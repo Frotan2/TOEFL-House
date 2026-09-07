@@ -13,6 +13,7 @@ use DateTimeImmutable;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSection;
 use App\Modules\Academic\Models\Skill;
+use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Academic\Domain\TeacherAuthority;
 use App\Support\Errors\BusinessRejection;
 
@@ -94,6 +95,38 @@ final class SchedulingConstraints
         // Teacher authority resolves the effective assignment, employment,
         // qualification, subject authority, leave, availability, and
         // timetable-conflict facts before the session becomes writable.
+        // Lock every existing effective assignment row for the teacher(s)
+        // attached to this class before performing the conflict read. This
+        // serializes concurrent session scheduling for the same teacher and
+        // closes the check-then-write race that a plain existence query leaves.
+        $teacherPersonIds = TeacherAssignment::query()
+            ->where('class_id', $class->id)
+            ->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))
+            ->where('effective_from', '<=', $scheduledOn->toDateString())
+            ->where(function ($query) use ($scheduledOn): void {
+                $query->whereNull('effective_to')->orWhere('effective_to', '>', $scheduledOn->toDateString());
+            })
+            ->whereNotNull('teacher_person_id')
+            ->pluck('teacher_person_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->unique()
+            ->values();
+        if ($teacherPersonIds->isEmpty()) {
+            throw BusinessRejection::forCode('academic.teacher_assignment_required', 'a session requires an effective teacher assignment');
+        }
+
+        TeacherAssignment::query()
+            ->whereIn('teacher_person_id', $teacherPersonIds->all())
+            ->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))
+            ->where('effective_from', '<=', $scheduledOn->toDateString())
+            ->where(function ($query) use ($scheduledOn): void {
+                $query->whereNull('effective_to')->orWhere('effective_to', '>', $scheduledOn->toDateString());
+            })
+            ->orderBy('teacher_person_id')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get(['id', 'teacher_person_id', 'class_id']);
+
         $this->teacherAuthority->assertClassCanDeliver($class, $scheduledOn, $startsAt, $endsAt, $skillId);
     }
 }
