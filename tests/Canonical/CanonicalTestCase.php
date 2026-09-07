@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Canonical;
 
+use App\Modules\Identity\Models\Person;
 use Tests\Concerns\BuildsAcademicStructure;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\BuildsEnrollments;
@@ -28,10 +29,6 @@ use Tests\TestCase;
  */
 abstract class CanonicalTestCase extends TestCase
 {
-    // The shared fixture traits declare their helpers private, which keeps
-    // them off the public surface of legacy tests. The canonical suite needs
-    // them in subclasses, so they are re-exposed here as protected seams
-    // rather than by widening the traits (which legacy tests still rely on).
     use BuildsAcademicStructure;
     use BuildsActors;
     use BuildsEnrollments;
@@ -53,6 +50,11 @@ abstract class CanonicalTestCase extends TestCase
     protected function sharedBranchId(): string
     {
         return $this->bootstrapBranchId();
+    }
+
+    protected function canonicalPersonWithAuthority(string $personId, array $capabilities = []): Person
+    {
+        return $this->personWithAuthority($personId, $capabilities);
     }
 
     /** @return array{person_id: string, employment_id: string, teacher_profile_id: string} */
