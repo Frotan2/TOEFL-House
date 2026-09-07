@@ -21,11 +21,12 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: static function (): void {
-            // Reporting stays in a cohesive route file while remaining inside
-            // the canonical /api/v1 + stateful employee API boundary.
             Route::prefix('api/v1')
                 ->middleware(['api', 'employee'])
                 ->group(base_path('routes/reporting-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee'])
+                ->group(base_path('routes/hr-api.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
