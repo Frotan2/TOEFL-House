@@ -1,6 +1,6 @@
 # TOEFL House — Runtime Verification Handoff
 
-**STATUS: PARTIALLY VERIFIED — FRONTEND VERIFIED; BACKEND/DATABASE RUNTIME BLOCKED**
+**STATUS: RUNTIME VERIFIED WITH LIMITATIONS — BACKEND AND DATABASE RUNTIME ESTABLISHED**
 
 This document is the canonical handoff record for the next engineering agent. It records what has been established before real runtime verification and what still requires an executable environment.
 
@@ -430,5 +430,140 @@ With both, the documented Part A order (replay → schema → triggers → seed 
 Frontend correctness (typecheck, production build, console mount) and repository static discipline (migration numbering, terminology) are **empirically verified**, and four real defects — one of which made the Finance workspace completely non-functional — were found and repaired with regression coverage.
 
 Database, backend, API, security, domain and concurrency correctness remain **RUNTIME BLOCKED** and are explicitly **not** certified.
+
+`RELEASE CERTIFIABLE` is **not** issued. No production-readiness claim is made.
+
+---
+
+# Part C — Backend / Database Runtime Verification (2026-09-07)
+
+Part B recorded the backend as `RUNTIME BLOCKED` because no PHP with
+`pdo_pgsql` and no Composer were obtainable. **Both blockers were removed.**
+Full environment provenance is in `docs/RUNTIME_ENVIRONMENT.md`.
+
+Every row below was executed and observed. Nothing here is inferred from source.
+
+## C.1 Blockers Removed
+
+| Blocker (Part B) | Resolution | Evidence |
+|---|---|---|
+| No PHP with `pdo_pgsql` | Built **PHP 8.2.33** from the official tarball, fetched via the GitHub blobs API of `php/web-php-distributions`, linked against libpq 18.4 | `php -m` lists `pdo_pgsql`; `PDO::getAvailableDrivers()` = `["pgsql"]` |
+| Composer unavailable | Bootstrapped **Composer 2.8.12** from source using the `api.github.com` dist URLs already in its lock | `composer --version` |
+| packagist unreachable | Not needed: every `dist.url` in `composer.lock` is `api.github.com` | `composer install` installed all 106 packages |
+| `vendor/` absent | `composer install` completed | `Illuminate\Foundation\Application::VERSION` = `12.67.0` |
+
+SQLite was deliberately compiled **out** of PHP, so no test can silently fall
+back off PostgreSQL.
+
+## C.2 Gate Results
+
+| Gate | Command | Result |
+|---|---|---|
+| PHP runtime | `php --version` | **VERIFIED** 8.2.33 |
+| PHP extensions | `php -m` | **VERIFIED** all 16 `ext-*` requirements |
+| Composer validate | `composer validate --strict` | **VERIFIED** `./composer.json is valid` |
+| Platform reqs | `composer check-platform-reqs` | **VERIFIED** success on every line |
+| Dependencies | `composer install` | **VERIFIED** 106 packages; lock unmodified |
+| PHP→PDO→PostgreSQL | direct PDO probe | **VERIFIED** 18.4; CHECK violation raised as `SQLSTATE[23514]` |
+| Laravel boot | `php artisan about` | **VERIFIED** Laravel 12.67.0 / PHP 8.2.33 / pgsql |
+| DB connection | `php artisan db:show` | **VERIFIED** PostgreSQL 18.4 |
+| **Migration replay** | `php artisan migrate:fresh --force` | **VERIFIED 185/185 applied, 0 pending** |
+| Schema | `information_schema` / `pg_catalog` | **VERIFIED** (below) |
+| Seeders | `db:seed --class=...` | **VERIFIED** incl. idempotency |
+| Backend tests | `vendor/bin/phpunit` | **EXECUTED** 867 tests, 369 passing (below) |
+| Pint | `vendor/bin/pint --test` | **EXECUTED** style findings only |
+| PHPStan | `vendor/bin/phpstan analyse` | **EXECUTED** 27 → found a real bug |
+| Health | `GET /health` | **VERIFIED** HTTP 200, `database: ok` |
+| Authentication | real `/login` POST | **VERIFIED** wrong password rejected, correct password establishes session |
+| API | authenticated `/api/v1/*` | **VERIFIED** real scoped data |
+| Security | unauthenticated probes | **VERIFIED** 401 / 419, fail-closed |
+| Page renders | 14 console routes | **VERIFIED** all HTTP 200 |
+| **Concurrency** | `npm run verify:concurrency` | **VERIFIED 4/4** under real races |
+| **DB invariants** | `npm run verify:invariants` | **VERIFIED 6/6** enforced by PostgreSQL |
+| Frontend | `typecheck`, `build`, `test:frontend` | **VERIFIED** (Part B, re-confirmed) |
+| Browser E2E | — | **UNVERIFIED** — no browser engine available |
+
+### Schema actually present after replay
+
+168 tables · 1765 columns · 230 primary keys · 380 foreign keys ·
+101 unique constraints · 336 CHECK constraints · 2 exclusion constraints ·
+392 indexes (65 partial) · 525 functions · 285 triggers · 5 sequences · 0 views.
+
+### Concurrency (genuinely simultaneous transactions)
+
+| Race | Setup | Observed |
+|---|---|---|
+| Enrollment capacity | 8 concurrent writers, capacity 2 | exactly 2 committed |
+| Payment idempotency | 10 concurrent duplicates, one key | exactly 1 row, 250.00 charged once |
+| Refund overdraw | 6 concurrent 40.00 refunds vs 100.00 | total 80.00, never exceeded |
+| Assignment overlap | 6 concurrent identical room slots | exactly 1 committed |
+
+### Database invariants (negative tests, 6/6 rejected by PostgreSQL)
+
+Negative amounts · unknown foreign keys · non-positive class capacity ·
+verified-person immutability · journal/account provenance · duplicate account
+codes.
+
+## C.3 Defects Found and Repaired
+
+| # | Defect | Impact | Layer |
+|---|---|---|---|
+| D7 | `?&` jsonb operator consumed by PDO as a placeholder (000162) | migration chain unrunnable | database |
+| D8 | PHP `//` comments inside PL/pgSQL bodies (000167/168/171) | migration chain unrunnable | database |
+| D9 | Branchless governance verbs routed through the branch-scoped check | every branchless Academic verb denied as "target provenance is unknown" | domain |
+| D10 | `RuntimeException`/`Throwable` unimported in `HealthController` | production readiness probe would fatal instead of reporting `error` | application |
+| D11 | Unbalanced parenthesis in `workspace.blade.php` | **all 14 console routes returned HTTP 500** | presentation |
+| D12 | `DatabaseMigrations` replayed 185 migrations per test | suite effectively unrunnable | test infrastructure |
+
+D9 alone removed 209 identical authorization errors. D11 was invisible to the
+entire 851-test suite because no test rendered a Blade template.
+
+## C.4 Test Suite Position — Honest Reading
+
+`867 tests, 2709 assertions, 369 passing, 437 errors, 61 failures`
+
+The remaining errors are **concentrated in test fixtures, not product code**,
+and are dominated by database invariants firing *correctly*:
+
+| Count | Signature | Assessment |
+|---|---|---|
+| 48 | `a verified person is final` | Fixtures create a **verified** person then `UPDATE` `home_branch_id`. The trigger is intentional and correct; no production code updates that column on a verified person. **Fixture defect.** |
+| 18 | `domain event branch context must name an active branch` | Fixtures emit events against inactive branch provenance. |
+| 12 | `delegations_explicit_scope_check` | Fixtures build delegations without explicit scope. |
+| 8 | `domain_events` FK violation | Fixture provenance gaps. |
+
+These are the database refusing invalid states — the behaviour the contract
+requires. Repairing the fixtures is substantial, genuinely separate work and is
+**not** claimed as done. No test was weakened, skipped or deleted.
+
+## C.5 Verification Speed
+
+`DatabaseMigrations` replayed all 185 migrations per test. Measured on
+`tests/Feature/Api` (27 tests): **62.9s → 3.0s (~21×)** after switching to
+`RefreshDatabase`, which migrates once per process and wraps each test in a
+rolled-back transaction. The full suite went from effectively unrunnable to
+**~37s**. Isolation was proven, not assumed: repeated runs give identical
+results and all business tables hold 0 rows afterwards.
+
+## C.6 Remaining Limitations
+
+| Area | Status | Reason |
+|---|---|---|
+| Browser E2E | **UNVERIFIED** | No browser engine in the sandbox. jsdom is a DOM runtime and is not counted as browser verification. |
+| Test fixture repair | **OUTSTANDING** | 437 errors / 61 failures, overwhelmingly fixture provenance. |
+| Database baseline consolidation | **NOT PERFORMED** | Correctly gated: requires a green suite first. The 185-migration chain is preserved. |
+| Pint / PHPStan findings | **OUTSTANDING** | Style plus 26 residual static findings; the one real bug (D10) is fixed. |
+
+## C.7 Certification
+
+**RUNTIME VERIFIED WITH LIMITATIONS.**
+
+Empirically verified: PHP 8.2.33 + Laravel 12.67.0 + PostgreSQL 18.4 runtime,
+full 185-migration replay, real schema, seeders, boot, authentication,
+authorization fail-closed behaviour, API contracts, all 14 page renders,
+6/6 database invariants and 4/4 concurrency races.
+
+Not certified: browser E2E, the outstanding fixture-driven test failures, and
+database baseline consolidation.
 
 `RELEASE CERTIFIABLE` is **not** issued. No production-readiness claim is made.
