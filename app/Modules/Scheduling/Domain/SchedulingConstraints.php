@@ -91,6 +91,30 @@ final class SchedulingConstraints
             }
         }
 
+        // A session skill must resolve to exactly one effective teacher
+        // assignment for the class/date. More than one matching assignment
+        // would make delivery and payroll attribution nondeterministic.
+        $matchingSkillAssignments = TeacherAssignment::query()
+            ->where('class_id', $class->id)
+            ->where('branch_id', $classBranchId)
+            ->whereNotNull('teacher_person_id')
+            ->whereNotNull('teacher_profile_id')
+            ->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))
+            ->where('effective_from', '<=', $scheduledOn->toDateString())
+            ->where(function ($query) use ($scheduledOn): void {
+                $query->whereNull('effective_to')->orWhere('effective_to', '>', $scheduledOn->toDateString());
+            })
+            ->whereExists(function ($query) use ($skillId): void {
+                $query->selectRaw('1')
+                    ->from('teacher_assignment_skills as tas')
+                    ->whereColumn('tas.teacher_assignment_id', 'teacher_assignments.id')
+                    ->where('tas.skill_id', $skillId);
+            })
+            ->count();
+        if ($matchingSkillAssignments > 1) {
+            throw BusinessRejection::forCode('scheduling.teacher_skill_assignment_ambiguous', 'a session skill has multiple effective teacher assignments; resolve the assignment before scheduling');
+        }
+
         // Scheduling is not allowed to create an orphan delivery event. The
         // Teacher authority resolves the effective assignment, employment,
         // qualification, subject authority, leave, availability, and
