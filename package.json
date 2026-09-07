@@ -7,7 +7,8 @@
     "build": "vite build",
     "test:frontend": "node tests/Frontend/mount.test.mjs",
     "verify:concurrency": "node scripts/runtime/concurrency-verification.mjs",
-    "verify:invariants": "node scripts/runtime/database-invariants.mjs"
+    "verify:invariants": "node scripts/runtime/database-invariants.mjs",
+    "verify:browser": "node scripts/runtime/browser-e2e.mjs"
   },
   "devDependencies": {
     "@types/react": "^19.1.10",
@@ -18,6 +19,7 @@
     "laravel-vite-plugin": "^2.0.0",
     "pg": "^8.23.0",
     "postcss": "^8.5.6",
+    "puppeteer-core": "^25.10.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.5"
   },

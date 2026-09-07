@@ -205,6 +205,7 @@ Route::prefix('v1')->middleware('employee')->group(function (): void {
     });
 
     Route::prefix('payroll')->name('api.payroll.')->group(function (): void {
+        Route::get('/workspace', [PayrollApiController::class, 'workspace'])->name('workspace');
         Route::get('/periods', [PayrollApiController::class, 'periods'])->name('periods');
         Route::get('/calculations', [PayrollApiController::class, 'calculations'])->name('calculations');
         Route::post('/calculations', [PayrollApiController::class, 'calculate'])->name('calculate');
