@@ -1,0 +1,417 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Finance\Commands;
+
+use App\Modules\Audit\AttemptedOperation;
+use App\Modules\Audit\AuditRecorder;
+use App\Modules\Finance\Domain\FinanceLifecycle;
+use App\Modules\Finance\Models\Account;
+use App\Modules\Finance\Models\FinancialPeriod;
+use App\Modules\Finance\Models\Journal;
+use App\Modules\Finance\Models\JournalLine;
+use App\Modules\Finance\Models\Discount;
+use App\Modules\Finance\Models\Expense;
+use App\Modules\Finance\Models\FundAllocation;
+use App\Modules\Finance\Models\Obligation;
+use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Models\PayrollLiabilityFact;
+use App\Modules\Finance\Models\Refund;
+use App\Modules\Organization\Models\Branch;
+use App\Support\Authorization\AccessDecision;
+use App\Support\Authorization\Actor;
+use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
+use App\Support\Idempotency\IdempotentExecution;
+use App\Support\Identifiers\RandomIdentifier;
+use App\Support\MoneyAmount;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Balanced accounting records: every journal must balance exactly, posts
+ * only to an open period, and is immutable once posted — corrections
+ * append reversal journals linked to their original.
+ */
+final class PostJournal
+{
+    public const CAPABILITY = 'finance.journal';
+
+    public function __construct(
+        private readonly AccessDecision $access,
+        private readonly IdempotentExecution $idempotency,
+        private readonly AuditRecorder $audit,
+        private readonly AttemptedOperation $attemptedOperation,
+    ) {}
+
+    /**
+     * @param  list<array{account_id: string, direction: string, amount: string}>  $lines
+     * @return array{journal_id: string, correlation_id: string}
+     */
+    public function post(Actor $actor, FinancialPeriod $period, string $sourceType, ?string $sourceId, string $reason, array $lines, string $idempotencyKey, ?string $reversalOfId = null): array
+    {
+        $payload = hash('sha256', implode('|', ['finance.journal.post', $period->id, $sourceType, (string) $sourceId, $reason, json_encode($lines), $reversalOfId ?? '', $actor->actorId]));
+
+        try {
+            return $this->idempotency->execute('finance.journal.post', $idempotencyKey, $payload,
+                fn (): array => DB::transaction(function () use ($actor, $period, $sourceType, $sourceId, $reason, $lines, $reversalOfId): array {
+                    [$debit, $credit] = $this->validate($sourceType, $sourceId, $reason, $lines, $reversalOfId);
+                    $scope = $this->scopeForJournalSource($sourceType, $sourceId, $reversalOfId);
+                    $this->require($actor, $scope);
+                    if ($reversalOfId !== null) {
+                        if ($sourceType !== 'journal' || $sourceId !== $reversalOfId) {
+                            throw BusinessRejection::forCode('finance.journal_reversal_link', 'a reversal must link its journal source exactly');
+                        }
+                        $original = Journal::query()->whereKey($reversalOfId)->lockForUpdate()->first();
+                        if ($original === null || $original->reversal_of_id !== null) {
+                            throw BusinessRejection::forCode('finance.journal_reversal_source', 'a reversal must link an original, non-reversal journal');
+                        }
+                        $this->assertExactInverse($original, $lines);
+                    }
+
+                    /** @var FinancialPeriod $lockedPeriod */
+                    $lockedPeriod = FinancialPeriod::query()->whereKey($period->id)->lockForUpdate()->firstOrFail();
+                    if ($lockedPeriod->lifecycle_state !== FinanceLifecycle::PERIOD_OPEN) {
+                        throw BusinessRejection::forCode('finance.period_not_open', 'journals post only to an open financial period');
+                    }
+
+                    // Payroll calculation/results remain Payroll evidence. A Finance
+                    // recognition is the monetary source, and one liability fact may
+                    // be disbursed exactly once. The partial unique index is the
+                    // concurrency-safe backstop; this check returns a clean 409.
+                    if ($sourceType === 'payroll_liability') {
+                        $liability = $this->payrollLiability($sourceId);
+                        $this->assertPayrollLiabilityAmount($liability, $debit, $credit);
+                        if (Journal::query()->where('source_type', 'payroll_liability')->where('source_id', $liability->id)->exists()) {
+                            throw BusinessRejection::forCode('finance.payroll_already_paid', 'this Finance payroll liability is already disbursed; correct it with a reversal');
+                        }
+                    }
+
+                    // An approved expense is a Finance source fact and may be
+                    // journalized exactly once. The partial unique index is the
+                    // concurrency-safe backstop; this check returns a clean 409.
+                    if ($sourceType === 'expense') {
+                        $expense = $this->expense($sourceId);
+                        $this->assertExpenseAmount($expense, $debit, $credit);
+                        if (Journal::query()->where('source_type', 'expense')->where('source_id', $expense->id)->exists()) {
+                            throw BusinessRejection::forCode('finance.expense_already_journalized', 'this approved expense is already journalized; correct it with a reversal');
+                        }
+                    }
+
+                    // An obligation is now auto-journalized on post; a manual
+                    // second posting is rejected cleanly by the schema guard.
+                    if ($sourceType === 'obligation') {
+                        $obligation = $this->obligation($sourceId);
+                        if (Journal::query()->where('source_type', 'obligation')->where('source_id', $obligation->id)->exists()) {
+                            throw BusinessRejection::forCode('finance.obligation_already_journalized', 'this obligation is already journalized; correct it with a reversal');
+                        }
+                    }
+
+                    // The remaining cash/AR facts are auto-journalized on
+                    // record; a manual second posting is rejected cleanly by
+                    // the schema guard.
+                    if (in_array($sourceType, ['payment', 'discount', 'refund', 'fund_allocation', 'employment_settlement'], true)
+                        && Journal::query()->where('source_type', $sourceType)->where('source_id', $sourceId)->exists()) {
+                        throw BusinessRejection::forCode('finance.source_already_journalized', sprintf('this %s source fact is already journalized; correct it with a reversal', str_replace('_', ' ', $sourceType)));
+                    }
+
+                    $journal = Journal::query()->create([
+                        'id' => RandomIdentifier::new(),
+                        'period_id' => $lockedPeriod->id,
+                        'source_type' => $sourceType,
+                        'source_id' => $sourceId,
+                        'reason' => $reason,
+                        'posted_by' => $actor->actorId,
+                        'reversal_of_id' => $reversalOfId,
+                        'organization_id' => $scope?->organizationId,
+                    ]);
+                    foreach ($lines as $line) {
+                        JournalLine::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'journal_id' => $journal->id,
+                            'account_id' => $line['account_id'],
+                            'direction' => $line['direction'],
+                            'amount' => $line['amount'],
+                        ]);
+                    }
+                    $event = $this->audit->record($actor->actorId, 'finance.journal.post', 'journal', $journal->id, null, [
+                        'period_id' => $lockedPeriod->id, 'source_type' => $sourceType, 'branch_id' => $scope?->branchId, 'organization_id' => $scope?->organizationId, 'debit' => $debit, 'credit' => $credit,
+                    ]);
+
+                    return ['journal_id' => $journal->id, 'correlation_id' => $event->correlation_id];
+                }),
+            );
+        } catch (AuthorizationDenied $denial) {
+            $this->attemptedOperation->deniedByActor($denial, $actor, 'finance.journal.post', 'journal', (string) $sourceId);
+        }
+    }
+
+    /** @return array{journal_id: string, correlation_id: string} */
+    public function reverse(Actor $actor, Journal $original, string $reason, string $idempotencyKey): array
+    {
+        return DB::transaction(function () use ($actor, $original, $reason, $idempotencyKey): array {
+            /** @var Journal $lockedOriginal */
+            $lockedOriginal = Journal::query()->whereKey($original->id)->lockForUpdate()->firstOrFail();
+            if ($lockedOriginal->reversal_of_id !== null) {
+                throw BusinessRejection::forCode('finance.journal_reversal_of_reversal', 'a reversal cannot itself be reversed');
+            }
+            if (Journal::query()->where('reversal_of_id', $lockedOriginal->id)->exists()) {
+                throw BusinessRejection::forCode('finance.journal_already_reversed', 'this journal already has a compensating reversal');
+            }
+            $lines = array_values(JournalLine::query()->where('journal_id', $lockedOriginal->id)
+                ->get()
+                ->map(static fn (JournalLine $line): array => [
+                    'account_id' => $line->account_id,
+                    'direction' => $line->direction === 'debit' ? 'credit' : 'debit',
+                    'amount' => (string) $line->amount,
+                ])->values()->all());
+
+            return $this->post(
+                $actor,
+                FinancialPeriod::query()->findOrFail($lockedOriginal->period_id),
+                'journal',
+                $lockedOriginal->id,
+                $reason,
+                $lines,
+                $idempotencyKey,
+                $lockedOriginal->id,
+            );
+        });
+    }
+
+    /**
+     * @param  list<array{account_id: string, direction: string, amount: string}>  $lines
+     * @return array{0: string, 1: string}
+     */
+    private function validate(string $sourceType, ?string $sourceId, string $reason, array $lines, ?string $reversalOfId): array
+    {
+        if ($sourceType === 'payroll_result') {
+            throw BusinessRejection::forCode('finance.journal_payroll_source_retired', 'a payroll disbursement must reference its Finance-recognized payroll liability, not a Payroll result directly');
+        }
+        if (! in_array($sourceType, ['obligation', 'payroll_liability', 'expense', 'payment', 'discount', 'refund', 'fund_allocation', 'employment_settlement', 'journal', 'other'], true)) {
+            throw BusinessRejection::forCode('finance.journal_source_unknown', sprintf('unknown journal source %s', $sourceType));
+        }
+        if ($reason === '') {
+            throw BusinessRejection::forCode('finance.journal_reason', 'a journal requires a reason');
+        }
+        if ($lines === []) {
+            throw BusinessRejection::forCode('finance.journal_lines_required', 'a journal requires at least one complete line');
+        }
+        if (in_array($sourceType, ['obligation', 'payroll_liability', 'expense', 'payment', 'discount', 'refund', 'fund_allocation', 'employment_settlement'], true) && trim((string) $sourceId) === '') {
+            throw BusinessRejection::forCode('finance.journal_source_required', sprintf('a %s journal requires its source id', str_replace('_', ' ', $sourceType)));
+        }
+        if ($sourceType === 'journal' && ($sourceId === null || $sourceId === '' || $reversalOfId === null)) {
+            throw BusinessRejection::forCode('finance.journal_reversal_source', 'a journal reversal requires its original journal source');
+        }
+        if ($sourceType !== 'journal' && $reversalOfId !== null) {
+            throw BusinessRejection::forCode('finance.journal_reversal_link', 'only a journal reversal may carry a reversal source');
+        }
+        $debit = '0.00';
+        $credit = '0.00';
+        foreach ($lines as $line) {
+            if (! in_array($line['direction'], ['debit', 'credit'], true)) {
+                throw BusinessRejection::forCode('finance.journal_direction', 'journal lines are debit or credit');
+            }
+            $lineAmount = MoneyAmount::decimal($line['amount']);
+            if (! MoneyAmount::positive($lineAmount)) {
+                throw BusinessRejection::forCode('finance.journal_amount', 'journal line amounts must be positive');
+            }
+            if (! Account::query()->whereKey($line['account_id'])->exists()) {
+                throw BusinessRejection::forCode('finance.journal_account_unknown', 'a journal line references an unknown account');
+            }
+            if ($line['direction'] === 'debit') {
+                $debit = bcadd($debit, $lineAmount, 2);
+            } else {
+                $credit = bcadd($credit, $lineAmount, 2);
+            }
+        }
+        if (bccomp($debit, $credit, 2) !== 0) {
+            throw BusinessRejection::forCode('finance.journal_unbalanced', sprintf('the journal does not balance: debit %s vs credit %s', $debit, $credit));
+        }
+
+        return [$debit, $credit];
+    }
+
+    private function scopeForJournalSource(string $sourceType, ?string $sourceId, ?string $reversalOfId): ?\App\Support\Authorization\StructureScope
+    {
+        if ($reversalOfId !== null) {
+            $original = Journal::query()->whereKey($reversalOfId)->first();
+            if ($original === null) {
+                throw BusinessRejection::forCode('finance.journal_reversal_source', 'a reversal must link an existing journal');
+            }
+            $sourceType = (string) $original->source_type;
+            $sourceId = $original->source_id;
+        }
+        if ($sourceType === 'obligation') {
+            $obligation = $sourceId === null ? null : Obligation::query()->whereKey($sourceId)->first();
+            if ($obligation === null) {
+                throw BusinessRejection::forCode('finance.journal_source_unknown', 'the journal obligation source is unknown');
+            }
+            $branchId = trim((string) ($obligation->current_home_branch_id ?? $obligation->originating_branch_id ?? ''));
+            $branch = $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
+            if ($branch === null) {
+                throw BusinessRejection::forCode('finance.journal_provenance_required', 'an obligation journal requires known branch provenance');
+            }
+
+            return $branch->structureScope();
+        }
+        if ($sourceType === 'payroll_liability') {
+            $liability = $this->payrollLiability($sourceId);
+            $branchId = trim((string) $liability->originating_branch_id);
+            $branch = $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
+            if ($branch === null) {
+                throw BusinessRejection::forCode('finance.journal_provenance_required', 'a payroll liability journal requires known Finance branch provenance');
+            }
+
+            return $branch->structureScope();
+        }
+        if ($sourceType === 'expense') {
+            $expense = $this->expense($sourceId);
+            $branchId = trim((string) ($expense->current_home_branch_id ?? $expense->originating_branch_id ?? ''));
+            $branch = $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
+            if ($branch === null) {
+                throw BusinessRejection::forCode('finance.journal_provenance_required', 'an expense journal requires known Finance branch provenance');
+            }
+
+            return $branch->structureScope();
+        }
+        if ($sourceType === 'payment') {
+            return $this->scopeFromBranchId((string) (Payment::query()->whereKey($sourceId)->value('current_home_branch_id') ?? Payment::query()->whereKey($sourceId)->value('originating_branch_id') ?? ''), 'a payment journal requires known branch provenance');
+        }
+        if ($sourceType === 'refund') {
+            $paymentId = (string) (Refund::query()->whereKey($sourceId)->value('payment_id') ?? '');
+            $branchId = trim((string) (Payment::query()->whereKey($paymentId)->value('current_home_branch_id') ?? Payment::query()->whereKey($paymentId)->value('originating_branch_id') ?? ''));
+
+            return $this->scopeFromBranchId($branchId, 'a refund journal requires known branch provenance');
+        }
+        if ($sourceType === 'discount') {
+            $branchId = (string) (Obligation::query()
+                ->whereKey(Discount::query()->whereKey($sourceId)->value('obligation_id'))
+                ->selectRaw('COALESCE(current_home_branch_id, originating_branch_id) AS branch_id')
+                ->value('branch_id') ?? '');
+
+            return $this->scopeFromBranchId($branchId, 'a discount journal requires known branch provenance');
+        }
+        if ($sourceType === 'fund_allocation') {
+            $branchId = (string) (Obligation::query()
+                ->join('obligation_lines', 'obligation_lines.obligation_id', '=', 'obligations.id')
+                ->where('obligation_lines.id', FundAllocation::query()->whereKey($sourceId)->value('obligation_line_id'))
+                ->selectRaw('COALESCE(obligations.current_home_branch_id, obligations.originating_branch_id) AS branch_id')
+                ->value('branch_id') ?? '');
+
+            return $this->scopeFromBranchId($branchId, 'a fund allocation journal requires known branch provenance');
+        }
+
+        // `other` is an explicit organization-wide accounting source. Legacy
+        // payroll_result journals remain readable/reversible, but new writes
+        // are rejected before this point and therefore cannot bypass Finance
+        // recognition.
+        return null;
+    }
+
+    private function scopeFromBranchId(string $branchId, string $failureMessage): ?\App\Support\Authorization\StructureScope
+    {
+        $branchId = trim($branchId);
+        if ($branchId === '') {
+            throw BusinessRejection::forCode('finance.journal_provenance_required', $failureMessage);
+        }
+        $branch = Branch::query()->whereKey($branchId)->first();
+        if ($branch === null) {
+            throw BusinessRejection::forCode('finance.journal_provenance_required', $failureMessage);
+        }
+
+        return $branch->structureScope();
+    }
+
+    private function payrollLiability(?string $sourceId): PayrollLiabilityFact
+    {
+        /** @var PayrollLiabilityFact|null $liability */
+        $liability = $sourceId === null ? null : PayrollLiabilityFact::query()->whereKey($sourceId)->lockForUpdate()->first();
+        if ($liability === null) {
+            throw BusinessRejection::forCode('finance.journal_source_unknown', 'the Finance payroll liability source is unknown');
+        }
+
+        return $liability;
+    }
+
+    private function expense(?string $sourceId): Expense
+    {
+        /** @var Expense|null $expense */
+        $expense = $sourceId === null ? null : Expense::query()->whereKey($sourceId)->lockForUpdate()->first();
+        if ($expense === null || $expense->lifecycle_state !== Expense::STATE_APPROVED) {
+            throw BusinessRejection::forCode('finance.journal_source_unknown', 'the Finance expense source is unknown or not approved');
+        }
+
+        return $expense;
+    }
+
+    private function obligation(?string $sourceId): Obligation
+    {
+        /** @var Obligation|null $obligation */
+        $obligation = $sourceId === null ? null : Obligation::query()->whereKey($sourceId)->lockForUpdate()->first();
+        if ($obligation === null) {
+            throw BusinessRejection::forCode('finance.journal_source_unknown', 'the obligation journal source is unknown');
+        }
+
+        return $obligation;
+    }
+
+    /** @param numeric-string $debit @param numeric-string $credit */
+    private function assertPayrollLiabilityAmount(PayrollLiabilityFact $liability, string $debit, string $credit): void
+    {
+        $amount = (string) $liability->amount;
+        $absoluteAmount = str_starts_with($amount, '-') ? substr($amount, 1) : $amount;
+        if (bccomp($debit, $absoluteAmount, 2) !== 0 || bccomp($credit, $absoluteAmount, 2) !== 0) {
+            throw BusinessRejection::forCode('finance.payroll_liability_amount_mismatch', 'a payroll liability journal must equal the absolute amount of its Finance liability fact');
+        }
+    }
+
+    /** @param numeric-string $debit @param numeric-string $credit */
+    private function assertExpenseAmount(Expense $expense, string $debit, string $credit): void
+    {
+        $amount = (string) $expense->amount;
+        if (bccomp($debit, $amount, 2) !== 0 || bccomp($credit, $amount, 2) !== 0) {
+            throw BusinessRejection::forCode('finance.expense_amount_mismatch', 'an expense journal must equal the approved expense amount');
+        }
+    }
+
+    /**
+     * @param list<array{account_id: string, direction: string, amount: string}> $lines
+     */
+    private function assertExactInverse(Journal $original, array $lines): void
+    {
+        $expected = [];
+        foreach (JournalLine::query()->where('journal_id', $original->id)->orderBy('id')->get() as $line) {
+            $key = $line->account_id.'|'.($line->direction === 'debit' ? 'credit' : 'debit');
+            $expected[$key] = bcadd($expected[$key] ?? '0.00', (string) $line->amount, 2);
+        }
+        ksort($expected, SORT_STRING);
+        if ($expected === [] || $expected !== $this->lineTotals($lines)) {
+            throw BusinessRejection::forCode('finance.journal_reversal_lines_mismatch', 'a reversal journal must be an exact inverse of its original journal lines');
+        }
+    }
+
+    /**
+     * @param list<array{account_id: string, direction: string, amount: string}> $lines
+     * @return array<string, numeric-string>
+     */
+    private function lineTotals(array $lines): array
+    {
+        $totals = [];
+        foreach ($lines as $line) {
+            $key = $line['account_id'].'|'.$line['direction'];
+            $totals[$key] = bcadd($totals[$key] ?? '0.00', MoneyAmount::decimal($line['amount']), 2);
+        }
+        ksort($totals, SORT_STRING);
+
+        return $totals;
+    }
+
+    private function require(Actor $actor, ?\App\Support\Authorization\StructureScope $scope): void
+    {
+        $outcome = $this->access->decide($actor, self::CAPABILITY, $scope);
+        if (! $outcome->allowed) {
+            throw AuthorizationDenied::forCode('finance.journal_denied', $outcome->reason);
+        }
+    }
+}

@@ -1,0 +1,952 @@
+@extends('layouts.app')
+
+@section('title', 'Finance')
+
+@section('content')
+<div class="card">
+    <h1>Finance</h1>
+    <p class="sub">The money surface: obligations, payments, refunds, discounts, and funding. Every movement is balanced, source-linked, idempotent, and reconciliation-ready. Amounts are produced by commands — never edited by hand.</p>
+</div>
+
+<div class="card">
+    <h2>Recognize approved Payroll liability</h2>
+    <p class="sub">Payroll supplies immutable calculation evidence; Finance recognition is required before the amount enters monetary reporting.</p>
+    <form method="POST" action="{{ route('finance.payroll-liability.recognize') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Source type</label>
+                <select name="source_type" required>
+                    <option value="payroll_result">Payroll result</option>
+                    <option value="payroll_adjustment">Payroll adjustment</option>
+                </select>
+            </div>
+            <div>
+                <label>Payroll source ID</label>
+                <input name="source_id" type="text" required>
+            </div>
+            <div>
+                <label>Exact source amount (use a negative reversal amount)</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+            </div>
+            <div>
+                <label>Evidence reference</label>
+                <input name="evidence_ref" type="text" required>
+            </div>
+        </div>
+        <div class="actions"><button type="submit" class="btn">Recognize liability</button></div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Financial periods</h2>
+    <p class="sub">Payments, obligations and refunds post only to an open period; closure is terminal (an overlapping open payroll period blocks it).</p>
+    <form method="POST" action="{{ route('finance.period.open') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Period key</label>
+                <input name="period_key" type="text" placeholder="e.g. SY2026-1" required>
+            </div>
+            <div>
+                <label>From</label>
+                <input type="date" name="date_from" required>
+            </div>
+            <div>
+                <label>To</label>
+                <input type="date" name="date_to" required>
+            </div>
+        </div>
+        <div class="actions"><button type="submit" class="btn">Open period</button></div>
+    </form>
+    @if ($periods->isEmpty())
+        <p class="empty">No financial periods.</p>
+    @else
+        <table class="grid" style="margin-top:8px">
+            <tr><th>Period</th><th>Window</th><th>State</th><th></th></tr>
+            @foreach ($periods as $period)
+                <tr>
+                    <td>{{ $period->period_key }}</td>
+                    <td>{{ $period->date_from }} → {{ $period->date_to }}</td>
+                    <td><span class="pill {{ $period->lifecycle_state === 'open' ? 'ok' : '' }}">{{ $period->lifecycle_state }}</span></td>
+                    <td>
+                        @if ($period->lifecycle_state === 'open')
+                            <form method="POST" action="{{ route('finance.period.close', $period->id) }}" style="display:inline">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <button type="submit" class="btn small">Close</button>
+                            </form>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+</div>
+
+<div class="card">
+    <h2>Record a payment</h2>
+    <form method="POST" action="{{ route('finance.payment') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Financial period</label>
+                <select name="period_id" required>
+                    <option value="">Select a period…</option>
+                    @foreach ($periods as $period)
+                        <option value="{{ $period->id }}">{{ $period->period_key }} ({{ $period->date_from }} → {{ $period->date_to }})</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Student</label>
+                <select name="student_id" required>
+                    <option value="">Select a student…</option>
+                    @foreach ($students as $student)
+                        <option value="{{ $student->id }}">{{ $student->student_code }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Amount</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+            </div>
+            <div>
+                <label>Method</label>
+                <input name="method" type="text" placeholder="e.g. cash, bank" required>
+            </div>
+            <div>
+                <label>Payer reference</label>
+                <input name="payer_ref" type="text" required>
+            </div>
+            <div>
+                <label>Received on</label>
+                <input type="date" name="received_on" required>
+            </div>
+        </div>
+        <div class="actions"><button type="submit" class="btn">Record payment</button></div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Post an obligation</h2>
+    <p class="sub">Obligations post only to an open financial period; the line total becomes the obligation amount.</p>
+    <form method="POST" action="{{ route('finance.obligation.post') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Financial period</label>
+                <select name="period_id" required>
+                    <option value="">Select an open period…</option>
+                    @foreach ($periods as $period)
+                        <option value="{{ $period->id }}">{{ $period->period_key }} ({{ $period->lifecycle_state }})</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Student</label>
+                <select name="student_id" required>
+                    <option value="">Select a student…</option>
+                    @foreach ($students as $student)
+                        <option value="{{ $student->id }}">{{ $student->student_code }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Source</label>
+                <input name="source" type="text" placeholder="e.g. tuition" required>
+            </div>
+            <div>
+                <label>Line category</label>
+                <input name="category" type="text" required>
+            </div>
+            <div>
+                <label>Line amount</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+            </div>
+            <div>
+                <label>Line source reference</label>
+                <input name="source_ref" type="text" required>
+            </div>
+        </div>
+        <div class="fields">
+            <input name="reason" type="text" placeholder="Reason" required>
+        </div>
+        <div class="actions"><button type="submit" class="btn">Post obligation</button></div>
+    </form>
+</div>
+
+<div class="row">
+    <div class="card" style="flex:1 1 320px">
+        <h2>Obligations (newest first)</h2>
+        @if ($obligations->isEmpty())
+            <p class="empty">No obligations posted.</p>
+        @else
+            <table class="grid">
+                <tr><th>Student</th><th>Source</th><th></th></tr>
+                @foreach ($obligations as $obligation)
+                    <tr>
+                        <td>{{ \Illuminate\Support\Str::limit($obligation->student_id, 16) }}</td>
+                        <td>{{ \Illuminate\Support\Str::limit($obligation->source, 16) }}</td>
+                        <td>
+                            <details>
+                                <summary class="btn small secondary" style="display:inline-block; cursor:pointer">Allocate</summary>
+                                <form method="POST" action="{{ route('finance.allocate', $obligation->id) }}" style="margin-top:8px">
+                                    @csrf
+                                    <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                    <label>Payment</label>
+                                    <select name="payment_id" required>
+                                        @foreach ($payments as $payment)
+                                            <option value="{{ $payment->id }}">{{ \Illuminate\Support\Str::limit($payment->id, 14) }} ({{ $payment->amount }})</option>
+                                        @endforeach
+                                    </select>
+                                    <label>Amount</label>
+                                    <input name="amount" type="text" inputmode="decimal" required>
+                                    <div class="actions"><button type="submit" class="btn small">Allocate</button></div>
+                                </form>
+                            </details>
+                        </td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+    </div>
+
+    <div class="card" style="flex:1 1 320px">
+        <h2>Payments (newest first)</h2>
+        @if ($payments->isEmpty())
+            <p class="empty">No payments recorded.</p>
+        @else
+            <table class="grid">
+                <tr><th>Student</th><th>Reference</th><th>Amount</th><th>Method</th><th>Received</th><th></th></tr>
+                @foreach ($payments as $payment)
+                    <tr>
+                        <td>{{ \Illuminate\Support\Str::limit($payment->student_id, 16) }}</td>
+                        <td><code>{{ $payment->payer_ref }}</code></td>
+                        <td>{{ $payment->amount }}</td>
+                        <td>{{ $payment->method }}</td>
+                        <td>{{ $payment->received_on }}</td>
+                        <td>
+                            <details>
+                                <summary class="btn small secondary" style="display:inline-block; cursor:pointer">Refund</summary>
+                                <form method="POST" action="{{ route('finance.refund', $payment->id) }}" style="margin-top:8px">
+                                    @csrf
+                                    <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                    <label>Period</label>
+                                    <select name="period_id" required>
+                                        @foreach ($periods as $period)
+                                            <option value="{{ $period->id }}">{{ $period->period_key }}</option>
+                                        @endforeach
+                                    </select>
+                                    <label>Amount</label>
+                                    <input name="amount" type="text" inputmode="decimal" required>
+                                    <label>Reason</label>
+                                    <input name="reason" type="text" required>
+                                    <p class="muted" style="font-size:12px">You are proposing this refund. A different employee holding the refund-approval authority records it from their own session.</p>
+                                    <div class="actions"><button type="submit" class="btn small">Propose refund</button></div>
+                                </form>
+                            </details>
+                        </td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+    </div>
+</div>
+
+<div class="row">
+    <div class="card" style="flex:1 1 320px">
+        <h2>Proposed refunds (awaiting approval)</h2>
+        @if ($proposedRefunds->isEmpty())
+            <p class="empty">No refunds awaiting approval.</p>
+        @else
+            <table class="grid">
+                <tr><th>Payment</th><th>Amount</th><th>Reason</th><th></th></tr>
+                @foreach ($proposedRefunds as $refund)
+                    <tr>
+                        <td>{{ \Illuminate\Support\Str::limit($refund->payment_id, 16) }}</td>
+                        <td>{{ $refund->amount }}</td>
+                        <td class="muted">{{ \Illuminate\Support\Str::limit($refund->reason, 24) }}</td>
+                        <td>
+                            <form method="POST" action="{{ route('finance.refund.approve', $refund->id) }}">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <button type="submit" class="btn small" title="Records this refund under your authority (must differ from the requester)">Approve</button>
+                            </form>
+                        </td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+        <h2 style="margin-top:16px">Refunds (recorded)</h2>
+        @if ($refunds->isEmpty())
+            <p class="empty">No refunds recorded.</p>
+        @else
+            <table class="grid">
+                <tr><th>Payment</th><th>Amount</th><th>Reason</th></tr>
+                @foreach ($refunds as $refund)
+                    <tr>
+                        <td>{{ \Illuminate\Support\Str::limit($refund->payment_id, 16) }}</td>
+                        <td>{{ $refund->amount }}</td>
+                        <td class="muted">{{ \Illuminate\Support\Str::limit($refund->reason, 24) }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+    </div>
+
+    <div class="card" style="flex:1 1 320px">
+        <h2>Chart of accounts</h2>
+        <p class="sub">Unique codes, five canonical types, immutable once defined — a changed definition is a new account.</p>
+        <form method="POST" action="{{ route('finance.account.define') }}">
+            @csrf
+            <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+            <div class="row">
+                <div>
+                    <label>Code</label>
+                    <input name="code" type="text" required>
+                </div>
+                <div>
+                    <label>Name</label>
+                    <input name="name" type="text" required>
+                </div>
+                <div>
+                    <label>Type</label>
+                    <select name="type" required>
+                        <option value="asset">Asset</option>
+                        <option value="liability">Liability</option>
+                        <option value="equity">Equity</option>
+                        <option value="revenue">Revenue</option>
+                        <option value="expense">Expense</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions"><button type="submit" class="btn">Define account</button></div>
+        </form>
+        @if ($accounts->isEmpty())
+            <p class="empty">No accounts defined.</p>
+        @else
+            <table class="grid" style="margin-top:8px">
+                <tr><th>Code</th><th>Name</th><th>Type</th></tr>
+                @foreach ($accounts as $account)
+                    <tr>
+                        <td><code>{{ $account->code }}</code></td>
+                        <td>{{ $account->name }}</td>
+                        <td><span class="pill">{{ $account->type }}</span></td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+    </div>
+</div>
+
+<div class="card">
+    <h2>Journals</h2>
+    <p class="sub">Balanced accounting records: debits must equal credits exactly, journals post only to an open period, and they are immutable once posted — corrections append a reversal linked to the original.</p>
+    <form method="POST" action="{{ route('finance.journal.post') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Open financial period</label>
+                <select name="period_id" required>
+                    <option value="">Select an open period…</option>
+                    @foreach ($periods as $period)
+                        @if ($period->lifecycle_state === 'open')
+                            <option value="{{ $period->id }}">{{ $period->period_key }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Source</label>
+                <select name="source_type" required>
+                    <option value="other">Other</option>
+                    <option value="obligation">Obligation</option>
+                    <option value="payroll_liability">Finance-recognized payroll liability</option>
+                </select>
+            </div>
+            <div>
+                <label>Source reference</label>
+                <input name="source_id" type="text" placeholder="required for obligation or payroll liability">
+            </div>
+        </div>
+        <div class="fields">
+            <input name="reason" type="text" placeholder="Reason" required>
+        </div>
+        <table class="grid" style="margin-top:8px">
+            <tr><th>Account</th><th>Direction</th><th>Amount</th></tr>
+            @for ($i = 0; $i < 4; $i++)
+                <tr>
+                    <td>
+                        <select name="lines[{{ $i }}][account_id]">
+                            <option value="">—</option>
+                            @foreach ($accounts as $account)
+                                <option value="{{ $account->id }}">{{ $account->code }} ({{ $account->name }})</option>
+                            @endforeach
+                        </select>
+                    </td>
+                    <td>
+                        <select name="lines[{{ $i }}][direction]">
+                            <option value="">—</option>
+                            <option value="debit">Debit</option>
+                            <option value="credit">Credit</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input name="lines[{{ $i }}][amount]" type="text" inputmode="decimal" placeholder="0.00">
+                    </td>
+                </tr>
+            @endfor
+        </table>
+        <div class="actions"><button type="submit" class="btn">Post journal (must balance)</button></div>
+    </form>
+    @if ($journals->isEmpty())
+        <p class="empty">No journals posted.</p>
+    @else
+        <h2 style="margin-top:16px">Journals (newest first)</h2>
+        <table class="grid">
+            <tr><th>Period</th><th>Source</th><th>Reason</th><th>Posted by</th><th></th></tr>
+            @foreach ($journals as $journal)
+                <tr>
+                    <td>{{ \Illuminate\Support\Str::limit($journal->period_id, 16) }}</td>
+                    <td>{{ $journal->source_type }}{{ $journal->source_id !== null ? ': '.\Illuminate\Support\Str::limit($journal->source_id, 12) : '' }}</td>
+                    <td class="muted">{{ \Illuminate\Support\Str::limit($journal->reason, 30) }}</td>
+                    <td>{{ \Illuminate\Support\Str::limit($journal->posted_by, 16) }}</td>
+                    <td>
+                        <form method="POST" action="{{ route('finance.journal.reverse', $journal->id) }}" style="display:inline">
+                            @csrf
+                            <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                            <input name="reason" type="text" placeholder="Reversal reason" required>
+                            <button type="submit" class="btn small secondary">Reverse</button>
+                        </form>
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+        @if ($journalLines->isNotEmpty())
+            <h2 style="margin-top:16px">Journal lines (newest first)</h2>
+            <table class="grid">
+                <tr><th>Journal</th><th>Account</th><th>Direction</th><th>Amount</th></tr>
+                @foreach ($journalLines as $line)
+                    <tr>
+                        <td>{{ \Illuminate\Support\Str::limit($line->journal_id, 16) }}</td>
+                        <td>{{ \Illuminate\Support\Str::limit($line->account_id, 16) }}</td>
+                        <td>{{ $line->direction }}</td>
+                        <td>{{ $line->amount }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+    @endif
+</div>
+
+<div class="card">
+    <h2>Discounts</h2>
+    <p class="sub">Proposed with its eligibility basis and effective window against an obligation in an open period; approved by a distinct employee. The original charge is never rewritten and an approved discount is immutable history.</p>
+    <form method="POST" action="{{ route('finance.discount.propose') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Obligation</label>
+                <select name="obligation_id" required>
+                    <option value="">Select an obligation…</option>
+                    @foreach ($obligations as $obligation)
+                        <option value="{{ $obligation->id }}">{{ \Illuminate\Support\Str::limit($obligation->student_id, 14) }} / {{ \Illuminate\Support\Str::limit($obligation->source, 14) }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Open financial period</label>
+                <select name="period_id" required>
+                    <option value="">Select an open period…</option>
+                    @foreach ($periods as $period)
+                        @if ($period->lifecycle_state === 'open')
+                            <option value="{{ $period->id }}">{{ $period->period_key }}</option>
+                        @endif
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Amount</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+            </div>
+            <div>
+                <label>Eligibility basis</label>
+                <input name="eligibility" type="text" required>
+            </div>
+            <div>
+                <label>Effective from</label>
+                <input name="effective_from" type="date" required>
+            </div>
+            <div>
+                <label>Effective to (optional)</label>
+                <input name="effective_to" type="date">
+            </div>
+        </div>
+        <div class="fields">
+            <input name="reason" type="text" placeholder="Reason" required>
+        </div>
+        <div class="actions"><button type="submit" class="btn">Propose discount</button></div>
+    </form>
+    @if ($discounts->isEmpty())
+        <p class="empty">No discounts recorded.</p>
+    @else
+        <table class="grid" style="margin-top:8px">
+            <tr><th>Obligation</th><th>Amount</th><th>Eligibility</th><th>Window</th><th>State</th><th></th></tr>
+            @foreach ($discounts as $discount)
+                <tr>
+                    <td>{{ \Illuminate\Support\Str::limit($discount->obligation_id, 16) }}</td>
+                    <td>{{ $discount->amount }}</td>
+                    <td class="muted">{{ \Illuminate\Support\Str::limit($discount->eligibility, 24) }}</td>
+                    <td>{{ $discount->effective_from }} → {{ $discount->effective_to ?? '—' }}</td>
+                    <td><span class="pill {{ $discount->lifecycle_state === 'approved' ? 'ok' : '' }}">{{ $discount->lifecycle_state }}</span></td>
+                    <td>
+                        @if ($discount->lifecycle_state === 'proposed')
+                            <form method="POST" action="{{ route('finance.discount.approve', $discount->id) }}" style="display:inline">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <button type="submit" class="btn small" title="Approves this discount under your authority (must differ from the proposer)">Approve</button>
+                            </form>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+</div>
+
+<div class="card">
+    <h2>Enrollment-gate coverage</h2>
+    <p class="sub">Credits, installment plans, and exceptions are approval-controlled Finance commitments, not editable balances. Approval allocates the exact source amount across eligible obligation remainder; a scoped source cannot consume another offering or class.</p>
+    <div class="row">
+        <div style="flex:1 1 300px">
+            <h3>Propose credit / advance</h3>
+            <form method="POST" action="{{ route('finance.credit.propose') }}">
+                @csrf
+                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                <label>Student</label>
+                <select name="student_id" required>
+                    <option value="">Select a student…</option>
+                    @foreach ($students as $student)
+                        <option value="{{ $student->id }}">{{ $student->student_code }}</option>
+                    @endforeach
+                </select>
+                <label>Amount</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+                <label>Evidence / source reference</label>
+                <input name="source_ref" type="text" required>
+                <label>Reason</label>
+                <input name="reason" type="text" required>
+                <div class="actions"><button type="submit" class="btn small">Propose credit</button></div>
+            </form>
+        </div>
+        <div style="flex:1 1 300px">
+            <h3>Propose installment plan</h3>
+            <form method="POST" action="{{ route('finance.installment.propose') }}">
+                @csrf
+                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                <label>Student</label>
+                <select name="student_id" required>
+                    <option value="">Select a student…</option>
+                    @foreach ($students as $student)
+                        <option value="{{ $student->id }}">{{ $student->student_code }}</option>
+                    @endforeach
+                </select>
+                <label>Offering ID (optional; restricts coverage)</label>
+                <input name="offering_id" type="text">
+                <label>Amount</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+                <label>Installment count</label>
+                <input name="installments_count" type="number" min="1" required>
+                <label>First due on</label>
+                <input name="first_due_on" type="date" required>
+                <label>Schedule reference</label>
+                <input name="schedule_ref" type="text" required>
+                <div class="actions"><button type="submit" class="btn small">Propose plan</button></div>
+            </form>
+        </div>
+        <div style="flex:1 1 300px">
+            <h3>Propose gate exception</h3>
+            <form method="POST" action="{{ route('finance.gate_exception.propose') }}">
+                @csrf
+                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                <label>Student</label>
+                <select name="student_id" required>
+                    <option value="">Select a student…</option>
+                    @foreach ($students as $student)
+                        <option value="{{ $student->id }}">{{ $student->student_code }}</option>
+                    @endforeach
+                </select>
+                <label>Offering ID (optional)</label>
+                <input name="offering_id" type="text">
+                <label>Class ID (optional; must match offering)</label>
+                <input name="class_id" type="text">
+                <label>Amount</label>
+                <input name="amount" type="text" inputmode="decimal" required>
+                <label>Effective from</label>
+                <input name="effective_from" type="date" required>
+                <label>Effective to (optional)</label>
+                <input name="effective_to" type="date">
+                <label>Reason</label>
+                <input name="reason" type="text" required>
+                <div class="actions"><button type="submit" class="btn small">Propose exception</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+        <div style="flex:1 1 320px">
+            <h3>Credits</h3>
+            @if ($credits->isEmpty())
+                <p class="empty">No credit proposals.</p>
+            @else
+                <table class="grid">
+                    <tr><th>Student</th><th>Amount</th><th>Evidence</th><th>State</th><th></th></tr>
+                    @foreach ($credits as $credit)
+                        <tr>
+                            <td>{{ \Illuminate\Support\Str::limit($credit->student_id, 14) }}</td>
+                            <td>{{ $credit->amount }}</td>
+                            <td class="muted">{{ \Illuminate\Support\Str::limit($credit->source_ref, 18) }}</td>
+                            <td>{{ $credit->lifecycle_state }}</td>
+                            <td>
+                                @if ($credit->lifecycle_state === 'proposed')
+                                    <form method="POST" action="{{ route('finance.credit.approve', $credit->id) }}">
+                                        @csrf
+                                        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                        <button type="submit" class="btn small">Approve</button>
+                                    </form>
+                                @elseif ($credit->lifecycle_state === 'approved')
+                                    <details>
+                                        <summary class="btn small secondary" style="display:inline-block; cursor:pointer">Revoke</summary>
+                                        <form method="POST" action="{{ route('finance.coverage-revocation.propose') }}" style="margin-top:8px">
+                                            @csrf
+                                            <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                            <input type="hidden" name="coverage_source_type" value="financial_credit">
+                                            <input type="hidden" name="coverage_source_id" value="{{ $credit->id }}">
+                                            <input name="reason" type="text" placeholder="Documented correction reason" required>
+                                            <button type="submit" class="btn small">Propose revocation</button>
+                                        </form>
+                                    </details>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </table>
+            @endif
+        </div>
+        <div style="flex:1 1 320px">
+            <h3>Installment plans</h3>
+            @if ($installmentPlans->isEmpty())
+                <p class="empty">No installment proposals.</p>
+            @else
+                <table class="grid">
+                    <tr><th>Student</th><th>Scope</th><th>Amount</th><th>State</th><th></th></tr>
+                    @foreach ($installmentPlans as $plan)
+                        <tr>
+                            <td>{{ \Illuminate\Support\Str::limit($plan->student_id, 14) }}</td>
+                            <td class="muted">{{ \Illuminate\Support\Str::limit($plan->offering_id ?? 'student-wide', 16) }}</td>
+                            <td>{{ $plan->amount }}</td>
+                            <td>{{ $plan->lifecycle_state }}</td>
+                            <td>
+                                @if ($plan->lifecycle_state === 'proposed')
+                                    <form method="POST" action="{{ route('finance.installment.approve', $plan->id) }}">
+                                        @csrf
+                                        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                        <button type="submit" class="btn small">Approve</button>
+                                    </form>
+                                @elseif ($plan->lifecycle_state === 'approved')
+                                    <details>
+                                        <summary class="btn small secondary" style="display:inline-block; cursor:pointer">Revoke</summary>
+                                        <form method="POST" action="{{ route('finance.coverage-revocation.propose') }}" style="margin-top:8px">
+                                            @csrf
+                                            <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                            <input type="hidden" name="coverage_source_type" value="enrollment_installment_plan">
+                                            <input type="hidden" name="coverage_source_id" value="{{ $plan->id }}">
+                                            <input name="reason" type="text" placeholder="Documented correction reason" required>
+                                            <button type="submit" class="btn small">Propose revocation</button>
+                                        </form>
+                                    </details>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </table>
+            @endif
+        </div>
+        <div style="flex:1 1 320px">
+            <h3>Gate exceptions</h3>
+            @if ($gateExceptions->isEmpty())
+                <p class="empty">No gate exception proposals.</p>
+            @else
+                <table class="grid">
+                    <tr><th>Student</th><th>Scope</th><th>Amount</th><th>Window</th><th>State</th><th></th></tr>
+                    @foreach ($gateExceptions as $exception)
+                        <tr>
+                            <td>{{ \Illuminate\Support\Str::limit($exception->student_id, 14) }}</td>
+                            <td class="muted">{{ \Illuminate\Support\Str::limit($exception->class_id ?? $exception->offering_id ?? 'student-wide', 14) }}</td>
+                            <td>{{ $exception->amount }}</td>
+                            <td>{{ $exception->effective_from }} → {{ $exception->effective_to ?? '—' }}</td>
+                            <td>{{ $exception->lifecycle_state }}</td>
+                            <td>
+                                @if ($exception->lifecycle_state === 'proposed')
+                                    <form method="POST" action="{{ route('finance.gate_exception.approve', $exception->id) }}">
+                                        @csrf
+                                        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                        <button type="submit" class="btn small">Approve</button>
+                                    </form>
+                                @elseif ($exception->lifecycle_state === 'approved')
+                                    <details>
+                                        <summary class="btn small secondary" style="display:inline-block; cursor:pointer">Revoke</summary>
+                                        <form method="POST" action="{{ route('finance.coverage-revocation.propose') }}" style="margin-top:8px">
+                                            @csrf
+                                            <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                            <input type="hidden" name="coverage_source_type" value="financial_gate_exception">
+                                            <input type="hidden" name="coverage_source_id" value="{{ $exception->id }}">
+                                            <input name="reason" type="text" placeholder="Documented correction reason" required>
+                                            <button type="submit" class="btn small">Propose revocation</button>
+                                        </form>
+                                    </details>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </table>
+            @endif
+        </div>
+    </div>
+
+    <h3 style="margin-top:16px">Attributed coverage commitments</h3>
+    @if ($coverageCommitments->isEmpty())
+        <p class="empty">No approved gate source has committed obligation coverage yet.</p>
+    @else
+        <table class="grid">
+            <tr><th>Source</th><th>Obligation</th><th>Committed amount</th></tr>
+            @foreach ($coverageCommitments as $commitment)
+                <tr>
+                    <td>{{ $commitment->coverage_source_type }} / {{ \Illuminate\Support\Str::limit($commitment->coverage_source_id, 14) }}</td>
+                    <td>{{ \Illuminate\Support\Str::limit($commitment->obligation_id, 16) }}</td>
+                    <td>{{ $commitment->amount }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
+    <h3 style="margin-top:16px">Coverage-source revocations</h3>
+    <p class="sub">A revocation removes a source only from future gate assessments. The original approved source and its signed historical enrollment evidence are preserved; issue a new evidenced source if replacement coverage is appropriate.</p>
+    @if ($coverageRevocations->isEmpty())
+        <p class="empty">No coverage-source revocations.</p>
+    @else
+        <table class="grid">
+            <tr><th>Source</th><th>Reason</th><th>State</th><th></th></tr>
+            @foreach ($coverageRevocations as $revocation)
+                <tr>
+                    <td>{{ $revocation->coverage_source_type }} / {{ \Illuminate\Support\Str::limit($revocation->coverage_source_id, 14) }}</td>
+                    <td class="muted">{{ \Illuminate\Support\Str::limit($revocation->reason, 36) }}</td>
+                    <td>{{ $revocation->lifecycle_state }}</td>
+                    <td>
+                        @if ($revocation->lifecycle_state === 'proposed')
+                            <form method="POST" action="{{ route('finance.coverage-revocation.approve', $revocation->id) }}">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <button type="submit" class="btn small">Record revocation</button>
+                            </form>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+</div>
+
+<div class="card">
+    <h2>Reconciliations</h2>
+    <p class="sub">One observation per period and subject: expected vs observed, with a variance that requires its explanation. Approved by a distinct employee — reconciliation owns the comparison evidence, never an alternate cash truth.</p>
+    <form method="POST" action="{{ route('finance.reconciliation.observe') }}">
+        @csrf
+        <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+        <div class="row">
+            <div>
+                <label>Financial period</label>
+                <select name="period_id" required>
+                    <option value="">Select a period…</option>
+                    @foreach ($periods as $period)
+                        <option value="{{ $period->id }}">{{ $period->period_key }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label>Subject</label>
+                <input name="subject" type="text" placeholder="e.g. bank-cash" required>
+            </div>
+            <div>
+                <label>Expected</label>
+                <input name="expected" type="text" inputmode="decimal" required>
+            </div>
+            <div>
+                <label>Observed</label>
+                <input name="observed" type="text" inputmode="decimal" required>
+            </div>
+            <div>
+                <label>Explanation (required when observed ≠ expected)</label>
+                <input name="explanation" type="text">
+            </div>
+        </div>
+        <div class="actions"><button type="submit" class="btn">Record observation</button></div>
+    </form>
+    @if ($reconciliations->isEmpty())
+        <p class="empty">No reconciliations recorded.</p>
+    @else
+        <table class="grid" style="margin-top:8px">
+            <tr><th>Period</th><th>Subject</th><th>Expected</th><th>Observed</th><th>Variance</th><th>State</th><th></th></tr>
+            @foreach ($reconciliations as $reconciliation)
+                <tr>
+                    <td>{{ \Illuminate\Support\Str::limit($reconciliation->period_id, 16) }}</td>
+                    <td>{{ $reconciliation->subject }}</td>
+                    <td>{{ $reconciliation->expected }}</td>
+                    <td>{{ $reconciliation->observed }}</td>
+                    <td>{{ $reconciliation->variance }}</td>
+                    <td><span class="pill {{ $reconciliation->lifecycle_state === 'approved' ? 'ok' : '' }}">{{ $reconciliation->lifecycle_state }}</span></td>
+                    <td>
+                        @if ($reconciliation->lifecycle_state === 'draft')
+                            <form method="POST" action="{{ route('finance.reconciliation.approve', $reconciliation->id) }}" style="display:inline">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <button type="submit" class="btn small" title="Approves this observation under your authority (must differ from the observer)">Approve</button>
+                            </form>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+</div>
+
+<div class="card">
+    <h2>Funding sources</h2>
+    <p class="sub">An immutable funding agreement establishes a pool and its restriction; allocations apply fund money to student obligation lines of the permitted use only and never exceed the committed pool.</p>
+    @if ($fundEstablishOrganizations->isNotEmpty())
+        <form method="POST" action="{{ route('finance.fund.establish') }}">
+            @csrf
+            <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+            <div class="row">
+                <div>
+                    <label>Owning organization</label>
+                    <select name="organization_id" required>
+                        <option value="">Organization…</option>
+                        @foreach ($fundEstablishOrganizations as $organization)
+                            <option value="{{ $organization->id }}">{{ $organization->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label>Name</label>
+                    <input name="name" type="text" required>
+                </div>
+                <div>
+                    <label>Agreement reference</label>
+                    <input name="agreement_ref" type="text" required>
+                </div>
+                <div>
+                    <label>Committed amount</label>
+                    <input name="committed_amount" type="text" inputmode="decimal" required>
+                </div>
+                <div>
+                    <label>Restricted category (optional)</label>
+                    <input name="restricted_category" type="text">
+                </div>
+                <div>
+                    <label>Restriction note (required when restricted)</label>
+                    <input name="restriction_note" type="text">
+                </div>
+            </div>
+            <div class="actions"><button type="submit" class="btn">Establish funding source</button></div>
+        </form>
+    @else
+        <p class="empty">You do not have organization-scoped authority to establish a funding source.</p>
+    @endif
+    @if ($fundingSources->isEmpty())
+        <p class="empty">No funding sources recorded.</p>
+    @else
+        <table class="grid" style="margin-top:8px">
+            <tr><th>Name</th><th>Organization</th><th>Committed</th><th>Restriction</th><th>Allocate</th></tr>
+            @foreach ($fundingSources as $fundingSource)
+                @php($eligibleFundingLines = $fundingObligationLinesByOrganization->get($fundingSource->organization_id, collect()))
+                <tr>
+                    <td>{{ $fundingSource->name }}</td>
+                    <td>{{ $fundOrganizationNames->get($fundingSource->organization_id, '—') }}</td>
+                    <td>{{ $fundingSource->committed_amount }}</td>
+                    <td class="muted">{{ $fundingSource->restricted_category ?? '—' }}</td>
+                    <td>
+                        @if (in_array($fundingSource->id, $allocatableFundingSourceIds, true) && $eligibleFundingLines->isNotEmpty())
+                            <form method="POST" action="{{ route('finance.fund.allocate', $fundingSource->id) }}" style="display:inline">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <select name="obligation_line_id" required>
+                                    <option value="">Obligation line…</option>
+                                    @foreach ($eligibleFundingLines as $line)
+                                        <option value="{{ $line->id }}">{{ \Illuminate\Support\Str::limit($line->obligation_id, 12) }} / {{ $line->category }} ({{ $line->amount }})</option>
+                                    @endforeach
+                                </select>
+                                <input name="amount" type="text" inputmode="decimal" placeholder="Amount" required>
+                                <input name="reason" type="text" placeholder="Reason" required>
+                                <button type="submit" class="btn small">Allocate</button>
+                            </form>
+                        @elseif (in_array($fundingSource->id, $allocatableFundingSourceIds, true))
+                            <span class="muted">No eligible obligation line in this organization.</span>
+                        @else
+                            <span class="muted">No allocation authority for this organization.</span>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+    @if ($fundAllocations->isNotEmpty())
+        <h2 style="margin-top:16px">Fund allocations (newest first)</h2>
+        <table class="grid">
+            <tr><th>Fund</th><th>Obligation line</th><th>Amount</th><th>Reason</th><th>Allocated by</th></tr>
+            @foreach ($fundAllocations as $allocation)
+                <tr>
+                    <td>{{ \Illuminate\Support\Str::limit($allocation->fund_id, 16) }}</td>
+                    <td>{{ \Illuminate\Support\Str::limit($allocation->obligation_line_id, 16) }}</td>
+                    <td>{{ $allocation->amount }}</td>
+                    <td class="muted">{{ \Illuminate\Support\Str::limit($allocation->reason, 24) }}</td>
+                    <td>{{ \Illuminate\Support\Str::limit($allocation->allocated_by, 16) }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+    @if ($financialCorrections->isNotEmpty())
+        <h2 style="margin-top:16px">Financial corrections (newest first)</h2>
+        <table class="grid">
+            <tr><th>Source</th><th>Amount</th><th>Direction</th><th>State</th><th>Reason</th><th>Action</th></tr>
+            @foreach ($financialCorrections as $correction)
+                <tr>
+                    <td class="muted">{{ $correction->correction_type }} / {{ \Illuminate\Support\Str::limit($correction->obligation_id ?? $correction->payment_allocation_id ?? $correction->fund_allocation_id ?? '', 16) }}</td>
+                    <td>{{ $correction->amount }}</td>
+                    <td>{{ $correction->direction }}</td>
+                    <td>{{ $correction->lifecycle_state }}</td>
+                    <td class="muted">{{ \Illuminate\Support\Str::limit($correction->reason, 28) }}</td>
+                    <td>
+                        @if ($correction->lifecycle_state === 'proposed')
+                            <form method="POST" action="{{ route('finance.correction.approve', $correction->id) }}">
+                                @csrf
+                                <input type="hidden" name="idempotency_key" value="{{ \Illuminate\Support\Str::uuid() }}">
+                                <button type="submit" class="btn small">Approve</button>
+                            </form>
+                        @else
+                            <span class="muted">Recorded</span>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+</div>
+@endsection

@@ -1,0 +1,154 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Finance\Commands;
+
+use App\Modules\Academic\Domain\RecordBranch;
+use App\Modules\Organization\Models\Branch;
+use App\Modules\Audit\AttemptedOperation;
+use App\Modules\Audit\AuditRecorder;
+use App\Modules\Finance\Domain\FinancialCoverageCommitmentAllocator;
+use App\Modules\Finance\Domain\FinancialCoverageLock;
+use App\Modules\Finance\Models\FinancialCredit;
+use App\Modules\Students\Models\Student;
+use App\Support\Authorization\AccessDecision;
+use App\Support\Authorization\Actor;
+use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
+use App\Support\Idempotency\IdempotentExecution;
+use App\Support\Identifiers\RandomIdentifier;
+use App\Support\MoneyAmount;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Finance-owned student credit/advance. A credit is proposed with an
+ * explicit source reference, approved by a distinct Finance actor against the
+ * current uncovered obligation truth, and immutable once approved.
+ */
+final class MaintainFinancialCredit
+{
+    public const CAPABILITY_PROPOSE = 'finance.credit';
+
+    public const CAPABILITY_APPROVE = 'finance.credit_approve';
+
+    public function __construct(
+        private readonly AccessDecision $access,
+        private readonly IdempotentExecution $idempotency,
+        private readonly AuditRecorder $audit,
+        private readonly AttemptedOperation $attemptedOperation,
+        private readonly FinancialCoverageCommitmentAllocator $coverageCommitments,
+    ) {}
+
+    /** @return array{credit_id: string, correlation_id: string} */
+    public function propose(Actor $proposer, string $studentId, string $amount, string $reason, string $sourceRef, string $idempotencyKey): array
+    {
+        $payload = hash('sha256', implode('|', ['finance.credit.propose', $studentId, $amount, $reason, $sourceRef, $proposer->actorId]));
+
+        try {
+            return $this->idempotency->execute('finance.credit.propose', $idempotencyKey, $payload,
+                fn (): array => DB::transaction(function () use ($proposer, $studentId, $amount, $reason, $sourceRef): array {
+                    $this->validate($amount, $reason, $sourceRef, $studentId);
+                    $branch = $this->branchForStudent($studentId);
+                    if ($branch === null) {
+                        throw BusinessRejection::forCode('finance.credit_provenance_required', 'a credit requires known student branch provenance');
+                    }
+                    $this->require($proposer, self::CAPABILITY_PROPOSE, $branch->structureScope());
+                    if (FinancialCredit::query()->where('source_ref', $sourceRef)->exists()) {
+                        throw BusinessRejection::forCode('finance.credit_source_exists', 'this credit source reference already exists');
+                    }
+
+                    $credit = FinancialCredit::query()->create([
+                        'id' => RandomIdentifier::new(),
+                        'student_id' => $studentId,
+                        'amount' => $amount,
+                        'reason' => $reason,
+                        'source_ref' => $sourceRef,
+                        'lifecycle_state' => FinancialCredit::STATE_PROPOSED,
+                        'requested_by' => $proposer->actorId,
+                    ]);
+                    $event = $this->audit->record($proposer->actorId, 'finance.credit.propose', 'financial_credit', $credit->id, null, [
+                        'student_id' => $studentId, 'branch_id' => $branch->id, 'organization_id' => $branch->structureScope()->organizationId, 'amount' => $amount, 'source_ref' => $sourceRef,
+                    ]);
+
+                    return ['credit_id' => $credit->id, 'correlation_id' => $event->correlation_id];
+                }),
+            );
+        } catch (AuthorizationDenied $denial) {
+            $this->attemptedOperation->deniedByActor($denial, $proposer, 'finance.credit.propose', 'financial_credit', $sourceRef);
+        }
+    }
+
+    /** @return array{credit_id: string, lifecycle_state: string, correlation_id: string} */
+    public function approve(Actor $approver, FinancialCredit $credit, string $idempotencyKey): array
+    {
+        $payload = hash('sha256', implode('|', ['finance.credit.approve', $credit->id, $approver->actorId]));
+
+        try {
+            return $this->idempotency->execute('finance.credit.approve', $idempotencyKey, $payload,
+                fn (): array => DB::transaction(function () use ($approver, $credit): array {
+                    FinancialCoverageLock::acquire((string) $credit->student_id);
+
+                    /** @var FinancialCredit $locked */
+                    $locked = FinancialCredit::query()->whereKey($credit->id)->lockForUpdate()->firstOrFail();
+                    $branch = $this->branchForStudent($locked->student_id);
+                    if ($branch === null) {
+                        throw BusinessRejection::forCode('finance.credit_provenance_required', 'a credit requires known student branch provenance');
+                    }
+                    $this->require($approver, self::CAPABILITY_APPROVE, $branch->structureScope());
+                    if ($locked->lifecycle_state !== FinancialCredit::STATE_PROPOSED) {
+                        throw BusinessRejection::forCode('finance.credit_not_proposed', 'only a proposed credit can be approved');
+                    }
+                    if (trim((string) $locked->requested_by) === $approver->actorId) {
+                        throw AuthorizationDenied::forCode('finance.credit_not_independent', 'the approver must differ from the proposer');
+                    }
+                    // The approval must consume specific, still-uncommitted
+                    // obligation remainder. A second approved gate source may
+                    // not silently re-use the same student-wide balance.
+                    $before = ['lifecycle_state' => $locked->lifecycle_state];
+                    $locked->forceFill(['lifecycle_state' => FinancialCredit::STATE_APPROVED, 'approved_by' => $approver->actorId, 'approved_at' => now()]);
+                    $locked->save();
+                    $commitments = $this->coverageCommitments->commitCredit($locked);
+                    $event = $this->audit->record($approver->actorId, 'finance.credit.approve', 'financial_credit', $locked->id, $before, [
+                        'lifecycle_state' => FinancialCredit::STATE_APPROVED,
+                        'branch_id' => $branch->id,
+                        'organization_id' => $branch->structureScope()->organizationId,
+                        'coverage_commitments' => $commitments,
+                    ]);
+
+                    return ['credit_id' => $locked->id, 'lifecycle_state' => FinancialCredit::STATE_APPROVED, 'correlation_id' => $event->correlation_id];
+                }),
+            );
+        } catch (AuthorizationDenied $denial) {
+            $this->attemptedOperation->deniedByActor($denial, $approver, 'finance.credit.approve', 'financial_credit', $credit->id);
+        }
+    }
+
+    private function validate(string $amount, string $reason, string $sourceRef, string $studentId): void
+    {
+        if ($reason === '' || $sourceRef === '') {
+            throw BusinessRejection::forCode('finance.credit_terms', 'a credit requires its reason and source reference');
+        }
+        if (! MoneyAmount::positive($amount)) {
+            throw BusinessRejection::forCode('finance.credit_amount', 'the credit amount must be a positive number');
+        }
+        if (Student::query()->whereKey($studentId)->doesntExist()) {
+            throw BusinessRejection::forCode('finance.credit_student_unknown', 'a credit requires a known student');
+        }
+    }
+
+    private function branchForStudent(string $studentId): ?Branch
+    {
+        $branchId = RecordBranch::studentBranchForId($studentId);
+
+        return $branchId === null ? null : Branch::query()->whereKey($branchId)->first();
+    }
+
+    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    {
+        $outcome = $this->access->decide($actor, $capability, $scope);
+        if (! $outcome->allowed) {
+            throw AuthorizationDenied::forCode('finance.credit_denied', $outcome->reason);
+        }
+    }
+}
