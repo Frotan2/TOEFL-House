@@ -174,72 +174,91 @@ return new class extends Migration
                         RAISE EXCEPTION 'terminal teacher authority state is final' USING ERRCODE = 'check_violation';
                     END IF;
                 END IF;
-                IF TG_TABLE_NAME IN ('teacher_profile_branches', 'teacher_skill_authorities', 'teacher_availabilities', 'teacher_workload_limits')
-                   AND NEW.lifecycle_state = 'ended' AND NEW.effective_to IS NULL THEN
-                    RAISE EXCEPTION 'ended teacher authority requires an effective end date'
-                        USING ERRCODE = 'check_violation';
+                -- teacher_qualifications has no effective_to column, and
+                -- PL/pgSQL resolves NEW.effective_to even when the
+                -- TG_TABLE_NAME test above is false, so the table check must
+                -- be a nested IF rather than a conjunct.
+                IF TG_TABLE_NAME IN ('teacher_profile_branches', 'teacher_skill_authorities', 'teacher_availabilities', 'teacher_workload_limits') THEN
+                    IF NEW.lifecycle_state = 'ended' AND NEW.effective_to IS NULL THEN
+                        RAISE EXCEPTION 'ended teacher authority requires an effective end date'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
                 END IF;
-                IF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_qualifications'
-                   AND OLD.lifecycle_state IN ('verified', 'expired', 'revoked')
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.qualification_type IS DISTINCT FROM OLD.qualification_type
-                       OR NEW.title IS DISTINCT FROM OLD.title
-                       OR NEW.issuer IS DISTINCT FROM OLD.issuer
-                       OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
-                       OR NEW.submitted_by IS DISTINCT FROM OLD.submitted_by
-                       OR NEW.valid_from IS DISTINCT FROM OLD.valid_from
-                       OR NEW.valid_to IS DISTINCT FROM OLD.valid_to
-                       OR NEW.verified_by IS DISTINCT FROM OLD.verified_by
-                       OR NEW.verified_at IS DISTINCT FROM OLD.verified_at
-                   ) THEN
-                    RAISE EXCEPTION 'verified teacher qualification evidence is immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_profile_branches'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.provenance_reason IS DISTINCT FROM OLD.provenance_reason
-                       OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-                   ) THEN
-                    RAISE EXCEPTION 'teacher branch authorization identity and provenance are immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_skill_authorities'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.skill_id IS DISTINCT FROM OLD.skill_id
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                       OR NEW.authority_kind IS DISTINCT FROM OLD.authority_kind
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-                       OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
-                   ) THEN
-                    RAISE EXCEPTION 'teacher subject authority identity and evidence are immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_availabilities'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.weekday IS DISTINCT FROM OLD.weekday
-                       OR NEW.starts_at IS DISTINCT FROM OLD.starts_at
-                       OR NEW.ends_at IS DISTINCT FROM OLD.ends_at
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.availability_kind IS DISTINCT FROM OLD.availability_kind
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                   ) THEN
-                    RAISE EXCEPTION 'teacher availability identity is immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_workload_limits'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                       OR NEW.max_hours_per_week IS DISTINCT FROM OLD.max_hours_per_week
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-                       OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
-                   ) THEN
-                    RAISE EXCEPTION 'teacher workload limit identity and evidence are immutable'
-                        USING ERRCODE = 'check_violation';
+                -- PL/pgSQL evaluates the whole boolean expression, so a NEW.<column>
+                -- reference is resolved even when the TG_TABLE_NAME test is false. This
+                -- shared guard is attached to several tables, so each table's columns
+                -- must be referenced only inside that table's own branch.
+                IF TG_TABLE_NAME = 'teacher_qualifications' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND OLD.lifecycle_state IN ('verified', 'expired', 'revoked')
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.qualification_type IS DISTINCT FROM OLD.qualification_type
+                           OR NEW.title IS DISTINCT FROM OLD.title
+                           OR NEW.issuer IS DISTINCT FROM OLD.issuer
+                           OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
+                           OR NEW.submitted_by IS DISTINCT FROM OLD.submitted_by
+                           OR NEW.valid_from IS DISTINCT FROM OLD.valid_from
+                           OR NEW.valid_to IS DISTINCT FROM OLD.valid_to
+                           OR NEW.verified_by IS DISTINCT FROM OLD.verified_by
+                           OR NEW.verified_at IS DISTINCT FROM OLD.verified_at
+                       ) THEN
+                        RAISE EXCEPTION 'verified teacher qualification evidence is immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_profile_branches' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.provenance_reason IS DISTINCT FROM OLD.provenance_reason
+                           OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                       ) THEN
+                        RAISE EXCEPTION 'teacher branch authorization identity and provenance are immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_skill_authorities' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.skill_id IS DISTINCT FROM OLD.skill_id
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                           OR NEW.authority_kind IS DISTINCT FROM OLD.authority_kind
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                           OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
+                       ) THEN
+                        RAISE EXCEPTION 'teacher subject authority identity and evidence are immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_availabilities' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.weekday IS DISTINCT FROM OLD.weekday
+                           OR NEW.starts_at IS DISTINCT FROM OLD.starts_at
+                           OR NEW.ends_at IS DISTINCT FROM OLD.ends_at
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.availability_kind IS DISTINCT FROM OLD.availability_kind
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                       ) THEN
+                        RAISE EXCEPTION 'teacher availability identity is immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_workload_limits' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                           OR NEW.max_hours_per_week IS DISTINCT FROM OLD.max_hours_per_week
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                           OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
+                       ) THEN
+                        RAISE EXCEPTION 'teacher workload limit identity and evidence are immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
                 END IF;
                 IF TG_TABLE_NAME = 'teacher_qualifications' THEN
                     IF NEW.lifecycle_state = 'verified' AND (NEW.submitted_by IS NULL OR NEW.verified_by IS NULL OR NEW.verified_at IS NULL) THEN

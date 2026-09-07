@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Outbox\Domain;
 
 use App\Modules\Audit\Models\AuditEvent;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Stable event-envelope context. Missing operational provenance is explicit
@@ -19,6 +20,31 @@ use App\Modules\Audit\Models\AuditEvent;
  */
 final class DomainEventContext
 {
+    /**
+     * Resolves the organization that currently owns a branch, via its
+     * effective campus assignment. Returns null when the branch has no
+     * resolvable active provenance, which keeps the envelope explicit rather
+     * than inventing organization-wide visibility.
+     */
+    private static function organizationForBranch(string $branchId): ?string
+    {
+        $organizationId = DB::table('campus_assignments as ca')
+            ->join('campuses as c', 'c.id', '=', 'ca.campus_id')
+            ->join('organizations as o', 'o.id', '=', 'c.organization_id')
+            ->whereRaw('btrim(ca.branch_id) = ?', [trim($branchId)])
+            ->whereDate('ca.effective_from', '<=', now())
+            ->where(function ($query): void {
+                $query->whereNull('ca.effective_to')->orWhereDate('ca.effective_to', '>', now());
+            })
+            ->where('c.lifecycle_state', 'active')
+            ->where('o.lifecycle_state', 'active')
+            ->value('c.organization_id');
+
+        $organizationId = is_string($organizationId) ? trim($organizationId) : null;
+
+        return ($organizationId === null || $organizationId === '') ? null : $organizationId;
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, string|null>
@@ -58,6 +84,15 @@ final class DomainEventContext
         if (! $branchDeclared && ! $organizationDeclared) {
             $branchId = self::first($intentFields, $provenanceKeys);
             $organizationId = self::first($intentFields, ['organization_id']);
+        }
+
+        // A branch-scoped envelope must also carry the organization that owns
+        // the branch: `domain_events_context_provenance_guard` requires both
+        // ids and that they identify the same active structure. The
+        // organization is derived from the branch on the server rather than
+        // trusted from the payload, so a producer cannot widen its own scope.
+        if ($branchId !== null && $organizationId === null) {
+            $organizationId = self::organizationForBranch($branchId);
         }
 
         $hasProvenance = $branchId !== null || $organizationId !== null;

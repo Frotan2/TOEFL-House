@@ -32,6 +32,7 @@ use Tests\TestCase;
 final class AcademicDeliveryFeatureTest extends TestCase
 {
     use \Tests\Concerns\BuildsAcademicStructure;
+    use \Tests\Concerns\BuildsTeachers;
 
     use BuildsActors;
     use DecidesAdmissions;
@@ -44,7 +45,7 @@ final class AcademicDeliveryFeatureTest extends TestCase
     {
         parent::setUp();
         $officer = $this->academicOfficer();
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'delivery');
 
         $chain = $this->buildAcademicChain($officer, 'delivery');
         $version = ['version_id' => $chain['program_version_id']];
