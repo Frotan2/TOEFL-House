@@ -18,10 +18,13 @@ The repository is a Laravel 12 modular monolith backed by PostgreSQL with broad 
 - audit and provenance controls
 - React boundary plus employee/management workspace foundations
 - outbox/consumer foundations
+- repository-wide hygiene and standards policy is now canonical
+- runtime/setup documentation distinguishes preparation from runtime evidence
+- frontend has an explicit TypeScript typecheck command
 
 ## Partially achieved / target gaps
 
-- remaining interactive Blade migration
+- remaining interactive Blade migration and retirement of compatible web POST adapters once external/current consumers are migrated
 - richer reporting snapshots/replay
 - dead-letter/replay operational tooling
 - richer notification and workspace operations
@@ -30,18 +33,24 @@ The repository is a Laravel 12 modular monolith backed by PostgreSQL with broad 
 - student/employee portal breadth
 - production observability/alerting depth
 - full operational browser/accessibility/performance evidence
+- physical PostgreSQL schema-baseline consolidation and independent schema equivalence proof
+- full runtime execution of the repository-wide quality gates in the official environment
 
 ## Release blockers
 
 The current documentation status must retain the runtime-certification blocker until the official runtime stack is actually available and the required gates pass.
 
+The database baseline decision is separately runtime-gated. No guessed baseline or fake migration state is acceptable.
+
 ## Priority order
 
-1. Official-runtime certification.
+1. Establish the official runtime environment and execute the verification gates.
 2. Resolve any runtime defects discovered there.
-3. Complete deterministic frontend dependency/release process.
-4. Complete approved target-state capabilities in dependency order.
-5. Keep documentation synchronized as implementation evolves.
+3. Freeze and independently verify the PostgreSQL schema baseline before any historical migration-chain removal.
+4. Complete deterministic frontend dependency/release process.
+5. Complete approved target-state capabilities in dependency order.
+6. Migrate/retire compatibility boundaries when real consumers are proven migrated.
+7. Keep documentation synchronized as implementation evolves.
 
 Historical work-package roadmaps remain historical evidence and must not override this current-state roadmap.
 
@@ -60,6 +69,7 @@ Historical work-package roadmaps remain historical evidence and must not overrid
 | Reporting / integration | CURRENT / TARGET GAP | Read-only projections/outbox/consumers exist; richer replay/DLQ/snapshot depth remains. |
 | Frontend | CURRENT / TARGET GAP | React boundary exists; remaining interactive Blade retirement remains. |
 | Operations / DR | CURRENT / TARGET GAP | Hardened deployment and recovery procedures exist; official-runtime drills remain. |
+| Codebase hygiene | CURRENT / TARGET GAP | Standards, naming, comment, compatibility and cleanup policy are canonical; full runtime execution of all gates remains blocked. |
 
 ## Release-state separation
 
