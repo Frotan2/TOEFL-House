@@ -69,7 +69,21 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         app(MaintainClass::class)->transition($officer, $classRow, 'active', 'canon-delivery-active');
         $this->assertDatabaseHas('classes', ['id' => $classRow->id, 'lifecycle_state' => 'active']);
 
-        $session = app(MaintainClass::class)->scheduleSession($officer, $classRow, new CarbonImmutable('2026-09-07'), '09:00', '11:00', 'canon-delivery-session', $this->newSkillId($officer, 'canon-skill-1'));
+        // Scheduling needs an authorized, available teacher whose assignment
+        // carries the session skill. This test builds its class by hand to
+        // exercise the lifecycle guards, so it wires that chain explicitly.
+        $deliverySkillId = $this->newSkillId($officer, 'canon-delivery-sk');
+        $profileId = (string) \App\Modules\Academic\Models\TeacherProfile::query()
+            ->where('person_id', 'canon-delivery-teach')->value('id');
+        foreach (range(1, 7) as $weekday) {
+            $this->makeTeacherSessionReady(
+                $profileId, $deliverySkillId, $this->sharedBranchId(),
+                'canon-dlv-w'.$weekday, $weekday
+            );
+        }
+        $this->attributeSkillToAssignment($officer, $classRow->id, $deliverySkillId, 'canon-dlv-attr');
+
+        $session = app(MaintainClass::class)->scheduleSession($officer, $classRow, new CarbonImmutable('2026-09-07'), '09:00', '11:00', 'canon-delivery-session', $deliverySkillId);
         $this->assertDatabaseHas('class_sessions', ['id' => $session['session_id'], 'class_id' => $classRow->id]);
 
         app(MaintainClass::class)->transition($officer, $classRow, 'cancelled', 'canon-delivery-cancel');
@@ -80,7 +94,8 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
     public function test_duplicate_seat_capacity_and_transfer_preserve_enrollment_history(): void
     {
         $officer = $this->actorWith('canon-academic-enroll', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.enroll_approve']);
-        $classId = $this->newActiveClass($officer, 'canon-delivery-enroll', 2)['class_id'];
+        $delivery = $this->newActiveClass($officer, 'canon-delivery-enroll', 2);
+        $classId = $delivery['class_id'];
         $studentA = $this->newStudent()['student'];
         $studentB = $this->newStudent()['student'];
         $studentC = $this->newStudent()['student'];
@@ -122,7 +137,8 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
     public function test_suspended_student_cannot_request_an_enrollment(): void
     {
         $officer = $this->actorWith('canon-suspended-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll']);
-        $classId = $this->newActiveClass($officer, 'canon-suspended', 2)['class_id'];
+        $delivery = $this->newActiveClass($officer, 'canon-suspended', 2);
+        $classId = $delivery['class_id'];
         $student = $this->newStudent()['student'];
         app(TransitionStudentStatus::class)->suspend(
             $this->actorWith('canon-student-manager', ['students.manage', 'students.hold']),
@@ -139,11 +155,12 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
     public function test_attendance_corrections_are_append_only_and_require_reason(): void
     {
         $officer = $this->actorWith('canon-attendance-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.enroll_approve', 'academic.attendance']);
-        $classId = $this->newActiveClass($officer, 'canon-attendance', 2)['class_id'];
+        $delivery = $this->newActiveClass($officer, 'canon-attendance', 2);
+        $classId = $delivery['class_id'];
         $student = $this->newStudent()['student'];
         $seat = app(MaintainEnrollment::class)->request($officer, $student->id, $classId, 'canon-attendance-enroll');
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'canon-attendance-activate');
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-08'), '09:00', '11:00', 'canon-attendance-session', $this->newSkillId($officer, 'canon-skill-2'));
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-08'), '09:00', '11:00', 'canon-attendance-session', $delivery['skill_id']);
         $sessionRow = ClassSession::query()->findOrFail($session['session_id']);
 
         $fact = app(RecordAttendance::class)->record($officer, $sessionRow, Enrollment::query()->findOrFail($seat['enrollment_id']), 'present', 'canon-attendance-record');
@@ -166,11 +183,12 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
     public function test_frozen_enrollment_cannot_take_attendance_or_transfer(): void
     {
         $officer = $this->actorWith('canon-frozen-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.enroll_approve', 'academic.attendance']);
-        $classId = $this->newActiveClass($officer, 'canon-frozen', 2)['class_id'];
+        $delivery = $this->newActiveClass($officer, 'canon-frozen', 2);
+        $classId = $delivery['class_id'];
         $student = $this->newStudent()['student'];
         $seat = app(MaintainEnrollment::class)->request($officer, $student->id, $classId, 'canon-frozen-enroll');
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'canon-frozen-activate');
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-09'), '09:00', '11:00', 'canon-frozen-session', $this->newSkillId($officer, 'canon-skill-3'));
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-09'), '09:00', '11:00', 'canon-frozen-session', $delivery['skill_id']);
         $sessionRow = ClassSession::query()->findOrFail($session['session_id']);
 
         app(MaintainEnrollment::class)->freeze($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'student requested a term break', 'canon-frozen-freeze');

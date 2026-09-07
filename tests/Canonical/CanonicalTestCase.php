@@ -76,7 +76,26 @@ abstract class CanonicalTestCase extends TestCase
      */
     protected function newActiveClass(\App\Support\Authorization\Actor $officer, string $keyPrefix, int $classCapacity = 2, int $offeringCapacity = 25): array
     {
-        return $this->buildActiveClass($officer, $keyPrefix, $classCapacity, $offeringCapacity);
+        $delivery = $this->buildActiveClass($officer, $keyPrefix, $classCapacity, $offeringCapacity);
+
+        // Make the class schedulable: a session needs an authorized, available
+        // teacher whose assignment carries the session skill. Returning a class
+        // that cannot hold a session would push this chain into every test.
+        $skillId = $this->newSkillId($officer, $keyPrefix.'-sk');
+        $profileId = \App\Modules\Academic\Models\TeacherProfile::query()
+            ->where('person_id', $delivery['teacher_person_id'])->value('id');
+
+        if ($profileId !== null) {
+            foreach (range(1, 7) as $weekday) {
+                $this->makeTeacherSessionReady(
+                    (string) $profileId, $skillId, $delivery['branch_id'],
+                    $keyPrefix.'-w'.$weekday, $weekday
+                );
+            }
+            $this->attributeSkillToAssignment($officer, $delivery['class_id'], $skillId, $keyPrefix.'-attr');
+        }
+
+        return $delivery + ['skill_id' => $skillId];
     }
 
     /** @return array{enrollment_id: string, correlation_id: string} */
@@ -93,7 +112,66 @@ abstract class CanonicalTestCase extends TestCase
      */
     protected function newSkillId(\App\Support\Authorization\Actor $officer, string $key): string
     {
+        // Skill registration is branchless governance and needs an
+        // organization-wide `academic.skill` grant, which a branch-scoped
+        // academic officer does not carry.
+        $registrar = $this->actorWith('canon-skill-registrar', ['academic.skill']);
+
         return app(\App\Modules\Academic\Commands\MaintainSkill::class)
-            ->register($officer, $key, ucfirst(str_replace('-', ' ', $key)), $key.'-skill')['skill_id'];
+            ->register($registrar, $key, ucfirst(str_replace('-', ' ', $key)), $key.'-skill')['skill_id'];
+    }
+
+    /**
+     * Makes a teacher able to deliver a session for a skill.
+     *
+     * Scheduling checks a chain the domain will not infer: the skill must be
+     * authorized for the teacher in that branch, the teacher must be available
+     * on the session weekday, and the skill must be attributed to the
+     * effective class assignment.
+     */
+    protected function makeTeacherSessionReady(
+        string $teacherProfileId,
+        string $skillId,
+        string $branchId,
+        string $keyPrefix,
+        int $weekday
+    ): void {
+        // authorizeSkill is approval-side; declareAvailability is management-side.
+        $approver = $this->actorWith($keyPrefix.'-sk-a', ['academic.teacher_approve']);
+        $manager = $this->actorWith($keyPrefix.'-sk-m', ['academic.teacher_manage']);
+        $profiles = app(\App\Modules\Academic\Commands\MaintainTeacherProfile::class);
+        $profile = \App\Modules\Academic\Models\TeacherProfile::query()->findOrFail($teacherProfileId);
+        $from = \Carbon\CarbonImmutable::today()->subYear()->toDateString();
+
+        if (! \App\Modules\Academic\Models\TeacherSkillAuthority::query()
+            ->where('teacher_profile_id', $teacherProfileId)
+            ->where('skill_id', $skillId)->where('branch_id', $branchId)->exists()) {
+            $profiles->authorizeSkill(
+                $approver, $profile, $skillId, $branchId, 'teach', $from, null,
+                'evidence/'.$keyPrefix.'/skill', $keyPrefix.'-sk-auth'
+            );
+        }
+        $profiles->declareAvailability(
+            $manager, \App\Modules\Academic\Models\TeacherProfile::query()->findOrFail($teacherProfileId),
+            $branchId, $weekday, '00:00', '23:59', $from, null, 'available', $keyPrefix.'-sk-avail'
+        );
+    }
+
+    /** Attributes a skill to the class's effective teacher assignment. */
+    protected function attributeSkillToAssignment(
+        \App\Support\Authorization\Actor $officer,
+        string $classId,
+        string $skillId,
+        string $key
+    ): void {
+        $assignment = \App\Modules\Academic\Models\TeacherAssignment::query()
+            ->where('class_id', $classId)->whereNull('effective_to')->firstOrFail();
+
+        // Attribution is a teacher-management action; the scheduling officer
+        // does not necessarily hold that capability.
+        $manager = $this->actorWith($key.'-mgr', ['academic.teacher_manage', 'academic.schedule']);
+
+        app(\App\Modules\Academic\Commands\MaintainClass::class)
+            ->assignSkill($manager, $assignment, $skillId, $key);
     }
 }
