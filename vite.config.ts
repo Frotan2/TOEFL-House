@@ -14,6 +14,7 @@ export default defineConfig({
         'resources/js/placement.tsx',
         'resources/js/identity.tsx',
         'resources/js/access.tsx',
+        'resources/js/organization.tsx',
       ],
       refresh: ['resources/views/**'],
     }),
