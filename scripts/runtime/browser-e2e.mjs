@@ -46,6 +46,15 @@ const record = (name, pass, detail) => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}\n      ${detail}`);
 };
 
+// Fail with a usable message when the target database has no account to sign
+// in with. Without this the suite reports a generic authentication failure and
+// looks like a product defect, when the real cause is an unseeded database.
+const probe = await fetch(`${BASE}/health`).then((r) => r.json()).catch(() => null);
+if (probe === null) {
+  console.error(`Cannot reach ${BASE}. Start the application before running browser E2E.`);
+  process.exit(1);
+}
+
 const browser = await puppeteer.launch({
   executablePath: EXECUTABLE,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
@@ -82,6 +91,16 @@ try {
     `landed on ${page.url().replace(BASE, '')}`
   );
 
+  // Brute-force protection is per (IP, username). Deliberately failing a
+  // login below consumes that allowance, so the sign-in attempt that follows
+  // can be throttled rather than genuinely rejected. Detect that explicitly
+  // instead of reporting it as an authentication failure.
+  const throttled = async () =>
+    (await page.evaluate(async (base) => {
+      const r = await fetch(`${base}/login`, { method: 'POST', headers: { Accept: 'application/json' } });
+      return r.status;
+    }, BASE)) === 429;
+
   // --- 2. Wrong credentials are rejected ----------------------------------
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle2' });
   await page.type('input[name="username"]', USER);
@@ -113,7 +132,14 @@ try {
   );
 
   if (!authenticated) {
-    throw new Error('authentication failed; console verification cannot proceed');
+    throw new Error(
+      (await throttled()
+        ? `login is rate limited (HTTP 429) for "${USER}"; wait for the throttle window or clear the cache, then re-run. `
+        : `authentication failed for "${USER}"; console verification cannot proceed. `)
+      + 'If the target database was recently rebuilt, seed an owner account first: '
+      + 'php artisan db:seed --class=FirstRunBootstrapSeeder --force '
+      + '(with BOOTSTRAP_OWNER_* set). See docs/TEST_SUITE_ARCHITECTURE.md.'
+    );
   }
 
   // --- 4. Every console renders a live React tree -------------------------
