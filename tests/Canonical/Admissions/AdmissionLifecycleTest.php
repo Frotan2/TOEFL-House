@@ -28,7 +28,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
     {
         parent::setUp();
         $this->applicantPersonId = 'canon-adm-person-1';
-        $this->personWithAuthority($this->applicantPersonId, []);
+        $this->canonicalPersonWithAuthority($this->applicantPersonId, []);
     }
 
     private function registeredApplicant(): Applicant
@@ -50,14 +50,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
         $approver = $this->admissionsApprover('canon-adm-approve-1');
         $applicant = $this->registeredApplicant();
 
-        $initiated = app(DecideAdmission::class)->initiate(
-            $clerk,
-            $applicant,
-            true,
-            'meets entry policy',
-            'interview-notes/canon-1',
-            'canon-adm-dec-init',
-        );
+        $initiated = app(DecideAdmission::class)->initiate($clerk, $applicant, true, 'meets entry policy', 'interview-notes/canon-1', 'canon-adm-dec-init');
         $this->assertSame('proposed', $initiated['lifecycle_state']);
         $this->assertDatabaseHas('admission_decisions', [
             'id' => $initiated['decision_id'],
@@ -69,19 +62,11 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
         ]);
         $this->assertDatabaseHas('applicants', ['id' => $applicant->id, 'lifecycle_state' => 'applicant']);
 
-        $reviewed = app(DecideAdmission::class)->review(
-            $reviewer,
-            AdmissionDecision::query()->findOrFail($initiated['decision_id']),
-            'canon-adm-dec-review',
-        );
+        $reviewed = app(DecideAdmission::class)->review($reviewer, AdmissionDecision::query()->findOrFail($initiated['decision_id']), 'canon-adm-dec-review');
         $this->assertSame('reviewed', $reviewed['lifecycle_state']);
         $this->assertDatabaseHas('applicants', ['id' => $applicant->id, 'lifecycle_state' => 'applicant']);
 
-        $decision = app(DecideAdmission::class)->approve(
-            $approver,
-            AdmissionDecision::query()->findOrFail($initiated['decision_id']),
-            'canon-adm-dec-approve',
-        );
+        $decision = app(DecideAdmission::class)->approve($approver, AdmissionDecision::query()->findOrFail($initiated['decision_id']), 'canon-adm-dec-approve');
         $this->assertSame('admit', $decision['outcome']);
         $this->assertDatabaseHas('applicants', ['id' => $applicant->id, 'lifecycle_state' => 'admitted']);
         $this->assertDatabaseHas('admission_decisions', [
@@ -181,6 +166,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
             'legal_name' => 'Canonical Unverified Applicant',
             'date_of_birth' => '2005-05-05',
             'verification_state' => Person::VERIFICATION_UNVERIFIED,
+            'home_branch_id' => $this->sharedBranchId(),
         ]);
 
         $this->expectException(BusinessRejection::class);
