@@ -45,13 +45,19 @@ trait BuildsStudents
             'identity_evidence_ref' => 'evidence/fixture/'.$applicantPersonId,
             'verified_by' => 'fixture-verifier',
             'verified_at' => now()->toDateTimeString(),
+            // A verified person is immutable, so provenance is set on insert.
+            'home_branch_id' => $this->bootstrapBranchId(),
         ]);
 
+        // Registration requires an explicit operational branch; the domain
+        // deliberately refuses to infer one.
         app(RegisterApplicant::class)->register(
             $this->grantedActor($initiatorId, []),
             $applicantPersonId,
             'TOEFL Intensive',
             'idem-print-'.RandomIdentifier::new(),
+            null,
+            $this->bootstrapBranchId(),
         );
         $applicant = Applicant::query()->where('person_id', $applicantPersonId)->firstOrFail();
 

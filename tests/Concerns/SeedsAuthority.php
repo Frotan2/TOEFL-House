@@ -11,6 +11,7 @@ use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
 use App\Modules\Access\Models\ScopeGrant;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\CampusAssignment;
 use App\Modules\Organization\Models\Organization;
@@ -41,17 +42,65 @@ trait SeedsAuthority
     /** @var array<string, Person> */
     private array $authorityPeople = [];
 
+    private string $bootstrapCampusId = '00000000-0000-4000-8000-00000000c005';
+
+    private string $bootstrapBranchId = '00000000-0000-4000-8000-00000000d005';
+
+    /**
+     * Seeds the minimum *complete* structure an operational fixture needs.
+     *
+     * An organization on its own is not usable provenance: person-linked
+     * operations resolve scope through Person.home_branch_id -> Branch ->
+     * active CampusAssignment -> Organization (see PersonBranchScope). A
+     * bootstrap that stops at the organization leaves every fixture person
+     * without resolvable provenance, and the domain correctly rejects the
+     * operation rather than falling back to a global scope.
+     */
+    /** The shared operational branch every authority fixture is homed in. */
+    private function bootstrapBranchId(): string
+    {
+        $this->ensureBootstrapAuthority();
+
+        return $this->bootstrapBranchId;
+    }
+
     private function ensureBootstrapAuthority(): void
     {
-        if (Organization::query()->whereKey($this->bootstrapOrganizationId)->exists()) {
-            return;
+        if (! Organization::query()->whereKey($this->bootstrapOrganizationId)->exists()) {
+            Organization::query()->create([
+                'id' => $this->bootstrapOrganizationId,
+                'name' => 'Authority Bootstrap',
+                'lifecycle_state' => 'active',
+            ]);
         }
 
-        Organization::query()->create([
-            'id' => $this->bootstrapOrganizationId,
-            'name' => 'Authority Bootstrap',
-            'lifecycle_state' => 'active',
-        ]);
+        if (! Campus::query()->whereKey($this->bootstrapCampusId)->exists()) {
+            Campus::query()->create([
+                'id' => $this->bootstrapCampusId,
+                'organization_id' => $this->bootstrapOrganizationId,
+                'name' => 'Authority Bootstrap Campus',
+                'lifecycle_state' => 'active',
+            ]);
+        }
+
+        if (! Branch::query()->whereKey($this->bootstrapBranchId)->exists()) {
+            Branch::query()->create([
+                'id' => $this->bootstrapBranchId,
+                'name' => 'Authority Bootstrap Branch',
+                'lifecycle_state' => 'active',
+            ]);
+        }
+
+        if (! CampusAssignment::query()->where('branch_id', $this->bootstrapBranchId)->whereNull('effective_to')->exists()) {
+            CampusAssignment::query()->create([
+                'id' => RandomIdentifier::new(),
+                'branch_id' => $this->bootstrapBranchId,
+                'campus_id' => $this->bootstrapCampusId,
+                'effective_from' => '2026-01-01',
+                'effective_to' => null,
+                'transfer_correlation_id' => RandomIdentifier::new(),
+            ]);
+        }
     }
 
     /**
@@ -72,6 +121,9 @@ trait SeedsAuthority
                 'identity_evidence_ref' => 'evidence/fixture/'.$personId,
                 'verified_by' => 'fixture-verifier',
                 'verified_at' => now()->toDateTimeString(),
+                // Set at creation: a verified person is immutable, so home
+                // provenance cannot be attached by a later UPDATE.
+                'home_branch_id' => $this->bootstrapBranchId,
             ]);
         }
         $person = $this->authorityPeople[$personId];
