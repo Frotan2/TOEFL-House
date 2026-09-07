@@ -34,8 +34,7 @@ final class HrApiController extends Controller
         $employments = Employment::query()->whereIn('id', $employmentIds)->orderByDesc('id')->limit(300)->get();
         $leaves = Leave::query()->whereIn('employment_id', $employmentIds)->orderByDesc('date_from')->limit(300)->get();
         $contracts = Contract::query()->whereIn('employment_id', $employmentIds)->orderByDesc('id')->limit(200)->get();
-        $contractIds = $contracts->pluck('id')->all();
-        $versions = ContractVersion::query()->whereIn('contract_id', $contractIds)->orderByDesc('effective_from')->limit(300)->get();
+        $versions = ContractVersion::query()->whereIn('contract_id', $contracts->pluck('id')->all())->orderByDesc('effective_from')->limit(300)->get();
 
         return response()->json([
             'data' => [
@@ -48,10 +47,6 @@ final class HrApiController extends Controller
                 'capabilities' => [
                     'employ' => $this->can('hr.employ'),
                     'contract' => $this->can('hr.contract'),
-                    'leave' => $this->can('hr.leave'),
-                    'approve_leave' => $this->can('hr.leave_decide'),
-                    'approve_contract' => $this->can('hr.contract_approve'),
-                    'scale' => $this->can('hr.scale'),
                 ],
             ],
         ]);
