@@ -65,7 +65,9 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
 
         $hrManager = $this->grantedActor('p16atk-hr-1', ['hr.employ']);
         $this->buildActiveTeacher($this->teacherPersonId, null, 'delivery918');
-        $employment = app(MaintainEmployment::class)->employ($hrManager, $this->teacherPersonId, 'p16atk-emp-1');
+        $employment = ['employment_id' => (string) \App\Modules\Hr\Models\Employment::query()
+            ->where('person_id', $this->teacherPersonId)->where('lifecycle_state', '!=', 'terminated')
+            ->value('id')]; // buildActiveTeacher already opened this employment
         $this->employmentId = $employment['employment_id'];
 
         $skillRegistrar = $this->grantedActor('p16atk-skill-1', ['academic.skill']);

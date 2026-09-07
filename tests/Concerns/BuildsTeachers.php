@@ -76,15 +76,26 @@ trait BuildsTeachers
         // domain intends.
         $academicApprover = $this->grantedActor($keyPrefix.'-teacher-approver', ['academic.teacher_approve']);
 
+        // A person may hold only one open employment (hr.employment_open_exists),
+        // so reuse an existing one rather than colliding with a test that
+        // already employed this person.
+        $existingEmployment = Employment::query()
+            ->where('person_id', $personId)
+            ->where('lifecycle_state', '!=', 'terminated')
+            ->first();
         // HR employment must exist and be active before a profile can exist.
-        $employment = app(MaintainEmployment::class)->employ(
-            $hrOfficer,
-            $personId,
-            $keyPrefix.'-employ',
-        );
+        $employment = $existingEmployment !== null
+            ? ['employment_id' => $existingEmployment->id]
+            : app(MaintainEmployment::class)->employ(
+                $hrOfficer,
+                $personId,
+                $keyPrefix.'-employ',
+            );
         $employmentModel = Employment::query()->findOrFail($employment['employment_id']);
+        $alreadyActive = $employmentModel->lifecycle_state === 'active';
 
         // Hiring requires an active contract (hr.hire_requires_contract).
+        if (! $alreadyActive) {
         $contractOfficer = $this->grantedActor($keyPrefix.'-hr-contract', ['hr.contract']);
         $contract = app(MaintainContract::class)->draft(
             $contractOfficer,
@@ -100,12 +111,13 @@ trait BuildsTeachers
             $keyPrefix.'-contract-sign',
         );
 
-        app(MaintainEmployment::class)->hire(
-            $hrOfficer,
-            $employmentModel,
-            $effectiveFrom,
-            $keyPrefix.'-hire',
-        );
+            app(MaintainEmployment::class)->hire(
+                $hrOfficer,
+                $employmentModel,
+                $effectiveFrom,
+                $keyPrefix.'-hire',
+            );
+        }
 
         // Fail loudly here rather than letting a later guard reject an
         // apparently unrelated operation: the fixture's whole purpose is to

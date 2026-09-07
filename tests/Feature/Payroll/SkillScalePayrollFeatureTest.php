@@ -74,7 +74,9 @@ final class SkillScalePayrollFeatureTest extends TestCase
 
         $hrManager = $this->grantedActor('p16-pay-hr-1', ['hr.employ']);
         $this->buildActiveTeacher($this->teacherPersonId, null, 'skillscaf8b');
-        $employment = app(MaintainEmployment::class)->employ($hrManager, $this->teacherPersonId, 'p16-pay-emp-1');
+        $employment = ['employment_id' => (string) \App\Modules\Hr\Models\Employment::query()
+            ->where('person_id', $this->teacherPersonId)->where('lifecycle_state', '!=', 'terminated')
+            ->value('id')]; // buildActiveTeacher already opened this employment
         $this->employmentId = $employment['employment_id'];
 
         $skillRegistrar = $this->grantedActor('p16-pay-skill-1', ['academic.skill']);
@@ -553,7 +555,9 @@ final class SkillScalePayrollFeatureTest extends TestCase
     {
         $hrManager = $this->grantedActor('p16-pay-hr-1', ['hr.employ']);
         $this->buildActiveTeacher('p16-pay-teacher-2', null, 'skillsca958');
-        $otherEmployment = app(MaintainEmployment::class)->employ($hrManager, 'p16-pay-teacher-2', 'p16-t10-emp');
+        $otherEmployment = ['employment_id' => (string) \App\Modules\Hr\Models\Employment::query()
+            ->where('person_id', 'p16-pay-teacher-2')->where('lifecycle_state', '!=', 'terminated')
+            ->value('id')]; // buildActiveTeacher already opened this employment
 
         // A session delivered by the setUp teacher must never bill the other employment.
         $this->deliveredSession('2026-08-05', 'speaking_listening', 'p16-t10-s1');
