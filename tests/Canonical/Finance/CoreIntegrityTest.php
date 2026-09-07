@@ -65,9 +65,7 @@ final class CoreIntegrityTest extends CanonicalTestCase
         $this->assertSame(2, DB::table('obligation_lines')->where('obligation_id', $obligation['obligation_id'])->count());
 
         try {
-            app(PostObligation::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, 'tuition', 'bad', [
-                ['category' => 'tuition', 'amount' => '0.00', 'source_ref' => 'x'],
-            ], 'canon-fin-ob-2');
+            app(PostObligation::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, 'tuition', 'bad', [['category' => 'tuition', 'amount' => '0.00', 'source_ref' => 'x']], 'canon-fin-ob-2');
             $this->fail('zero-value obligation lines must be rejected');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('finance.obligation_line_amount', $rejection->errorCode());
@@ -80,9 +78,7 @@ final class CoreIntegrityTest extends CanonicalTestCase
     public function test_balanced_journal_is_required_and_reversal_is_an_append_only_negation(): void
     {
         $accountant = $this->accountant();
-        $obligation = app(PostObligation::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, 'tuition', 'September tuition', [
-            ['category' => 'tuition', 'amount' => '8500.00', 'source_ref' => 'price-list/v3'],
-        ], 'canon-fin-ob-3');
+        $obligation = app(PostObligation::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, 'tuition', 'September tuition', [['category' => 'tuition', 'amount' => '8500.00', 'source_ref' => 'price-list/v3']], 'canon-fin-ob-3');
 
         try {
             app(PostJournal::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), 'obligation', $obligation['obligation_id'], 'charge posting', [
@@ -117,9 +113,7 @@ final class CoreIntegrityTest extends CanonicalTestCase
         app(MaintainFinancialPeriod::class)->close($accountant, FinancialPeriod::query()->findOrFail($this->periodId), 'canon-fin-period-close');
 
         try {
-            app(PostObligation::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, 'tuition', 'late', [
-                ['category' => 'tuition', 'amount' => '100.00', 'source_ref' => 'x'],
-            ], 'canon-fin-ob-closed');
+            app(PostObligation::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, 'tuition', 'late', [['category' => 'tuition', 'amount' => '100.00', 'source_ref' => 'x']], 'canon-fin-ob-closed');
             $this->fail('closed periods must reject obligations');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('finance.period_not_open', $rejection->errorCode());
