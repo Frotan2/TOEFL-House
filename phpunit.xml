@@ -13,6 +13,11 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!-- Canonical suite: derived from the current implementation and
+             mutation-checked. See docs/TEST_SUITE_ARCHITECTURE.md. -->
+        <testsuite name="Canonical">
+            <directory>tests/Canonical</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
