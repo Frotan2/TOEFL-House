@@ -46,7 +46,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
     {
         $officer = $this->actorWith('canon-academic-lifecycle', ['academic.structure', 'academic.schedule', 'academic.teacher_manage']);
         $chain = $this->newAcademicChain($officer, 'canon-delivery-lifecycle', 10);
-        $class = app(MaintainClass::class)->defineClass($officer, $chain['program_version_id'], $chain['period_id'], 2, 'canon-delivery-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $chain['program_version_id'], $chain['period_id'], 2, 'canon-delivery-class', null, $this->sharedBranchId());
         $classRow = ClassModel::query()->findOrFail($class['class_id']);
 
         try {
@@ -64,8 +64,8 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
             $this->assertSame('academic.class_needs_teacher', $rejection->errorCode());
         }
 
-        $this->newActiveTeacher('canon-delivery-teacher', $this->sharedBranchId(), 'canon-delivery-teacher');
-        app(MaintainClass::class)->assignTeacher($officer, $classRow, 'canon-delivery-teacher', new CarbonImmutable('2026-09-01'), null, 'canon-delivery-assignment');
+        $this->newActiveTeacher('canon-delivery-teach', $this->sharedBranchId(), 'canon-delivery');
+        app(MaintainClass::class)->assignTeacher($officer, $classRow, 'canon-delivery-teach', new CarbonImmutable('2026-09-01'), null, 'canon-delivery-assignment');
         app(MaintainClass::class)->transition($officer, $classRow, 'active', 'canon-delivery-active');
         $this->assertDatabaseHas('classes', ['id' => $classRow->id, 'lifecycle_state' => 'active']);
 
@@ -79,7 +79,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
 
     public function test_duplicate_seat_capacity_and_transfer_preserve_enrollment_history(): void
     {
-        $officer = $this->actorWith('canon-academic-enroll', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll']);
+        $officer = $this->actorWith('canon-academic-enroll', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.enroll_approve']);
         $classId = $this->newActiveClass($officer, 'canon-delivery-enroll', 2)['class_id'];
         $studentA = $this->newStudent()['student'];
         $studentB = $this->newStudent()['student'];
@@ -125,7 +125,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         $classId = $this->newActiveClass($officer, 'canon-suspended', 2)['class_id'];
         $student = $this->newStudent()['student'];
         app(TransitionStudentStatus::class)->suspend(
-            $this->actorWith('canon-student-manager', ['students.hold']),
+            $this->actorWith('canon-student-manager', ['students.manage', 'students.hold']),
             Student::query()->findOrFail($student->id),
             'attendance',
             'canon-suspend',
@@ -138,7 +138,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
 
     public function test_attendance_corrections_are_append_only_and_require_reason(): void
     {
-        $officer = $this->actorWith('canon-attendance-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.attendance']);
+        $officer = $this->actorWith('canon-attendance-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.enroll_approve', 'academic.attendance']);
         $classId = $this->newActiveClass($officer, 'canon-attendance', 2)['class_id'];
         $student = $this->newStudent()['student'];
         $seat = app(MaintainEnrollment::class)->request($officer, $student->id, $classId, 'canon-attendance-enroll');
@@ -165,7 +165,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
 
     public function test_frozen_enrollment_cannot_take_attendance_or_transfer(): void
     {
-        $officer = $this->actorWith('canon-frozen-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.attendance']);
+        $officer = $this->actorWith('canon-frozen-officer', ['academic.structure', 'academic.schedule', 'academic.teacher_manage', 'academic.enroll', 'academic.enroll_approve', 'academic.attendance']);
         $classId = $this->newActiveClass($officer, 'canon-frozen', 2)['class_id'];
         $student = $this->newStudent()['student'];
         $seat = app(MaintainEnrollment::class)->request($officer, $student->id, $classId, 'canon-frozen-enroll');
@@ -195,7 +195,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         $nobody = $this->actorWith('canon-academic-nobody', []);
 
         $this->expectException(AuthorizationDenied::class);
-        $this->expectExceptionMessage('no active authority grants academic.structure');
+        $this->expectExceptionMessage('an organization-wide authority grant is required');
         try {
             app(MaintainAcademicStructure::class)->definePeriod($nobody, 'Canonical Rogue Period', new CarbonImmutable('2027-01-01'), new CarbonImmutable('2027-06-01'), 'canon-period-denied');
         } finally {
