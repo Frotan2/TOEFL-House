@@ -84,4 +84,16 @@ abstract class CanonicalTestCase extends TestCase
     {
         return $this->requestSeat($requester, $studentId, $classId, $key, $offeringId);
     }
+
+    /**
+     * A registered academic skill.
+     *
+     * Sessions require explicit subject/skill authority; the domain refuses to
+     * schedule teaching with no stated subject.
+     */
+    protected function newSkillId(\App\Support\Authorization\Actor $officer, string $key): string
+    {
+        return app(\App\Modules\Academic\Commands\MaintainSkill::class)
+            ->register($officer, $key, ucfirst(str_replace('-', ' ', $key)), $key.'-skill')['skill_id'];
+    }
 }

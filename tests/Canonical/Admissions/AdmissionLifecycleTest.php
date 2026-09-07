@@ -112,7 +112,10 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
             app(DecideAdmission::class)->review($clerk, AdmissionDecision::query()->findOrFail($decisionId), 'canon-adm-dec-2-review');
             $this->fail('reception must never review');
         } catch (AuthorizationDenied $denial) {
-            $this->assertSame('admissions.reviewer_denied', $denial->errorCode());
+            // The clerk initiated this decision, so separation of duties is
+            // evaluated before capability: the same actor may never review
+            // their own proposal, whatever authority they hold.
+            $this->assertSame('admissions.single_actor', $denial->errorCode());
         }
         $this->assertDatabaseHas('admission_decisions', ['id' => $decisionId, 'lifecycle_state' => 'proposed']);
         $this->assertDatabaseHas('applicants', ['id' => $applicant->id, 'lifecycle_state' => 'applicant']);
@@ -123,7 +126,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
             app(DecideAdmission::class)->approve($clerk, AdmissionDecision::query()->findOrFail($decisionId), 'canon-adm-dec-2-approve');
             $this->fail('reception must not approve');
         } catch (AuthorizationDenied $denial) {
-            $this->assertSame('admissions.approver_denied', $denial->errorCode());
+            $this->assertSame('admissions.single_actor', $denial->errorCode());
         }
         $this->assertDatabaseHas('admission_decisions', ['id' => $decisionId, 'lifecycle_state' => 'reviewed']);
 
@@ -173,7 +176,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
 
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('an applicant requires a verified person identity');
-        app(RegisterApplicant::class)->register($clerk, $unverified->id, 'General English', 'canon-adm-reg-unverified');
+        app(RegisterApplicant::class)->register($clerk, $unverified->id, 'General English', 'canon-adm-reg-unverified', null, $this->sharedBranchId());
     }
 
     public function test_duplicate_open_admission_file_is_rejected(): void
@@ -182,7 +185,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
 
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('already has an open admission file');
-        app(RegisterApplicant::class)->register($this->admissionsClerk('canon-adm-reception-4'), $this->applicantPersonId, 'Another Program', 'canon-adm-reg-duplicate');
+        app(RegisterApplicant::class)->register($this->admissionsClerk('canon-adm-reception-4'), $this->applicantPersonId, 'Another Program', 'canon-adm-reg-duplicate', null, $this->sharedBranchId());
     }
 
     public function test_conversion_is_idempotent_for_the_same_key_and_rejected_for_a_new_key(): void
@@ -234,7 +237,7 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
         ]);
 
         $this->expectException(BusinessRejection::class);
-        $this->expectExceptionMessage('an applicant requires an operational branch');
+        $this->expectExceptionMessage('new applicant registration requires an operational branch');
         app(RegisterApplicant::class)->register($this->admissionsClerk('canon-adm-reception-7'), $person->id, 'General English', 'canon-adm-reg-no-branch');
     }
 }
