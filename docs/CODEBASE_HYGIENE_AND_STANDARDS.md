@@ -271,4 +271,20 @@ For every retained compatibility boundary, documentation should record:
 
 The removal gate must be objective: migration of the consuming client, confirmed absence of supported external consumers, or an approved deprecation decision.
 
-This policy supplements the governing architecture, data-authority, security, operations, testing, and database-consolidation documents; it does not override them.
+## 22. Canonical terminology
+
+Current domain vocabulary is governed by `docs/CANONICAL_TERMINOLOGY.md`.
+
+New code, tests, API descriptions, UI labels and current documentation must use the canonical term for an existing concept. A new synonym requires an explicit semantic distinction, an external-compatibility reason, or an approved historical context.
+
+Do not rename public API or database identifiers merely for vocabulary consistency. Preserve the external contract and map it to the canonical internal concept at the boundary when required.
+
+Run the advisory terminology audit with:
+
+```text
+php scripts/terminology-audit.php
+```
+
+The audit must be reviewed semantically; it is not a license to bulk-replace legitimate historical or compatibility terminology.
+
+This policy supplements the governing architecture, data-authority, security, operations, testing, release, database-consolidation, and canonical-terminology documents; it does not override them.
