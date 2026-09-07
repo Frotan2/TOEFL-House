@@ -23,6 +23,7 @@ final class IdentityLifecycleTest extends CanonicalTestCase
             'legal_name' => $legalName,
             'date_of_birth' => '1998-04-12',
             'verification_state' => Person::VERIFICATION_UNVERIFIED,
+            'home_branch_id' => $this->sharedBranchId(),
         ]);
     }
 
@@ -38,16 +39,8 @@ final class IdentityLifecycleTest extends CanonicalTestCase
         );
 
         $this->assertSame($person->id, $outcome['person_id']);
-        $this->assertDatabaseHas('people', [
-            'id' => $person->id,
-            'verification_state' => 'verified',
-            'identity_key' => 'passport-canon-8723',
-        ]);
-        $this->assertDatabaseHas('audit_events', [
-            'operation' => 'identity.verify',
-            'target_type' => 'person',
-            'target_id' => $person->id,
-        ]);
+        $this->assertDatabaseHas('people', ['id' => $person->id, 'verification_state' => 'verified', 'identity_key' => 'passport-canon-8723']);
+        $this->assertDatabaseHas('audit_events', ['operation' => 'identity.verify', 'target_type' => 'person', 'target_id' => $person->id]);
     }
 
     public function test_account_linking_requires_verified_identity(): void
@@ -56,12 +49,7 @@ final class IdentityLifecycleTest extends CanonicalTestCase
 
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('user account requires a verified person');
-        app(LinkUserAccount::class)->link(
-            $this->actorWith('canon-identity-admin', ['identity.admin']),
-            $person,
-            'unverified.canon.user',
-            RandomIdentifier::new(),
-        );
+        app(LinkUserAccount::class)->link($this->actorWith('canon-identity-admin', ['identity.admin']), $person, 'unverified.canon.user', RandomIdentifier::new());
     }
 
     public function test_account_linking_persists_active_account_and_audit_evidence(): void
@@ -71,12 +59,7 @@ final class IdentityLifecycleTest extends CanonicalTestCase
 
         $outcome = app(LinkUserAccount::class)->link($this->actorWith('canon-identity-admin-2', ['identity.admin']), $person, 'sara.canon', RandomIdentifier::new());
 
-        $this->assertDatabaseHas('user_accounts', [
-            'id' => $outcome['account_id'],
-            'person_id' => $person->id,
-            'username' => 'sara.canon',
-            'account_state' => 'active',
-        ]);
+        $this->assertDatabaseHas('user_accounts', ['id' => $outcome['account_id'], 'person_id' => $person->id, 'username' => 'sara.canon', 'account_state' => 'active']);
         $this->assertDatabaseHas('audit_events', ['operation' => 'identity.link_account', 'target_type' => 'person', 'target_id' => $person->id]);
     }
 
