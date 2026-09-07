@@ -57,6 +57,11 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Console v1', 'rst-ver');
         $period = $structure->definePeriod($officer, 'Console Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-30'), 'rst-period');
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'rst-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-ofroomssec', 1, 'Level', 'A1', 'ofroomssec-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'ofroomssec-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'ofroomssec-of');
 
         $maintainClass = app(MaintainClass::class);
         $this->buildActiveTeacher('rst-teacher-1', null, 'roomssec4b5');

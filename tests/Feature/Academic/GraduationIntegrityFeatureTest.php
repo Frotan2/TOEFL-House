@@ -61,6 +61,11 @@ final class GraduationIntegrityFeatureTest extends TestCase
         $this->programVersionId = (string) $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Graduation v1', 'grad-ver')['version_id'];
         $this->periodId = (string) $structure->definePeriod($officer, 'Graduation Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'grad-period')['period_id'];
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'grad-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $this->programVersionId, 'lvl-ofgraduati', 1, 'Level', 'A1', 'ofgraduati-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $this->periodId, 'ofgraduati-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $this->periodId, 200, 'ofgraduati-of');
 
         $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'grad-class', null)['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'grad-teacher-1', new CarbonImmutable('2026-09-01'), null, 'grad-class-teacher');

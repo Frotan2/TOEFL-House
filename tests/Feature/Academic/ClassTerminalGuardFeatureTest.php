@@ -56,6 +56,11 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'term-ver-'.$seed);
         $period = $structure->definePeriod($officer, 'Terminal Term '.$seed, new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'term-per-'.$seed);
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'term-per-pub-'.$seed);
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-ofclasster', 1, 'Level', 'A1', 'ofclasster-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'ofclasster-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'ofclasster-of');
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'term-class-'.$seed, null, $this->bootstrapBranchId());
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'term-teacher-'.$seed, new CarbonImmutable('2026-09-01'), null, 'term-teach-'.$seed);

@@ -51,6 +51,11 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Scheduling v1', 'sched-ver');
         $period = $structure->definePeriod($officer, 'Scheduling Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'sched-period');
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'sched-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-ofacademic', 1, 'Level', 'A1', 'ofacademic-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'ofacademic-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'ofacademic-of');
 
         $this->classId = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 20, 'sched-class', null, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, 'sched-class-teacher');
