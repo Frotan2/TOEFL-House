@@ -18,12 +18,12 @@ The interactive frontend follows the canonical boundary: React renders and orche
 | Payroll | React | Payroll lifecycle/calculation/settlement is separated from Finance monetary authority. |
 | Placement | React | Placement has a versioned API with attempt, scoring, moderation, recommendation, decision and eligibility queries/commands. |
 | Identity | React | Identity has a versioned API for person, verification, account link, credential, and account deactivation operations. |
+| Access | React | Access has a dedicated v1 boundary for assignments, policy publication, named-scope grants, staged organization-wide approvals, and dated delegations. |
 
 ## Transitional or API-blocked surfaces
 
 | Surface | Classification | Reason |
 |---|---|---|
-| Access | API BLOCKED / transitional | Current governance console is web-command backed; a stable v1 read/write projection for positions, policies, grants, delegations and approval states is not yet present. Do not create a shadow React authority. |
 | Organization | API BLOCKED / transitional | Current organization console is server-rendered and no complete stable v1 organization administration boundary is exposed to the SPA. |
 | Documents | API BLOCKED / specialized | Document lifecycle commands exist in the web boundary, but there is no complete v1 document/evidence projection suitable for a safe SPA migration. |
 | Library | API BLOCKED / specialized | Library is not currently exposed through a complete versioned interactive API boundary. |
