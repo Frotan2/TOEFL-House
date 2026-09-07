@@ -48,23 +48,29 @@ tbody tr:hover td { background: #f8fbfe; }
 .status-page { min-height: 42vh; }
 .loading-orb { width: 14px; height: 14px; box-shadow: 0 0 0 7px rgba(49,114,187,.08); }
 
-/* Operational density: long lists remain scannable without turning into spreadsheet UI. */
 .work-list > li, .notification-list > li, .fact-list > li, .compact-list > li, .report-list > li { gap: 12px; }
 .work-list > li > div:first-child, .notification-list > li > div:first-child { min-width: 0; }
 .work-list a, .notification-list strong, .fact-list strong, .compact-list strong { overflow-wrap: anywhere; }
-
-/* Strong non-colour status semantics. */
 .status-chip { line-height: 1.25; }
 .status-chip::before { content: ''; background: currentColor; border-radius: 50%; display: inline-block; flex: 0 0 auto; height: 6px; margin: 0 6px 0 0; width: 6px; }
-
-/* Prevent focus loss behind sticky UI and keep interactive targets usable. */
 [id] { scroll-margin-top: 92px; }
 button, a, input, select, textarea { touch-action: manipulation; }
 
+/* Finance domain: money remains authoritative, contextual and deliberately non-dashboard-like. */
+.finance-guard { align-items: flex-start; background: var(--surface-3); border: 1px solid var(--line); border-left: 3px solid var(--brand-600); border-radius: 11px; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; }
+.finance-guard strong { color: var(--ink-900); font-size: 12px; }
+.finance-guard span { color: var(--ink-600); font-size: 12px; line-height: 1.55; }
+.finance-command-grid { display: grid; gap: 12px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.finance-detail { border-color: #cdd9e6; box-shadow: var(--shadow-sm); }
+.finance-detail h3 { margin-top: 24px; }
+#finance-main .table-wrap tbody tr { cursor: pointer; }
+#finance-main .table-wrap tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+#finance-main .metric-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+
 @media (max-width:1120px) {
   .app-brand { min-width: 150px; }
-  .crm-layout, .academic-layout, .student-detail-grid { grid-template-columns: 1fr; }
-  .crm-detail, .student-detail-side { position: static; }
+  .crm-layout, .academic-layout, .student-detail-grid, .finance-command-grid { grid-template-columns: 1fr; }
+  .crm-detail, .student-detail-side, .finance-detail { position: static; }
   .app-nav { order: 3; flex-basis: 100%; }
   .app-header-inner { flex-wrap: wrap; }
 }
@@ -72,7 +78,7 @@ button, a, input, select, textarea { touch-action: manipulation; }
   .app-header-inner { padding-block: 8px 10px; }
   .workspace-header, .workspace-context-bar { gap: 14px; }
   .summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .metric-grid, #finance-main .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .app-header-actions { margin-left: 0; }
 }
 @media (max-width:680px) {
@@ -94,12 +100,13 @@ button, a, input, select, textarea { touch-action: manipulation; }
   .form-grid, .compact-grid, .detail-grid, .filter-row { grid-template-columns: 1fr; }
   .search-row { flex-direction: column; }
   .search-row .button { width: 100%; }
-  .metric-grid { grid-template-columns: 1fr; }
+  .metric-grid, #finance-main .metric-grid { grid-template-columns: 1fr; }
   .table-wrap table { min-width: 580px; }
   .detail-facts div, .detail-list div { grid-template-columns: 1fr; gap: 3px; }
   .work-list > li, .notification-list > li { align-items: stretch; flex-direction: column; }
   .work-actions, .notification-actions { justify-content: flex-start; }
   .button, .text-button { max-width: 100%; }
+  .finance-command-grid { grid-template-columns: 1fr; }
 }
 @media (max-width:440px) {
   .summary-grid, .quick-actions { grid-template-columns: 1fr; }
