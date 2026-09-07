@@ -25,7 +25,7 @@ trait BuildsStudents
      * @param  array<string, string>  $ids  deterministic ids: ['initiator','reviewer','approver','applicant','student']
      * @return array{student: Student, person: Person}
      */
-    private function makeStudent(array $ids = []): array
+    protected function makeStudent(array $ids = []): array
     {
         $initiatorId = $ids['initiator'] ?? 'adm-init-'.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8);
         $reviewerId = $ids['reviewer'] ?? 'adm-rev-'.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8);

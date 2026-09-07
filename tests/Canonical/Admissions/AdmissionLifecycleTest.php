@@ -38,6 +38,8 @@ final class AdmissionLifecycleTest extends CanonicalTestCase
             $this->applicantPersonId,
             'IELTS Preparation',
             'canon-adm-reg-1',
+            null,
+            $this->sharedBranchId(),
         );
 
         return Applicant::query()->findOrFail($result['applicant_id']);

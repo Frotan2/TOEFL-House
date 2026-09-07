@@ -44,7 +44,6 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->newActiveTeacher($this->teacherPersonId, null, 'offr-teacher');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('offr-officer-setup');
 
@@ -55,18 +54,22 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         ])->id;
         $this->attachBranchToBootstrapOrganization($this->branchId);
 
+        // The teacher must be authorized for the branch its class belongs to,
+        // so the branch has to exist before the profile is built.
+        $this->newActiveTeacher($this->teacherPersonId, $this->branchId, 'offr-teacher');
+
         $program = $structure->defineProgram($officer, 'Offering Intensive', 'off-prog');
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Offering v1', 'off-ver');
         $this->programVersionId = $version['version_id'];
         $this->levelId = $structure->defineLevel($officer, $this->programVersionId, 'starter', 1, 'Starter', 'A1', 'off-lvl')['level_id'];
 
-        $this->periodId = $structure->definePeriod($officer, 'Offering Term', new CarbonImmutable('2026-10-01'), new CarbonImmutable('2026-12-30'), 'off-period')['period_id'];
+        $this->periodId = $structure->definePeriod($officer, 'Offering Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-30'), 'off-period')['period_id'];
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'off-period-pub');
 
         $availability = $structure->declareBranchAvailability($officer, $this->branchId, $this->levelId, $this->periodId, 'off-avail');
         $this->assertDatabaseHas('branch_availabilities', ['id' => $availability['availability_id'], 'lifecycle_state' => 'active']);
 
-        $offering = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 1, 'off-offering');
+        $offering = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 2, 'off-offering');
         $this->offeringId = $offering['offering_id'];
 
         $this->classId = app(MaintainClass::class)->defineClass(
@@ -78,7 +81,7 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
             $this->levelId,
             $this->branchId,
         )['class_id'];
-        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, 'off-class-teacher');
+        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, CarbonImmutable::today(), null, 'off-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'off-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'off-class-active');
     }

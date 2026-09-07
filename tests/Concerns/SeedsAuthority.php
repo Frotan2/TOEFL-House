@@ -57,14 +57,14 @@ trait SeedsAuthority
      * operation rather than falling back to a global scope.
      */
     /** The shared operational branch every authority fixture is homed in. */
-    private function bootstrapBranchId(): string
+    protected function bootstrapBranchId(): string
     {
         $this->ensureBootstrapAuthority();
 
         return $this->bootstrapBranchId;
     }
 
-    private function ensureBootstrapAuthority(): void
+    protected function ensureBootstrapAuthority(): void
     {
         if (! Organization::query()->whereKey($this->bootstrapOrganizationId)->exists()) {
             Organization::query()->create([
@@ -108,7 +108,7 @@ trait SeedsAuthority
      * the bootstrap organization.
      */
     /** @param list<string> $capabilities */
-    private function personWithAuthority(string $personId, array $capabilities): Person
+    protected function personWithAuthority(string $personId, array $capabilities): Person
     {
         $this->ensureBootstrapAuthority();
         if (! isset($this->authorityPeople[$personId])) {
@@ -196,7 +196,7 @@ trait SeedsAuthority
      * Direct named-scope grant of capabilities to a person.
      */
     /** @param list<string> $capabilities */
-    private function grantScopeAuthority(string $personId, array $capabilities, string $scopeType, string $scopeId, ?string $effectiveTo = null): void
+    protected function grantScopeAuthority(string $personId, array $capabilities, string $scopeType, string $scopeId, ?string $effectiveTo = null): void
     {
         $this->ensureBootstrapAuthority();
         if (! isset($this->authorityPeople[$personId])) {
@@ -245,7 +245,7 @@ trait SeedsAuthority
      * campus assignment a branch resolves to no organization, and
      * organization-rooted authority correctly does not cover it.
      */
-    private function attachBranchToBootstrapOrganization(string $branchId): void
+    protected function attachBranchToBootstrapOrganization(string $branchId): void
     {
         $this->ensureBootstrapAuthority();
         $campusId = Campus::query()->where('organization_id', $this->bootstrapOrganizationId)->value('id');
@@ -275,7 +275,7 @@ trait SeedsAuthority
      * capabilities on a newly created scope, keeping wildcard fixture
      * actors authoritative inside every organization the test creates.
      */
-    private function grantKnownAuthorityOn(string $scopeType, string $scopeId): void
+    protected function grantKnownAuthorityOn(string $scopeType, string $scopeId): void
     {
         foreach ($this->authorityCapabilities as $personId => $capabilities) {
             $this->grantScopeAuthority($personId, $capabilities, $scopeType, $scopeId);

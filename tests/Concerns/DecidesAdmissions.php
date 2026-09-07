@@ -20,7 +20,7 @@ trait DecidesAdmissions
     /**
      * @return array{decision_id: string, outcome: string, lifecycle_state: string, correlation_id: string}
      */
-    private function runAdmissionDecision(Actor $initiator, Actor $reviewer, Actor $approver, Applicant $applicant, bool $admit, string $reason, string $evidenceRef, string $keyBase): array
+    protected function runAdmissionDecision(Actor $initiator, Actor $reviewer, Actor $approver, Applicant $applicant, bool $admit, string $reason, string $evidenceRef, string $keyBase): array
     {
         $initiated = app(DecideAdmission::class)->initiate($initiator, $applicant, $admit, $reason, $evidenceRef, $keyBase.'.initiate');
         $decisionId = (string) $initiated['decision_id'];

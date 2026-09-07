@@ -148,10 +148,16 @@ trait BuildsTeachers
         // only fixture data; no production rule is relaxed.
         // The row's identity is immutable (teacher_authority_reference_guard),
         // so replace it rather than mutating it.
+        // register() authorizes the person's HOME branch, which is not always
+        // the branch the caller asked for. Backdate whichever row exists, and
+        // additionally authorize the requested branch when it differs.
         $existing = TeacherProfileBranch::query()
             ->where('teacher_profile_id', $profile->id)
             ->where('branch_id', $branchId)
-            ->firstOrFail();
+            ->first()
+            ?? TeacherProfileBranch::query()
+                ->where('teacher_profile_id', $profile->id)
+                ->firstOrFail();
         $attributes = $existing->getAttributes();
         $existing->delete();
         // Backdate only the branch authorization so assignments dated from the
@@ -159,6 +165,25 @@ trait BuildsTeachers
         // are deliberately left alone (see the note above).
         $attributes['effective_from'] = CarbonImmutable::today()->subYear()->toDateString();
         TeacherProfileBranch::query()->create($attributes);
+
+        // If the caller asked for a branch the profile is not yet homed in,
+        // authorize it through the production command so the assignment is
+        // lawful rather than fabricated.
+        $authorized = TeacherProfileBranch::query()
+            ->where('teacher_profile_id', $profile->id)
+            ->where('branch_id', $branchId)
+            ->exists();
+        if (! $authorized) {
+            $profiles->authorizeBranch(
+                $academicApprover,
+                TeacherProfile::query()->findOrFail($profile->id),
+                $branchId,
+                CarbonImmutable::today()->subYear()->toDateString(),
+                null,
+                'fixture cross-branch authorization',
+                $keyPrefix.'-xbranch',
+            );
+        }
 
         $profiles->transition(
             $academicApprover,

@@ -274,7 +274,12 @@ final class TeacherAuthority
         if ($employment === null) {
             throw BusinessRejection::forCode('academic.teacher_employment_inactive', 'teacher employment is not active for this academic action');
         }
-        $status = EmploymentStatus::query()->where('employment_id', $employment->id)->where('effective_from', '<=', $on->toDateString())->orderByDesc('effective_from')->orderByDesc('created_at')->orderByDesc('id')->first();
+        // employment_statuses.created_at has second precision, so two rows
+        // written in the same second tie and `id DESC` (a random UUID) decides
+        // the winner nondeterministically. `seq` is a monotonic bigIncrements
+        // column and is the only stable tiebreak. The database guards in
+        // 000161 order the same way.
+        $status = EmploymentStatus::query()->where('employment_id', $employment->id)->where('effective_from', '<=', $on->toDateString())->orderByDesc('effective_from')->orderByDesc('seq')->first();
         $effectiveEmploymentState = $status !== null ? $status->status : $employment->lifecycle_state;
         if ($effectiveEmploymentState !== 'active') {
             throw BusinessRejection::forCode('academic.teacher_status_inactive', 'teacher employment status is not active on the academic date');

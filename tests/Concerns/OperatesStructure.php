@@ -19,7 +19,7 @@ use Carbon\CarbonImmutable;
  */
 trait OperatesStructure
 {
-    private function structureDecisionForGlobalActors(): StructureDecision
+    protected function structureDecisionForGlobalActors(): StructureDecision
     {
         return new StructureDecision(
             $this->generalManager(),
@@ -28,7 +28,7 @@ trait OperatesStructure
         );
     }
 
-    private function establishActiveOrganization(string $name = 'The TOEFL House'): Organization
+    protected function establishActiveOrganization(string $name = 'The TOEFL House'): Organization
     {
         $decision = $this->structureDecisionForGlobalActors();
         $created = $this->createCommand()->createOrganization($decision, $name, RandomIdentifier::new());
@@ -43,7 +43,7 @@ trait OperatesStructure
         return $refreshed;
     }
 
-    private function establishActiveCampus(Organization $organization, string $name = 'Main Campus'): Campus
+    protected function establishActiveCampus(Organization $organization, string $name = 'Main Campus'): Campus
     {
         $created = $this->createCommand()->createCampus($this->structureDecisionForGlobalActors(), $organization->id, $name, RandomIdentifier::new());
         /** @var Campus $campus */
@@ -56,7 +56,7 @@ trait OperatesStructure
         return $refreshed;
     }
 
-    private function establishActiveBranch(Campus $campus, string $name = 'Central Branch'): Branch
+    protected function establishActiveBranch(Campus $campus, string $name = 'Central Branch'): Branch
     {
         $created = $this->createCommand()->createBranch(
             $this->structureDecisionForGlobalActors(),
@@ -75,12 +75,12 @@ trait OperatesStructure
         return $refreshed;
     }
 
-    private function grantStructureAuthorityOn(string $scopeType, string $scopeId): void
+    protected function grantStructureAuthorityOn(string $scopeType, string $scopeId): void
     {
         $this->grantKnownAuthorityOn($scopeType, $scopeId);
     }
 
-    private function establishDraftOrganization(string $name = 'Draft Unit'): Organization
+    protected function establishDraftOrganization(string $name = 'Draft Unit'): Organization
     {
         $created = $this->createCommand()->createOrganization($this->structureDecisionForGlobalActors(), $name, RandomIdentifier::new());
         $this->grantKnownAuthorityOn('organization', $created['id']);
@@ -88,12 +88,12 @@ trait OperatesStructure
         return Organization::query()->findOrFail($created['id']);
     }
 
-    private function createCommand(): CreateStructureUnit
+    protected function createCommand(): CreateStructureUnit
     {
         return app(CreateStructureUnit::class);
     }
 
-    private function transitionCommand(): TransitionStructureUnit
+    protected function transitionCommand(): TransitionStructureUnit
     {
         return app(TransitionStructureUnit::class);
     }

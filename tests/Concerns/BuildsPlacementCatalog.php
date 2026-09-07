@@ -57,7 +57,7 @@ trait BuildsPlacementCatalog
     /** @var array<string, string> */
     private array $sectionIds = [];
 
-    private function setUpPlacementCatalog(): void
+    protected function setUpPlacementCatalog(): void
     {
         $this->ensurePlacementBranch();
         $officer = $this->placementOfficer('plc-setup-1');
@@ -130,7 +130,7 @@ trait BuildsPlacementCatalog
         $catalog->publishVersion($this->placementOfficer('plc-cat-12'), PlacementTestVersion::query()->findOrFail($this->testVersionId), 'plc-version-pub');
     }
 
-    private function addRubric(MaintainPlacementCatalog $catalog, string $component, ?string $versionId = null, string $fixturePrefix = 'plc'): void
+    protected function addRubric(MaintainPlacementCatalog $catalog, string $component, ?string $versionId = null, string $fixturePrefix = 'plc'): void
     {
         $versionId ??= $this->testVersionId;
         foreach ([['A1', 0, 39.99, 'A1'], ['A2', 40, 54.99, 'A2'], ['B1', 55, 69.99, 'B1'], ['B2', 70, 84.99, 'B2'], ['C1', 85, 100, 'C1']] as [$band, $min, $max, $cefr]) {
@@ -139,12 +139,12 @@ trait BuildsPlacementCatalog
         }
     }
 
-    private function actorId(string $prefix): string
+    protected function actorId(string $prefix): string
     {
         return $prefix.'-'.(++$this->actorSequence).'-'.substr((string) microtime(), -4);
     }
 
-    private function ensurePlacementBranch(): void
+    protected function ensurePlacementBranch(): void
     {
         if ($this->placementBranchId !== '') {
             return;
@@ -159,7 +159,7 @@ trait BuildsPlacementCatalog
         $this->grantKnownAuthorityOn('branch', $branch->id);
     }
 
-    private function setUpPhysicalAutoCatalog(): void
+    protected function setUpPhysicalAutoCatalog(): void
     {
         $this->ensurePlacementBranch();
         $catalog = app(MaintainPlacementCatalog::class);
@@ -212,7 +212,7 @@ trait BuildsPlacementCatalog
      * normalized responses. This proves that evidence-only physical intake is
      * a reachable governed workflow rather than a legacy escape hatch.
      */
-    private function setUpPhysicalProfessionalCatalog(): void
+    protected function setUpPhysicalProfessionalCatalog(): void
     {
         $this->ensurePlacementBranch();
         $catalog = app(MaintainPlacementCatalog::class);
@@ -266,18 +266,18 @@ trait BuildsPlacementCatalog
         $catalog->publishVersion($this->placementOfficer('plc-physical-prof-cat-8'), PlacementTestVersion::query()->findOrFail($version['version_id']), 'plc-physical-prof-version-pub');
     }
 
-    private function completeReleasedPlacement(string $personId, string $prefix): PlacementProfile
+    protected function completeReleasedPlacement(string $personId, string $prefix): PlacementProfile
     {
         return $this->completePlacement($personId, $prefix, true);
     }
 
     /** Builds a decision through independent approval but does not release it. */
-    private function completeApprovedPlacement(string $personId, string $prefix): PlacementProfile
+    protected function completeApprovedPlacement(string $personId, string $prefix): PlacementProfile
     {
         return $this->completePlacement($personId, $prefix, false);
     }
 
-    private function completePlacement(string $personId, string $prefix, bool $release): PlacementProfile
+    protected function completePlacement(string $personId, string $prefix, bool $release): PlacementProfile
     {
         $profile = PlacementProfile::query()->findOrFail(app(ManagePlacementProfile::class)->openProfile(
             $this->placementOfficer($this->actorId($prefix.'-open')),
