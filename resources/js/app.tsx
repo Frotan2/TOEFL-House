@@ -6,6 +6,7 @@ import { CrmApp } from './crm';
 import { ManagementApp } from './management';
 import { StudentsApp } from './students';
 import { WorkspaceApp } from './workspace';
+import { IdentityApp } from './identity';
 import { createApiClient } from './core/api';
 
 const root = document.getElementById('react-console');
@@ -22,8 +23,10 @@ if (root) {
         ? <CrmApp {...common} />
         : view === 'management'
           ? <ManagementApp {...common} />
-          : view === 'students'
-            ? <StudentsApp {...common} studentsView={root.getAttribute('data-students-view') ?? 'directory'} studentId={root.getAttribute('data-student-id') ?? ''} />
-            : <WorkspaceApp {...common} />;
+          : view === 'identity'
+            ? <IdentityApp {...common} />
+            : view === 'students'
+              ? <StudentsApp {...common} studentsView={root.getAttribute('data-students-view') ?? 'directory'} studentId={root.getAttribute('data-student-id') ?? ''} />
+              : <WorkspaceApp {...common} />;
   createRoot(root).render(content);
 }
