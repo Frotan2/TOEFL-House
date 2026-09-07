@@ -125,6 +125,11 @@ jobs:
         env:
           DB_DATABASE: toefl_house_test
 
+      # The canonical suite is the authority for new domain coverage and is
+      # expected to be green; it runs first so a regression there is obvious.
+      - name: Canonical suite
+        run: vendor/bin/phpunit --testsuite Canonical --no-coverage
+
       # Includes the architecture test that locks the testing strategy.
       - name: Backend test suite
         run: vendor/bin/phpunit --no-coverage

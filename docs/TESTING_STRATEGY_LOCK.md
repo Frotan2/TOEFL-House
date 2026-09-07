@@ -175,3 +175,19 @@ that tells the truth.
 | `npm run verify:environment` | Running the suite on a drifted runtime. |
 | `tests/Feature/Http/WorkspacePageRenderTest.php` | Blade templates that compile in CI but 500 in a browser. |
 | `tests/Frontend/mount.test.mjs` | Console bundles that build but crash on load. |
+
+---
+
+## 7. The Canonical Suite Is The Authority For New Work
+
+`docs/TEST_SUITE_ARCHITECTURE.md` defines the layered test architecture and is
+mandatory for new tests.
+
+- New domain coverage belongs in `tests/Canonical` (PHPUnit testsuite
+  `Canonical`), derived from the current implementation rather than from older
+  tests' expectations.
+- Legacy `tests/Feature` and `tests/Unit` remain runnable and are still CI
+  gates. They are being converged, not trusted wholesale: a legacy expectation
+  never overrides current implementation behaviour.
+- Every canonical invariant test must be shown to fail when the production rule
+  it protects is broken. Record the mutation result in the commit message.
