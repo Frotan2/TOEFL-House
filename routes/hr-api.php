@@ -7,7 +7,9 @@ Route::prefix('hr')->name('api.hr.')->group(function (): void {
     Route::get('/workspace', [HrApiController::class, 'workspace'])->name('workspace');
     Route::post('/employ', [HrApiController::class, 'employ'])->name('employ');
     Route::post('/employments/{employmentId}/{action}', [HrApiController::class, 'employmentTransition'])
-        ->where('action', 'hire|leave|suspend|reinstate|terminate')->name('employment.transition');
+        ->where('action', 'hire|suspend|reinstate|terminate')->name('employment.transition');
+    Route::post('/employments/{employmentId}/place-on-leave', [HrApiController::class, 'employmentTransition'])
+        ->defaults('action', 'leave')->name('employment.place-on-leave');
     Route::post('/employments/{employmentId}/leave', [HrApiController::class, 'requestLeave'])->name('leave.request');
     Route::post('/leaves/{leaveId}/decide', [HrApiController::class, 'decideLeave'])->name('leave.decide');
     Route::post('/leaves/{leaveId}/cancel', [HrApiController::class, 'cancelLeave'])->name('leave.cancel');
@@ -17,7 +19,7 @@ Route::prefix('hr')->name('api.hr.')->group(function (): void {
         ->where('action', 'submit|withdraw|approve')->name('version.transition');
     Route::post('/contracts', [HrApiController::class, 'draftContract'])->name('contract.draft');
     Route::post('/contracts/{contractId}/sign', [HrApiController::class, 'contractSign'])->name('contract.sign');
-    Route::post('/contracts/{contractId}/close', [HrApiController::class, 'contractClose'])->name('contract.close');
+    Route::post('/contracts/{contractId}/close', [HrApiController::class, 'contract.close')->name('contract.close');
     Route::post('/scales', [HrApiController::class, 'registerScale'])->name('scale.register');
     Route::post('/scales/{scaleId}/retire', [HrApiController::class, 'retireScale'])->name('scale.retire');
 });
