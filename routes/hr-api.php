@@ -19,7 +19,7 @@ Route::prefix('hr')->name('api.hr.')->group(function (): void {
         ->where('action', 'submit|withdraw|approve')->name('version.transition');
     Route::post('/contracts', [HrApiController::class, 'draftContract'])->name('contract.draft');
     Route::post('/contracts/{contractId}/sign', [HrApiController::class, 'contractSign'])->name('contract.sign');
-    Route::post('/contracts/{contractId}/close', [HrApiController::class, 'contract.close')->name('contract.close');
+    Route::post('/contracts/{contractId}/close', [HrApiController::class, 'contractClose'])->name('contract.close');
     Route::post('/scales', [HrApiController::class, 'registerScale'])->name('scale.register');
     Route::post('/scales/{scaleId}/retire', [HrApiController::class, 'retireScale'])->name('scale.retire');
 });
