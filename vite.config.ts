@@ -12,6 +12,7 @@ export default defineConfig({
         'resources/js/hr.tsx',
         'resources/js/payroll.tsx',
         'resources/js/placement.tsx',
+        'resources/js/identity.tsx',
       ],
       refresh: ['resources/views/**'],
     }),
