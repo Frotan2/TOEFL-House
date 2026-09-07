@@ -86,7 +86,34 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         $session = app(MaintainClass::class)->scheduleSession($officer, $classRow, new CarbonImmutable('2026-09-07'), '09:00', '11:00', 'canon-delivery-session', $deliverySkillId);
         $this->assertDatabaseHas('class_sessions', ['id' => $session['session_id'], 'class_id' => $classRow->id]);
 
-        app(MaintainClass::class)->transition($officer, $classRow, 'cancelled', 'canon-delivery-cancel');
+        // A class carrying future sessions may not be cancelled: cancelling it
+        // would strand scheduled teaching. Assert the refusal rather than
+        // assuming cancellation always succeeds.
+        try {
+            app(MaintainClass::class)->transition($officer, $classRow, 'cancelled', 'canon-delivery-cancel-blocked');
+            $this->fail('a class with future sessions must not be cancellable');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('academic.class_future_sessions', $rejection->errorCode());
+        }
+        $this->assertDatabaseHas('classes', ['id' => $classRow->id, 'lifecycle_state' => 'active']);
+
+        // A class whose only session has already been delivered carries no
+        // future sessions, so the same transition is then allowed. This proves
+        // the guard is about outstanding teaching, not the class itself.
+        $past = $this->newActiveClass($officer, 'canon-delivery-past', 2);
+        $pastClass = ClassModel::query()->findOrFail($past['class_id']);
+        app(MaintainClass::class)->scheduleSession(
+            $officer,
+            $pastClass,
+            new CarbonImmutable('2026-09-02'),
+            '09:00',
+            '11:00',
+            'canon-delivery-past-session',
+            $past['skill_id']
+        );
+
+        app(MaintainClass::class)->transition($officer, $pastClass, 'cancelled', 'canon-delivery-cancel');
+        $classRow = $pastClass;
         $this->assertDatabaseHas('classes', ['id' => $classRow->id, 'lifecycle_state' => 'cancelled']);
         $this->assertDatabaseHas('audit_events', ['operation' => 'academic.class.transition', 'target_type' => 'class', 'target_id' => $classRow->id]);
     }
@@ -113,15 +140,23 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
 
         $seatB = app(MaintainEnrollment::class)->request($clerk, $studentB->id, $classId, 'canon-seat-b');
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatB['enrollment_id']), 'canon-seat-b-active');
-        $seatC = app(MaintainEnrollment::class)->request($clerk, $studentC->id, $classId, 'canon-seat-c');
-
+        // Capacity is asserted at REQUEST time against 'requested', 'active'
+        // and 'frozen' claims (EnrollmentConstraints::assertCapacity), so the
+        // third seat is refused before it can ever reach activation.
         try {
-            app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatC['enrollment_id']), 'canon-seat-c-active');
-            $this->fail('capacity of two must be exhausted');
+            app(MaintainEnrollment::class)->request($clerk, $studentC->id, $classId, 'canon-seat-c');
+            $this->fail('capacity of two must be exhausted at request time');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.class_full', $rejection->errorCode());
         }
-        $this->assertDatabaseHas('enrollments', ['id' => $seatC['enrollment_id'], 'lifecycle_state' => 'requested']);
+
+        // The refused request left no row at all, which is the stronger
+        // guarantee: a rejected seat claim must not persist partially.
+        $this->assertSame(
+            2,
+            \Illuminate\Support\Facades\DB::table('enrollments')->where('class_id', $classId)->count(),
+            'a refused seat request must not create an enrollment row'
+        );
 
         $class2 = $this->newActiveClass($officer, 'canon-delivery-transfer', 5)['class_id'];
         $transferred = app(MaintainEnrollment::class)->transfer($officer, Enrollment::query()->findOrFail($seatA['enrollment_id']), $class2, 'canon-seat-transfer');

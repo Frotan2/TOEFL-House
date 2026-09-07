@@ -47,6 +47,14 @@ trait BuildsTeachers
     private function buildActiveTeacher(string $personId, ?string $branchId = null, string $keyPrefix = 'teacher'): array
     {
         $branchId ??= $this->bootstrapBranchId();
+
+        // Actor ids and idempotency keys are char(36) and this fixture appends
+        // suffixes up to '-teacher-approver' (17 chars). Collapse the caller's
+        // prefix to a short stable tag so a descriptive name cannot overflow
+        // the column with a confusing 'value too long' error.
+        $keyPrefix = strlen($keyPrefix) > 12
+            ? substr($keyPrefix, 0, 8).substr(md5($keyPrefix), 0, 4)
+            : $keyPrefix;
         // employ() stamps a `candidate` employment_status effective TODAY.
         // The active-class guard reads the newest status with
         // effective_from <= CURRENT_DATE, ordered by effective_from, then

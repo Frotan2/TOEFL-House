@@ -81,7 +81,12 @@ abstract class CanonicalTestCase extends TestCase
         // Make the class schedulable: a session needs an authorized, available
         // teacher whose assignment carries the session skill. Returning a class
         // that cannot hold a session would push this chain into every test.
-        $skillId = $this->newSkillId($officer, $keyPrefix.'-sk');
+        // Actor ids and idempotency keys are char(36) and this seam appends
+        // suffixes such as '-w7-sk-appr' and '-teacher-approver'. Derive a
+        // short, stable tag so a descriptive test prefix cannot overflow them.
+        $tag = substr($keyPrefix, 0, 6).substr(md5($keyPrefix), 0, 4);
+
+        $skillId = $this->newSkillId($officer, $tag.'-sk');
         $profileId = \App\Modules\Academic\Models\TeacherProfile::query()
             ->where('person_id', $delivery['teacher_person_id'])->value('id');
 
@@ -89,10 +94,10 @@ abstract class CanonicalTestCase extends TestCase
             foreach (range(1, 7) as $weekday) {
                 $this->makeTeacherSessionReady(
                     (string) $profileId, $skillId, $delivery['branch_id'],
-                    $keyPrefix.'-w'.$weekday, $weekday
+                    $tag.'-w'.$weekday, $weekday
                 );
             }
-            $this->attributeSkillToAssignment($officer, $delivery['class_id'], $skillId, $keyPrefix.'-attr');
+            $this->attributeSkillToAssignment($officer, $delivery['class_id'], $skillId, $tag.'-attr');
         }
 
         return $delivery + ['skill_id' => $skillId];

@@ -191,7 +191,7 @@ final class MaintainEnrollment
                     EnrollmentLifecycle::requireTransition($locked->lifecycle_state, EnrollmentLifecycle::STATE_ACTIVE);
                     $this->assertStudentActive($locked->student_id);
                     $this->assertClassActive($locked->class_id);
-                    $this->assertCapacity($locked->class_id);
+                    $this->assertCapacity($locked->class_id, $locked->id);
                     if ($locked->offering_id !== null) {
                         $this->assertOfferingCapacity($locked->offering_id);
                     }
@@ -446,7 +446,7 @@ final class MaintainEnrollment
                             throw BusinessRejection::forCode('academic.enrollment_student_changed', 'the enrollment student changed while the financial coverage lock was acquired');
                         }
                         $this->assertClassActive($locked->class_id);
-                        $this->assertCapacity($locked->class_id);
+                        $this->assertCapacity($locked->class_id, $locked->id);
                         if ($locked->offering_id !== null) {
                             $this->assertOfferingCapacity($locked->offering_id);
                         }
@@ -739,8 +739,8 @@ final class MaintainEnrollment
         $this->constraints->assertOfferingCapacity($offeringId);
     }
 
-    private function assertCapacity(string $classId): void
+    private function assertCapacity(string $classId, ?string $excludeEnrollmentId = null): void
     {
-        $this->constraints->assertCapacity($classId);
+        $this->constraints->assertCapacity($classId, $excludeEnrollmentId);
     }
 }

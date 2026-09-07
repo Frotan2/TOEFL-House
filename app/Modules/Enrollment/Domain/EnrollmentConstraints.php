@@ -105,11 +105,21 @@ final class EnrollmentConstraints
         }
     }
 
-    public function assertCapacity(string $classId): void
+    /**
+     * Asserts the class can take one more live seat claim.
+     *
+     * `$excludeEnrollmentId` is the claim being transitioned. A seat that is
+     * already counted (for example a `requested` row moving to `active`) must
+     * not be counted twice, otherwise a class at exactly its capacity could
+     * never activate the claims it already holds.
+     */
+    public function assertCapacity(string $classId, ?string $excludeEnrollmentId = null): void
     {
         /** @var ClassModel $class */
         $class = ClassModel::query()->whereKey($classId)->lockForUpdate()->firstOrFail();
-        $claimedSeats = Enrollment::query()->where('class_id', $classId)->whereIn('lifecycle_state', ['requested', 'active', 'frozen'])->count();
+        $claimedSeats = Enrollment::query()->where('class_id', $classId)
+            ->when($excludeEnrollmentId !== null, fn ($query) => $query->whereKeyNot($excludeEnrollmentId))
+            ->whereIn('lifecycle_state', ['requested', 'active', 'frozen'])->count();
         if ($claimedSeats >= $class->capacity) {
             throw BusinessRejection::forCode('academic.class_full', sprintf('class capacity of %d is exhausted by live seat claims', $class->capacity));
         }
