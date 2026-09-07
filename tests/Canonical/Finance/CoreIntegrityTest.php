@@ -90,10 +90,20 @@ final class CoreIntegrityTest extends CanonicalTestCase
             $this->assertSame('finance.journal_unbalanced', $rejection->errorCode());
         }
 
-        $journal = app(PostJournal::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), 'obligation', $obligation['obligation_id'], 'charge posting', [
-            ['account_id' => $this->arAccountId, 'direction' => 'debit', 'amount' => '8500.00'],
-            ['account_id' => $this->revenueAccountId, 'direction' => 'credit', 'amount' => '8500.00'],
-        ], 'canon-fin-j-2');
+        // PostObligation already journalizes the obligation, so a second
+        // journal for the same source is correctly refused: an obligation has
+        // exactly one journal, and corrections are appended as reversals.
+        try {
+            app(PostJournal::class)->post($accountant, FinancialPeriod::query()->findOrFail($this->periodId), 'obligation', $obligation['obligation_id'], 'duplicate journal attempt', [
+                ['account_id' => $this->arAccountId, 'direction' => 'debit', 'amount' => '8500.00'],
+                ['account_id' => $this->revenueAccountId, 'direction' => 'credit', 'amount' => '8500.00'],
+            ], 'canon-fin-j-2');
+            $this->fail('an obligation must not be journalized twice');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('finance.obligation_already_journalized', $rejection->errorCode());
+        }
+
+        $journal = ['journal_id' => $obligation['journal_id']];
         $reversal = app(PostJournal::class)->reverse($accountant, Journal::query()->findOrFail($journal['journal_id']), 'charge voided after review', 'canon-fin-j-3');
 
         $this->assertDatabaseHas('journals', ['id' => $reversal['journal_id'], 'source_type' => 'journal', 'source_id' => $journal['journal_id']]);

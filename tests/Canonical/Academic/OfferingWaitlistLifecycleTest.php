@@ -161,23 +161,40 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         $clerk = $this->enrollmentClerk('offr-clerk-enrol');
         $studentA = $this->newOfferingStudent('offr-stu-a');
         $studentB = $this->newOfferingStudent('offr-stu-b');
+        // Two classes share this offering: the roomy one (2 seats) and the
+        // suite's default class (1 seat). Filling the default class first
+        // leaves the offering with a single free seat while the roomy class
+        // still has room, so the OFFERING limit is what binds below.
         $classId = $this->roomyClassId($officer, 'enr-roomy');
 
         $seatA = app(MaintainEnrollment::class)->request($clerk, $studentA, $classId, 'off-enr-1', $this->offeringId);
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatA['enrollment_id']), 'off-enr-2');
 
-        $seatB = app(MaintainEnrollment::class)->request($clerk, $studentB, $classId, 'off-enr-3', $this->offeringId);
+        // roomyClassId() already sized the offering at 2, which is exactly
+        // seat A plus the filler below.
+        $filler = $this->newOfferingStudent('offr-stu-fill');
+        $seatFill = app(MaintainEnrollment::class)->request($clerk, $filler, $this->classId, 'off-enr-fill', $this->offeringId);
+        app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatFill['enrollment_id']), 'off-enr-fill-act');
+
+        // Offering capacity is asserted at REQUEST time, like class capacity.
+        // The roomy class still has a free seat, so this refusal can only come
+        // from the offering: capacity is enforced across every class that
+        // shares it, not per class.
+        $studentC = $this->newOfferingStudent('offr-stu-c');
         try {
-            app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatB['enrollment_id']), 'off-enr-4');
-            $this->fail('a seat beyond capacity must be refused');
+            app(MaintainEnrollment::class)->request($clerk, $studentC, $classId, 'off-enr-3', $this->offeringId);
+            $this->fail('a seat beyond offering capacity must be refused');
         } catch (BusinessRejection $rejection) {
-            // A class may never be defined larger than its offering
-            // (academic.class_capacity_exceeds_offering), so with one class the
-            // class limit is reached first. 'academic.offering_full' is
-            // reachable only when several classes share an offering; that is a
-            // distinct scenario, not this one.
-            $this->assertSame('academic.class_full', $rejection->errorCode());
+            $this->assertSame('academic.offering_full', $rejection->errorCode());
         }
+
+        $this->assertSame(
+            2,
+            \Illuminate\Support\Facades\DB::table('enrollments')
+                ->where('offering_id', $this->offeringId)
+                ->whereIn('lifecycle_state', ['requested', 'active', 'frozen'])->count(),
+            'a refused request must not add a live claim'
+        );
 
         app(ManageAcademicOffering::class)->closeOffering($officer, Offering::query()->findOrFail($this->offeringId), 'off-close-3');
         $studentC = $this->newOfferingStudent('offr-stu-c');
@@ -189,7 +206,7 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         }
 
         $this->assertSame($this->offeringId, trim((string) Enrollment::query()->findOrFail($seatA['enrollment_id'])->offering_id));
-        $this->assertSame($this->offeringId, trim((string) Enrollment::query()->findOrFail($seatB['enrollment_id'])->offering_id));
+        $this->assertSame($this->offeringId, trim((string) Enrollment::query()->findOrFail($seatFill['enrollment_id'])->offering_id));
     }
 
     public function test_waitlist_join_offer_promote_and_withdraw(): void
@@ -210,7 +227,9 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
             $waitlist->offer($officer, ClassWaitlistEntry::query()->findOrFail($joined['entry_id']), 'wl-offer-1');
             $this->fail('an offer must require a free seat');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('academic.waitlist_offering_full', $rejection->errorCode());
+            // The class fills before the offering (a class may never exceed its
+            // offering), so the waitlist opens on the class limit.
+            $this->assertSame('academic.waitlist_class_full', $rejection->errorCode());
         }
 
         app(MaintainEnrollment::class)->withdraw($clerk, Enrollment::query()->findOrFail($seatA['enrollment_id']), 'student left the branch', 'wl-withdraw-a');

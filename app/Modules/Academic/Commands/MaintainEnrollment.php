@@ -193,7 +193,7 @@ final class MaintainEnrollment
                     $this->assertClassActive($locked->class_id);
                     $this->assertCapacity($locked->class_id, $locked->id);
                     if ($locked->offering_id !== null) {
-                        $this->assertOfferingCapacity($locked->offering_id);
+                        $this->assertOfferingCapacity($locked->offering_id, $locked->id);
                     }
                     $this->freezeFinancialGate($locked, $actor);
 
@@ -448,7 +448,7 @@ final class MaintainEnrollment
                         $this->assertClassActive($locked->class_id);
                         $this->assertCapacity($locked->class_id, $locked->id);
                         if ($locked->offering_id !== null) {
-                            $this->assertOfferingCapacity($locked->offering_id);
+                            $this->assertOfferingCapacity($locked->offering_id, $locked->id);
                         }
                         $this->freezeFinancialGate($locked, $actor);
                     }
@@ -734,9 +734,9 @@ final class MaintainEnrollment
         $this->constraints->assertOfferingOpenAndMatchesClass($offeringId, $classId);
     }
 
-    private function assertOfferingCapacity(string $offeringId): void
+    private function assertOfferingCapacity(string $offeringId, ?string $excludeEnrollmentId = null): void
     {
-        $this->constraints->assertOfferingCapacity($offeringId);
+        $this->constraints->assertOfferingCapacity($offeringId, $excludeEnrollmentId);
     }
 
     private function assertCapacity(string $classId, ?string $excludeEnrollmentId = null): void

@@ -234,8 +234,12 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
             $this->assertSame('academic.attendance_enrollment_not_active', $rejection->errorCode());
         }
 
+        // Transfer to a REAL class, so the rejection proves the frozen-state
+        // rule rather than merely a missing target.
+        $target = $this->newActiveClass($officer, 'canon-frozen-tgt', 2)['class_id'];
+
         try {
-            app(MaintainEnrollment::class)->transfer($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'x', 'canon-frozen-transfer');
+            app(MaintainEnrollment::class)->transfer($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), $target, 'canon-frozen-transfer');
             $this->fail('frozen -> transferred must be rejected');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.enrollment_transition_forbidden', $rejection->errorCode());
