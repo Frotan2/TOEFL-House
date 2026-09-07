@@ -5,7 +5,14 @@ import laravel from 'laravel-vite-plugin';
 export default defineConfig({
   plugins: [
     laravel({
-      input: ['resources/js/app.tsx', 'resources/js/finance.tsx', 'resources/js/reporting.tsx', 'resources/js/hr.tsx', 'resources/js/payroll.tsx'],
+      input: [
+        'resources/js/app.tsx',
+        'resources/js/finance.tsx',
+        'resources/js/reporting.tsx',
+        'resources/js/hr.tsx',
+        'resources/js/payroll.tsx',
+        'resources/js/placement.tsx',
+      ],
       refresh: ['resources/views/**'],
     }),
     react(),
