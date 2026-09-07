@@ -2,7 +2,7 @@ import { ReactNode, SVGProps } from 'react';
 
 type AppShellProps = {
   current?: string;
-  csrfToken: string;
+  csrfToken?: string;
   children?: ReactNode;
 };
 
@@ -47,6 +47,7 @@ function NavigationLinks({ current }: { current: string }) {
 }
 
 export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
+  const resolvedCsrfToken = csrfToken ?? document.getElementById('react-console')?.getAttribute('data-csrf-token') ?? '';
   return (
     <>
       <a className="skip-link" href="#workspace-main">Skip to main content</a>
@@ -56,9 +57,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
             <span className="brand-mark" aria-hidden="true">T</span>
             <span className="brand-copy"><strong>TOEFL House</strong><small>Operations platform</small></span>
           </a>
-          <nav className="app-nav" aria-label="Primary navigation">
-            <NavigationLinks current={current} />
-          </nav>
+          <nav className="app-nav" aria-label="Primary navigation"><NavigationLinks current={current} /></nav>
           <div className="app-header-actions">
             <a className="header-utility" href="/workspace" title="Return to your workspace"><span className="utility-dot" aria-hidden="true" />My workspace</a>
             <details className="mobile-nav">
@@ -66,7 +65,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
               <nav aria-label="Mobile primary navigation"><NavigationLinks current={current} /></nav>
             </details>
             <form method="post" action="/logout">
-              <input type="hidden" name="_token" value={csrfToken} />
+              <input type="hidden" name="_token" value={resolvedCsrfToken} />
               <button className="sign-out" type="submit" aria-label="Sign out"><Icon name="logout" /><span>Sign out</span></button>
             </form>
           </div>
