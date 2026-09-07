@@ -1,0 +1,80 @@
+/* Product-wide experience layer. Business/domain authority remains server-side. */
+:root {
+  --experience-content-max: 1360px;
+  --experience-page-gutter: clamp(16px, 2.4vw, 32px);
+  --experience-panel-padding: clamp(16px, 1.8vw, 24px);
+  --experience-control-height: 44px;
+  --experience-focus-ring: 0 0 0 4px rgba(76,143,227,.16);
+}
+
+.app-header-inner { max-width: var(--experience-content-max); min-height: 68px; padding-inline: var(--experience-page-gutter); }
+.app-header { background: rgba(255,255,255,.97); backdrop-filter: blur(12px); }
+.brand-mark { background: var(--brand-900); box-shadow: none; }
+.app-nav a { border: 1px solid transparent; min-height: 40px; }
+.app-nav a.active { background: #eef4fa; border-color: #dbe7f2; }
+.app-nav a:hover { transform: none; }
+
+.workspace { max-width: var(--experience-content-max); padding: clamp(24px,3.2vw,42px) var(--experience-page-gutter) 72px; }
+.workspace > * + * { margin-top: 20px; }
+.workspace h1 { font-size: clamp(28px,3.6vw,42px); letter-spacing: -.04em; line-height: 1.08; }
+.workspace h2 { font-size: 19px; }
+.lede { font-size: 14px; max-width: 760px; }
+
+.panel, .search { border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.035); padding: var(--experience-panel-padding); }
+.panel:hover { box-shadow: 0 8px 24px rgba(15,23,42,.055); }
+.section-heading { margin-bottom: 16px; }
+.button { border-radius: 8px; box-shadow: none; min-height: var(--experience-control-height); }
+.button:hover { box-shadow: 0 5px 12px rgba(31,79,134,.13); }
+.text-button { min-height: 34px; }
+input, select, textarea { min-height: var(--experience-control-height); border-radius: 8px; }
+input:focus, select:focus, textarea:focus { box-shadow: var(--experience-focus-ring); }
+
+.summary-grid, .metric-grid, .quick-actions { gap: 12px; }
+.summary-grid .panel, .metric-grid .panel { min-height: 112px; }
+.metric { font-size: clamp(25px,2.4vw,32px); }
+.quick-action { min-height: 68px; border-radius: 11px; box-shadow: none; }
+.quick-action:hover { transform: translateY(-1px); }
+.table-wrap { border-radius: 11px; background: var(--surface); }
+.table-wrap table { min-width: 620px; }
+thead th { position: sticky; top: 0; z-index: 1; font-size: 10px; }
+tbody tr:hover td { background: #f8fbfe; }
+
+.visitor-list li.selected, .academic-class-list li.selected { box-shadow: inset 3px 0 0 var(--brand-600); }
+.visitor-row, .student-list button, .academic-class-list button { min-height: 58px; }
+.visitor-row:focus-visible, .student-list button:focus-visible, .academic-class-list button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; position: relative; z-index: 1; }
+.detail-facts div, .detail-list div { grid-template-columns: 116px minmax(0,1fr); }
+.status-page { min-height: 42vh; }
+.loading-orb { width: 14px; height: 14px; box-shadow: 0 0 0 7px rgba(49,114,187,.08); }
+
+@media (max-width:1120px) {
+  .app-brand { min-width: 150px; }
+  .crm-layout, .academic-layout, .student-detail-grid { grid-template-columns: 1fr; }
+  .crm-detail, .student-detail-side { position: static; }
+}
+@media (max-width:840px) {
+  .app-header-inner { padding-block: 8px 10px; }
+  .workspace-header, .workspace-context-bar { gap: 14px; }
+  .summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:680px) {
+  .app-header-inner { padding-inline: 12px; }
+  .workspace { padding-inline: 14px; }
+  .panel, .search { border-radius: 12px; padding: 15px; }
+  .section-heading { flex-direction: column; gap: 12px; }
+  .form-grid, .compact-grid, .detail-grid, .filter-row { grid-template-columns: 1fr; }
+  .search-row { flex-direction: column; }
+  .search-row .button { width: 100%; }
+  .metric-grid { grid-template-columns: 1fr; }
+  .table-wrap table { min-width: 580px; }
+  .detail-facts div, .detail-list div { grid-template-columns: 1fr; gap: 3px; }
+}
+@media (max-width:440px) {
+  .summary-grid, .quick-actions { grid-template-columns: 1fr; }
+  .workspace { padding-inline: 12px; padding-bottom: 44px; }
+  .workspace h1 { font-size: 29px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; }
+  .panel:hover, .quick-action:hover, .button:hover { transform:none; }
+}
