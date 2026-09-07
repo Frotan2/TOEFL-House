@@ -58,6 +58,11 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->programVersionId = $version['version_id'];
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'gs-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'gs-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-gradesheetworkflowfeatur', 1, 'Level', 'A1', 'canon-gradesheetworkflowfeatur-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-gradesheetworkflowfeatur-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-gradesheetworkflowfeatur-offering');
 
         $class = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $period['period_id'], 2, 'gs-class');
         $this->classId = $class['class_id'];

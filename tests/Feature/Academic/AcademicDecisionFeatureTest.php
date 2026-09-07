@@ -53,6 +53,11 @@ final class AcademicDecisionFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'v1', 'dec-prog-2');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Decision Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'dec-period-1');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'dec-period-2');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicdecisionfeaturet', 1, 'Level', 'A1', 'canon-academicdecisionfeaturet-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicdecisionfeaturet-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicdecisionfeaturet-offering');
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1');
         $this->classId = $class['class_id'];
         $this->grantedActor('dec-teacher-1', []);

@@ -71,6 +71,11 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), $this->k('period'));
         $this->periodId = $period['period_id'];
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', $this->k('period-pub'));
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-crossmoduleboundaryattac', 1, 'Level', 'A1', 'canon-crossmoduleboundaryattac-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-crossmoduleboundaryattac-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-crossmoduleboundaryattac-offering');
 
         // Class A holds two seats; class B holds one.
         $classA = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 2, $this->k('class-a'));
