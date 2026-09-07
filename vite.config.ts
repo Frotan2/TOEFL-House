@@ -13,6 +13,7 @@ export default defineConfig({
         'resources/js/payroll.tsx',
         'resources/js/placement.tsx',
         'resources/js/identity.tsx',
+        'resources/js/access.tsx',
       ],
       refresh: ['resources/views/**'],
     }),
