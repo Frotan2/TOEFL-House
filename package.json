@@ -8,7 +8,8 @@
     "test:frontend": "node tests/Frontend/mount.test.mjs",
     "verify:concurrency": "node scripts/runtime/concurrency-verification.mjs",
     "verify:invariants": "node scripts/runtime/database-invariants.mjs",
-    "verify:browser": "node scripts/runtime/browser-e2e.mjs"
+    "verify:browser": "node scripts/runtime/browser-e2e.mjs",
+    "verify:environment": "node scripts/runtime/verify-environment.mjs"
   },
   "devDependencies": {
     "@types/react": "^19.1.10",
