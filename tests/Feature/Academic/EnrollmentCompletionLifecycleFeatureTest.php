@@ -70,9 +70,8 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'comp-period-pub');
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
-        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $this->programVersionId, 'lvl-ofenrollme', 1, 'Level', 'A1', 'ofenrollme-lvl');
-        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $this->periodId, 'ofenrollme-av');
-        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $this->periodId, 200, 'ofenrollme-of');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $this->levelId, $this->periodId, 'ofenrollme-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $this->levelId, $this->periodId, 200, 'ofenrollme-of');
 
         $this->levelClassId = $this->defineActiveClass('comp-class', 2, $this->levelId);
         $this->smallClassId = $this->defineActiveClass('comp-small', 1, $this->levelId);

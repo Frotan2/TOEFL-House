@@ -63,9 +63,8 @@ final class EnrollmentFinancialGateFeatureTest extends TestCase
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($periodId), 'published', 'gate-period-pub-'.$seed);
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
-        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-ofenrollme', 1, 'Level', 'A1', 'ofenrollme-lvl');
-        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $periodId['period_id'], 'ofenrollme-av');
-        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $periodId['period_id'], 200, 'ofenrollme-of');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $levelId, $periodId['period_id'], 'ofenrollme-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $levelId, $periodId['period_id'], 200, 'ofenrollme-of');
 
         $classId = (string) app(MaintainClass::class)->defineClass(
             $officer,
