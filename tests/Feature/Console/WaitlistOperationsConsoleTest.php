@@ -103,7 +103,7 @@ final class WaitlistOperationsConsoleTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('wl-clerk-'.$personId), $personId, 'Program', 'wl-reg-'.$personId);
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('wl-clerk-'.$personId), $personId, 'Program', 'wl-reg-'.$personId, null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

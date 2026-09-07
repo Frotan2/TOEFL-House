@@ -212,7 +212,7 @@ final class BranchIsolationAdversarialTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('iso-clerk-'.$personId), $personId, 'Program', 'iso-reg-'.$personId);
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('iso-clerk-'.$personId), $personId, 'Program', 'iso-reg-'.$personId, null, $this->bootstrapBranchId());
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
             $this->admissionsClerk('iso-clerk-'.$personId),

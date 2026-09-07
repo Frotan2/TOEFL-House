@@ -107,7 +107,7 @@ final class CrossModuleBoundaryAttackTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('bd-clerk-'.$personId), $personId, 'IELTS Preparation', $this->k('reg'));
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('bd-clerk-'.$personId), $personId, 'IELTS Preparation', $this->k('reg'), null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

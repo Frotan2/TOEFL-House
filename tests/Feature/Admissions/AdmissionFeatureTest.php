@@ -35,7 +35,7 @@ final class AdmissionFeatureTest extends TestCase
 
     private function registeredApplicant(): Applicant
     {
-        $result = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPersonId, 'IELTS Preparation', 'reg-key-1');
+        $result = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPersonId, 'IELTS Preparation', 'reg-key-1', null, $this->bootstrapBranchId());
 
         return Applicant::query()->findOrFail($result['applicant_id']);
     }
@@ -155,7 +155,7 @@ final class AdmissionFeatureTest extends TestCase
         ]);
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('an applicant requires a verified person identity');
-        app(RegisterApplicant::class)->register($clerk, $unverified->id, 'General English', 'reg-key-2');
+        app(RegisterApplicant::class)->register($clerk, $unverified->id, 'General English', 'reg-key-2', null, $this->bootstrapBranchId());
     }
 
     public function test_duplicate_open_file_and_double_conversion_are_rejected(): void
@@ -164,7 +164,7 @@ final class AdmissionFeatureTest extends TestCase
 
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('already has an open admission file');
-        app(RegisterApplicant::class)->register($this->admissionsClerk('adm-reception-3'), $this->applicantPersonId, 'Another Program', 'reg-key-3');
+        app(RegisterApplicant::class)->register($this->admissionsClerk('adm-reception-3'), $this->applicantPersonId, 'Another Program', 'reg-key-3', null, $this->bootstrapBranchId());
     }
 
     public function test_conversion_twice_with_different_keys_is_rejected(): void

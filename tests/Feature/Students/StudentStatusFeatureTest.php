@@ -31,7 +31,7 @@ final class StudentStatusFeatureTest extends TestCase
     {
         parent::setUp();
         $this->personWithAuthority('stu-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('stu-clerk'), 'stu-person-1', 'Program', 'stu-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('stu-clerk'), 'stu-person-1', 'Program', 'stu-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

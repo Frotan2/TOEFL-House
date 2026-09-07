@@ -92,7 +92,7 @@ final class AcademicOfferingAndWaitlistFeatureTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('off-clerk-'.$personId), $personId, 'Program', 'off-reg-'.$personId);
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('off-clerk-'.$personId), $personId, 'Program', 'off-reg-'.$personId, null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

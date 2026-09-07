@@ -138,7 +138,7 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         $personId = 'afw-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('afw-clerk-2'), $personId, 'IELTS Preparation', 'afw-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('afw-clerk-2'), $personId, 'IELTS Preparation', 'afw-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 

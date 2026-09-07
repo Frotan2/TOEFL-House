@@ -137,7 +137,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
     private function enrolledStudent(string $personId, string $keyPrefix): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('p16-pay-adm-clerk'), $personId, 'Program', $keyPrefix.'-reg');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('p16-pay-adm-clerk'), $personId, 'Program', $keyPrefix.'-reg', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

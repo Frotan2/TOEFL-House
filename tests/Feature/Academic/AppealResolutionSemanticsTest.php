@@ -141,7 +141,7 @@ final class AppealResolutionSemanticsTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('sem-clerk-'.$personId), $personId, 'Program', 'sem-reg-'.$personId);
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('sem-clerk-'.$personId), $personId, 'Program', 'sem-reg-'.$personId, null, $this->bootstrapBranchId());
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
             $this->admissionsClerk('sem-clerk-'.$personId),

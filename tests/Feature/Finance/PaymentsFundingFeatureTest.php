@@ -53,7 +53,7 @@ final class PaymentsFundingFeatureTest extends TestCase
     {
         parent::setUp();
         $this->personWithAuthority('pay-fin-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('pay-fin-clerk'), 'pay-fin-person-1', 'Program', 'pay-fin-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('pay-fin-clerk'), 'pay-fin-person-1', 'Program', 'pay-fin-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('pay-fin-clerk'), $this->admissionsReviewer('pay-fin-review'), $this->admissionsApprover('pay-fin-approve'), $applicant, true, 'meets policy', 'ev/pay', 'pay-fin-adm-1');
@@ -392,7 +392,7 @@ final class PaymentsFundingFeatureTest extends TestCase
         }
 
         $this->personWithAuthority('pay-fin-person-2', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('pay-fin-clerk'), 'pay-fin-person-2', 'Program', 'pay-fin-reg-2');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('pay-fin-clerk'), 'pay-fin-person-2', 'Program', 'pay-fin-reg-2', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('pay-fin-clerk'), $this->admissionsReviewer('pay-fin-review'), $this->admissionsApprover('pay-fin-approve'), $applicant, true, 'meets policy', 'ev/pay2', 'pay-fin-adm-2');

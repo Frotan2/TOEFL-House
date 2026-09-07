@@ -98,6 +98,8 @@ final class TransportWorkflowFeatureTest extends TestCase
 
         $registered = app(RegisterApplicant::class)->register(
             $this->admissionsClerk('twt-clerk-'.$suffix), $personId, 'IELTS Preparation', 'twt-reg-'.$suffix,
+            null,
+            $this->bootstrapBranchId(),
         );
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);

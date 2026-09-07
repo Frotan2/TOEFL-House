@@ -400,7 +400,7 @@ final class LevelProgressionFeatureTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk($personId.'-clerk'), $personId, 'Program', $personId.'-reg');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk($personId.'-clerk'), $personId, 'Program', $personId.'-reg', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

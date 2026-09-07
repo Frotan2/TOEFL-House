@@ -61,7 +61,7 @@ final class AcademicDecisionFeatureTest extends TestCase
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'dec-class-4');
 
         $this->grantedActor('dec-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('dec-clerk'), 'dec-person-1', 'Program', 'dec-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('dec-clerk'), 'dec-person-1', 'Program', 'dec-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('dec-clerk'), $this->admissionsReviewer('dec-review'), $this->admissionsApprover('dec-approve'), $applicant, true, 'meets policy', 'ev/dec', 'dec-adm-1');

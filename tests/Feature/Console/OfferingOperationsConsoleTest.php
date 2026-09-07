@@ -238,7 +238,7 @@ final class OfferingOperationsConsoleTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('con-clerk-'.$personId), $personId, 'Program', 'con-reg-'.$personId);
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('con-clerk-'.$personId), $personId, 'Program', 'con-reg-'.$personId, null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

@@ -105,7 +105,7 @@ final class GraduationWorkflowFeatureTest extends TestCase
         $personId = 'gwf-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('gwf-clerk-2'), $personId, 'IELTS Preparation', 'gwf-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('gwf-clerk-2'), $personId, 'IELTS Preparation', 'gwf-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 

@@ -35,7 +35,7 @@ final class StudentLifecycleFeatureTest extends TestCase
     {
         parent::setUp();
         $this->personWithAuthority('life-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('life-clerk'), 'life-person-1', 'Program', 'life-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('life-clerk'), 'life-person-1', 'Program', 'life-reg-1', null, $this->bootstrapBranchId());
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
             $this->admissionsClerk('life-clerk'),

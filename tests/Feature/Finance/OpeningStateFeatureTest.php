@@ -57,7 +57,7 @@ final class OpeningStateFeatureTest extends TestCase
 
         // a live student of the operating business
         $this->personWithAuthority('op-person-student', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('op-adm'), 'op-person-student', 'Program', 'op-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('op-adm'), 'op-person-student', 'Program', 'op-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('op-adm'), $this->admissionsReviewer('op-adm-r'), $this->admissionsApprover('op-adm-a'), $applicant, true, 'live student', 'ev/op', 'op-adm-2');

@@ -285,7 +285,7 @@ final class VisitorCrmFeatureTest extends TestCase
         $capture = app(CaptureVisitor::class)->capture($crmStaff, $person->id, '', null, 'register@example.com', 'email', 'online', null, null, null, 'IELTS', null, 'capture-register');
 
         $registrar = $this->admissionsClerk('crm-adm-clerk-1');
-        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-1');
+        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-1', null, $this->bootstrapBranchId());
 
         $visitor = Visitor::query()->findOrFail($capture['visitor_id']);
         $this->assertSame(Visitor::STATUS_CONVERTED, $visitor->status);
@@ -526,7 +526,7 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertSame($person->id, trim((string) $refreshedVisitor->person_id));
 
         $registrar = $this->admissionsClerk('crm-link-clerk-1');
-        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-link');
+        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-link', null, $this->bootstrapBranchId());
         $this->assertSame(Visitor::STATUS_CONVERTED, $visitor->fresh()?->status);
         $this->assertDatabaseHas('visitor_conversions', ['visitor_id' => $visitor->id, 'conversion_type' => 'applicant']);
     }

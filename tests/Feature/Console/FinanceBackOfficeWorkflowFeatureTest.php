@@ -93,7 +93,7 @@ final class FinanceBackOfficeWorkflowFeatureTest extends TestCase
         $personId = 'fdw-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('fdw-clerk-1'), $personId, 'IELTS Preparation', 'fdw-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('fdw-clerk-1'), $personId, 'IELTS Preparation', 'fdw-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 

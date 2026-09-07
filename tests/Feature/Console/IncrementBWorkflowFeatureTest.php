@@ -55,7 +55,7 @@ final class IncrementBWorkflowFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'incb-ver');
         $personId = 'incb-stu-1';
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('incb-clerk-1'), $personId, 'IELTS Preparation', 'incb-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('incb-clerk-1'), $personId, 'IELTS Preparation', 'incb-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $initiated = app(DecideAdmission::class)->initiate($this->admissionsClerk('incb-clerk-2'), $applicant, true, 'meets entry policy', 'interview-notes/incb', 'incb-deci-1');

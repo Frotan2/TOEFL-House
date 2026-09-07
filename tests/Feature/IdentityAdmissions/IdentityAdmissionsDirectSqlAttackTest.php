@@ -78,7 +78,7 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
 
     public function test_direct_sql_cannot_forge_a_single_actor_admission_decision(): void
     {
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-1', null, $this->bootstrapBranchId());
         $applicantId = $registered['applicant_id'];
 
         // A well-shaped PROPOSAL by the forger gets in...
@@ -103,7 +103,7 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
 
     public function test_direct_sql_cannot_skip_the_review_stage(): void
     {
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-3');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-3', null, $this->bootstrapBranchId());
         $applicantId = $registered['applicant_id'];
 
         DB::table('admission_decisions')->insert([
@@ -131,7 +131,7 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
 
     public function test_direct_sql_cannot_finalize_a_decision_with_a_self_approving_chain(): void
     {
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-4');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-4', null, $this->bootstrapBranchId());
         $applicantId = $registered['applicant_id'];
 
         DB::table('admission_decisions')->insert([
@@ -161,7 +161,7 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
 
     public function test_finalizing_a_decision_transitions_the_applicant_at_the_schema_boundary(): void
     {
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-5');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-5', null, $this->bootstrapBranchId());
         $applicantId = $registered['applicant_id'];
 
         DB::table('admission_decisions')->insert([
@@ -190,7 +190,7 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
 
     public function test_direct_sql_cannot_decide_an_already_decided_applicant(): void
     {
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-2');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk(), $this->applicantPerson->id, 'TOEFL Intensive', 'idatk-reg-2', null, $this->bootstrapBranchId());
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk(), $this->admissionsReviewer(), $this->admissionsApprover(), $applicant, true, 'meets entry policy', 'interview-notes/1', 'idatk-dec-1');
         $this->assertSame('admitted', Applicant::query()->findOrFail($registered['applicant_id'])->lifecycle_state);

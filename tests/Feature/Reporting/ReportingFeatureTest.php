@@ -422,7 +422,7 @@ final class ReportingFeatureTest extends TestCase
         $period = app(MaintainFinancialPeriod::class)->open($clerk, $this->financialPeriodKey, '2026-12-01', '2026-12-31', 'rep-fin-per-1');
 
         $this->personWithAuthority('rep-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), 'rep-person-1', 'Program', 'rep-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), 'rep-person-1', 'Program', 'rep-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('rep-adm-clerk'), $this->admissionsReviewer('rep-adm-rev'), $this->admissionsApprover('rep-adm-appr'), $applicant, true, 'meets policy', 'ev/rep', 'rep-adm-1');
@@ -459,7 +459,7 @@ final class ReportingFeatureTest extends TestCase
 
         foreach (['rep-person-2', 'rep-person-3'] as $i => $personId) {
             $this->personWithAuthority($personId, []);
-            $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), $personId, 'Program', 'rep-reg-'.($i + 2));
+            $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), $personId, 'Program', 'rep-reg-'.($i + 2), null, $this->bootstrapBranchId());
             /** @var Applicant $applicant */
             $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
             $this->runAdmissionDecision($this->admissionsClerk('rep-adm-clerk'), $this->admissionsReviewer('rep-adm-rev'), $this->admissionsApprover('rep-adm-appr'), $applicant, true, 'meets policy', 'ev/rep'.$i, 'rep-adm-'.($i + 2));

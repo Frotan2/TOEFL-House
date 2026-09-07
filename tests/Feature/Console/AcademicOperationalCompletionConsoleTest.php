@@ -92,6 +92,8 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
 
         $registered = app(RegisterApplicant::class)->register(
             $this->admissionsClerk('aoc-clerk-'.$suffix), $personId, 'IELTS Preparation', 'aoc-reg-'.$suffix,
+            null,
+            $this->bootstrapBranchId(),
         );
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);

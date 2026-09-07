@@ -98,6 +98,8 @@ final class ProgressionLifecycleConsoleTest extends TestCase
 
         $registered = app(RegisterApplicant::class)->register(
             $this->admissionsClerk('plc-clerk-'.$suffix), $personId, 'IELTS Preparation', 'plc-reg-'.$suffix,
+            null,
+            $this->bootstrapBranchId(),
         );
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);

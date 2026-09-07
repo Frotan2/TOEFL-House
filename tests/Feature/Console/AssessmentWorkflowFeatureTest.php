@@ -102,7 +102,7 @@ final class AssessmentWorkflowFeatureTest extends TestCase
         $personId = 'awf-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('awf-clerk-2'), $personId, 'IELTS Preparation', 'awf-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('awf-clerk-2'), $personId, 'IELTS Preparation', 'awf-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 

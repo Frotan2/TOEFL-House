@@ -52,7 +52,7 @@ final class FinanceCoreFeatureTest extends TestCase
         $this->periodId = $period['period_id'];
 
         $this->personWithAuthority('fin-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('fin-clerk'), 'fin-person-1', 'Program', 'fin-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('fin-clerk'), 'fin-person-1', 'Program', 'fin-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('fin-clerk'), $this->admissionsReviewer('fin-review'), $this->admissionsApprover('fin-approve'), $applicant, true, 'meets policy', 'ev/fin', 'fin-adm-1');
