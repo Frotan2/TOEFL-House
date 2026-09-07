@@ -31,7 +31,9 @@ $warnings = [];
 $allowedDataMigrations = ['2026_09_07_000186_seed_standard_finance_chart.php'];
 
 foreach ($files as $file) {
-    if (preg_match('/^(\d{4})_[^\.]+\.php$/', $file, $match) !== 1) {
+    // Laravel migration filenames are `YYYY_MM_DD_NNNNNN_name.php`. The audited
+    // ordinal is the sequence segment after the date, not the year.
+    if (preg_match('/^\d{4}_\d{2}_\d{2}_(\d{6})_[^\.]+\.php$/', $file, $match) !== 1) {
         $errors[] = "invalid migration filename: {$file}";
         continue;
     }

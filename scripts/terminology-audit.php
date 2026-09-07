@@ -48,6 +48,8 @@ $excludedPathFragments = [
 
 $excludedDirectories = [
     $root.'/docs/history',
+    // Generated Vite output is a build artifact, not authored source.
+    $root.'/public/build',
 ];
 
 $allowedLineMarkers = [

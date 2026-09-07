@@ -10,7 +10,7 @@
 
 The migration history must **not** be blindly deleted or squashed at this point.
 
-The branch contains exactly **190 ordered migration files**, ending at `000190`. The late part of the chain is not historical noise: migrations `000160`–`000190` contain active domain-convergence, authority, provenance, financial, reporting, temporal, accounting, and capacity hardening. Several are very large and materially change the canonical schema.
+The branch contains exactly **185 ordered migration files**, with ordinals ending at `000190` (the `000175`–`000179` numbering gap accounts for the five-file difference). The late part of the chain is not historical noise: migrations `000160`–`000190` contain active domain-convergence, authority, provenance, financial, reporting, temporal, accounting, and capacity hardening. Several are very large and materially change the canonical schema.
 
 The project is still pre-production, so eventual consolidation is reasonable **after a schema freeze**, but the current environment cannot execute PostgreSQL or Laravel migrations. There is no `psql`, no Docker runtime, and no Composer/vendor installation available in the verification environment. Consequently a real schema dump, fresh-database replay, live schema diff, and existing-database reconciliation cannot honestly be certified here.
 

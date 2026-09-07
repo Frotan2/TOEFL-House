@@ -1,6 +1,6 @@
 # TOEFL House — Runtime Verification Handoff
 
-**STATUS: CURRENT HANDOFF — RUNTIME VERIFICATION PENDING**
+**STATUS: PARTIALLY VERIFIED — FRONTEND VERIFIED; BACKEND/DATABASE RUNTIME BLOCKED**
 
 This document is the canonical handoff record for the next engineering agent. It records what has been established before real runtime verification and what still requires an executable environment.
 
@@ -9,8 +9,8 @@ This document is the canonical handoff record for the next engineering agent. It
 | Item | Current evidence |
 |---|---|
 | Repository | `Frotan2/TOEFL-House` |
-| Working branch | `frontend-transformation-2026-09` |
-| Current HEAD | `c092c92809232d93c14c962174c6623290ab1a7b` |
+| Working branch | `arena/01a07c87-toefl-house` (branched from `frontend-transformation-2026-09`) |
+| Base commit | `25e4f425b53baa012ac655b8d9459e66ae161859` |
 | `main` HEAD | `14c9869b7193057437c621ddf26d48f49271980c` |
 | Backend | Laravel 12.x modular monolith |
 | PHP project constraint | `^8.2` |
@@ -43,7 +43,7 @@ Repository evidence for versions is in `composer.json` and `package.json`. The b
 
 ### Database
 
-- The active migration chain contains exactly **190 migrations**, ending at `000190`.
+- The active migration chain contains exactly **185 migration files**, with ordinals running `000001`–`000190` and the historical numbering gap `000175`–`000179` accounting for the difference. Verified by file count on the working branch.
 - The numbering gap `000175–000179` is recorded as historical numbering and is not treated as a defect solely because of the gap.
 - Late migrations contain meaningful hardening and convergence, so the chain has not been deleted or collapsed by guesswork.
 - Retired structures include `compensation_components` and `work_bases`; future code/baselines must not resurrect them.
@@ -118,7 +118,7 @@ The database-specific baseline decision intentionally remains runtime-gated; gov
 | PHP extensions | Requirements documented by runtime/framework | Inspect/load required extensions in the real runtime | BLOCKED |
 | Laravel boot | Bootstrap/configuration/routes are present | `php artisan` boot, config/cache/session checks | BLOCKED |
 | PostgreSQL | `pgsql` is canonical; migration chain reviewed statically | Start PostgreSQL 18.x and establish a real DB | BLOCKED |
-| Migration replay | 190 migrations inventoried; chain retained | Replay from zero in disposable PostgreSQL | BLOCKED |
+| Migration replay | 185 migration files inventoried (ordinals to `000190`); chain retained | Replay from zero in disposable PostgreSQL | BLOCKED |
 | Schema inspection | Static review of key constraints/triggers performed | Inspect actual tables, indexes, functions, triggers, views and extensions | BLOCKED |
 | Functions/triggers | Important guards identified in migrations | Execute and observe PostgreSQL functions/triggers | BLOCKED |
 | Constraints | Key CHECK/unique/trigger protections reviewed statically | Assert behavior against real PostgreSQL | BLOCKED |
@@ -300,3 +300,135 @@ The next agent should append or update the evidence record using this structure:
 At handoff time the repository is **prepared for runtime verification but not runtime-certified**.
 
 The highest-risk unresolved gate is the PostgreSQL/Laravel runtime: until the current migration chain can be replayed against real PostgreSQL and the resulting schema, invariants, concurrency behavior and application tests can be observed, no release or baseline-convergence claim is permitted.
+
+---
+
+# Part B — Runtime Verification Session (2026-09-07)
+
+This part records **executed** verification on branch `arena/01a07c87-toefl-house`. It supersedes the Part A status lines it contradicts. Every `VERIFIED` row below corresponds to a command that was actually run and observed in this session.
+
+## B.1 Environment Established
+
+The prior handoff recorded the entire runtime as `BLOCKED`. That was re-tested rather than trusted. Two of the blockers were **partially removable** inside the sandbox:
+
+| Component | Prior status | Actual outcome | Evidence |
+|---|---|---|---|
+| Node / npm | BLOCKED | **VERIFIED** | `node v22.22.3`, `npm 10.9.8` (target 22.x) |
+| npm registry | BLOCKED | **REACHABLE** | `npm install` resolved 75 packages, 0 vulnerabilities |
+| PostgreSQL 18.x | BLOCKED | **RUNNING** | `@embedded-postgres/linux-x64` → `initdb` + `pg_ctl` → `PostgreSQL 18.4` accepting connections on `127.0.0.1:5433`; `CHECK` constraint rejection observed true |
+| PHP 8.2 | BLOCKED | **RUNNING (WASM, limited)** | `@php-wasm/node` → `PHP 8.2.10-dev`, 37 extensions; executed repository PHP scripts |
+| Composer / packagist | BLOCKED | **STILL BLOCKED** | `repo.packagist.org`, `getcomposer.org`, `release-assets.githubusercontent.com`, `deb.debian.org` all return connection failure (`000`) |
+| Laravel `vendor/` | BLOCKED | **STILL BLOCKED** | Cannot install dependencies without Composer/packagist |
+
+### The decisive backend blocker
+
+The available PHP runtime is a WebAssembly build. Extension probe result:
+
+```text
+pdo_pgsql   MISSING
+pgsql       MISSING
+pcntl       MISSING
+openssl/mbstring/tokenizer/fileinfo/curl/zip/bcmath  present
+```
+
+`config/database.php` defaults to `pgsql`, `phpunit.xml` pins `DB_CONNECTION=pgsql`, and **137 of 185 migrations** use PostgreSQL-specific SQL (`CREATE OR REPLACE FUNCTION`, `EXCLUDE USING`, `::jsonb`, `gen_random_uuid`).
+
+Therefore: PostgreSQL is running and PHP is running, but **PHP cannot connect to PostgreSQL**. Substituting SQLite is prohibited by the governing contract and would invalidate the invariants under test. Migration replay, backend tests, API, authorization, concurrency and finance/academic domain verification remain **BLOCKED** — not failed, and not verified.
+
+## B.2 Defects Found and Repaired
+
+All four were found by execution, not inspection. Each is repaired at its authoritative layer.
+
+### D1 — Reporting console: JSX syntax error (build-breaking)
+
+`resources/js/reporting.tsx:105` closed the `{tab === 'dashboards' && ...}` expression container after `</section>` instead of before it (`</div></section>}` where the codebase's 16 other sites use `</div>}</section>`).
+
+`tsc` failed with `TS1005: '}' expected`, which **blocked typecheck for the entire frontend** and masked every other type error in the codebase.
+
+### D2 — Finance console: missing `createRoot` import (runtime crash)
+
+`resources/js/finance.tsx` called `createRoot(...)` without importing it. Every other console imports it from `react-dom/client`; finance alone omitted it. The bundler emits this without error, so it fails only in the browser.
+
+Proven by execution, before and after the fix:
+
+```text
+BEFORE FIX: {"mounted":false,"err":"createRoot is not defined"}
+AFTER  FIX: {"mounted":true,"err":null}
+```
+
+The Finance workspace rendered a permanently blank page. This is the most severe defect found.
+
+### D3 — Academic console: unguarded null dereference
+
+`resources/js/academic.tsx` lines 243/245 dereferenced `selected.capabilities.*` while iterating `selectedEnrollments`/`selectedWaitlist`, which are non-empty only when `selected` is non-null — but the compiler correctly rejected the unguarded access (`TS18047`). Aligned to the file's existing `selected?.capabilities` convention used on line 247.
+
+### D4 — Migration audit script: ordinal regex captured the year
+
+`scripts/database-migration-audit.php` matched `/^(\d{4})_/`, capturing `2026` (the year) as the migration ordinal. Consequences:
+
+- every migration collided with the first → **184 false duplicate errors**
+- the script exited `1` permanently
+- real duplicate-ordinal detection was **entirely non-functional**
+- reported `LOWEST/HIGHEST NUMBER: 2026` and `NUMBERING GAPS: none`
+
+Corrected to `/^\d{4}_\d{2}_\d{2}_(\d{6})_/`. Now reports truthfully, and duplicate detection was re-proven by injecting a temporary duplicate-ordinal file (detected, then removed).
+
+### D5 — Terminology audit scanned build artifacts
+
+`scripts/terminology-audit.php` linted `public/build/` (git-ignored generated Vite output), flooding results with minified bundle noise. Excluded generated output; the audit now scans 939 authored files.
+
+### D6 — Documentation asserted an incorrect migration count
+
+Both `RUNTIME_VERIFICATION_HANDOFF.md` and `DATABASE_SCHEMA_CONSOLIDATION.md` stated "exactly **190 migrations**". The tree contains **185 files**; ordinals reach `000190` with the documented `000175`–`000179` gap. Corrected in both documents. The chain was **not** modified.
+
+## B.3 Regression Coverage Added
+
+`tests/Frontend/mount.test.mjs` (`npm run test:frontend`) bundles each of the 8 console entrypoints and mounts it in a real DOM (jsdom), asserting it renders without throwing. `fetch` never resolves, so this asserts first paint independent of backend availability.
+
+This directly guards the D2 defect class — bundles that compile and build cleanly but crash on load. **Verified to actually fail** when the `createRoot` import is removed (`FAIL finance — createRoot is not defined`, exit 1) and pass when restored.
+
+## B.4 Evidence Record
+
+| Gate | Command | Result | Evidence |
+|---|---|---|---|
+| Environment (Node) | `node -v` / `npm -v` | **VERIFIED** | v22.22.3 / 10.9.8 |
+| Frontend dependencies | `npm install` | **VERIFIED** | 75 packages, 0 vulnerabilities |
+| TypeScript typecheck | `npm run typecheck` | **VERIFIED** | exit 0, after repairing D1/D2/D3 and a Vite 7 `allowedHosts` type error |
+| Production build | `npm run build` | **VERIFIED** | vite 7.3.6, 42 modules, 12 assets, built in ~1.6s |
+| Frontend mount (DOM) | `npm run test:frontend` | **VERIFIED** | 8/8 consoles mounted and rendered |
+| Migration discipline | `scripts/database-migration-audit.php` | **VERIFIED** | 185 files, ordinals 0001–0190, gap 0175–0179, no duplicates, `RESULT: PASS` |
+| Terminology discipline | `scripts/terminology-audit.php` | **VERIFIED (advisory)** | 939 files scanned, 0 disallowed, 63 advisory items, exit 0 |
+| PostgreSQL server | `initdb` + `pg_ctl` + SQL | **VERIFIED** | PostgreSQL 18.4 live; `CHECK` constraint enforcement observed |
+| PHP runtime | php-wasm 8.2 | **VERIFIED (limited)** | PHP 8.2.10-dev executes repository scripts; no `pdo_pgsql` |
+| Composer / `vendor/` | `composer install` | **BLOCKED** | packagist and all Composer distribution hosts unreachable |
+| Laravel boot | `php artisan` | **BLOCKED** | requires `vendor/` |
+| Migration replay | `php artisan migrate` | **BLOCKED** | requires `vendor/` **and** `pdo_pgsql` |
+| Schema / triggers / functions | PostgreSQL inspection | **BLOCKED** | depends on replay |
+| Seeders | `db:seed` | **BLOCKED** | depends on replay |
+| Backend tests (PHPUnit) | `vendor/bin/phpunit` | **BLOCKED** | requires `vendor/` |
+| PHPStan / Pint | `vendor/bin/...` | **BLOCKED** | requires `vendor/` |
+| API / authentication / authorization | HTTP exercise | **BLOCKED** | requires Laravel boot |
+| Finance / Academic / Placement / Access / Organization / HR / Payroll | domain runtime tests | **BLOCKED** | requires Laravel boot + database |
+| Concurrency | multi-session races | **BLOCKED** | requires Laravel boot + database |
+| Security (adversarial) | negative authorization | **BLOCKED** | requires Laravel boot |
+| Browser verification | real browser | **NOT PERFORMED** | jsdom is a DOM runtime, **not** a browser; no browser-rendering/accessibility claim is made |
+| Database baseline equivalence | replay + diff | **BLOCKED** | gate unchanged; chain preserved |
+
+## B.5 What Would Unblock the Remainder
+
+One of the following is required, and none can be satisfied from inside this sandbox:
+
+1. Network allowlisting for `repo.packagist.org` + `getcomposer.org` (or `release-assets.githubusercontent.com`), **and**
+2. A native PHP 8.2 binary with `pdo_pgsql` (system package, or `apt`/`deb.debian.org` access to build it).
+
+With both, the documented Part A order (replay → schema → triggers → seed → tests → domains → concurrency → API → security) becomes executable against the PostgreSQL 18.4 instance already proven working here.
+
+## B.6 Certification Status
+
+**VERIFIED WITH LIMITATIONS.**
+
+Frontend correctness (typecheck, production build, console mount) and repository static discipline (migration numbering, terminology) are **empirically verified**, and four real defects — one of which made the Finance workspace completely non-functional — were found and repaired with regression coverage.
+
+Database, backend, API, security, domain and concurrency correctness remain **RUNTIME BLOCKED** and are explicitly **not** certified.
+
+`RELEASE CERTIFIABLE` is **not** issued. No production-readiness claim is made.
