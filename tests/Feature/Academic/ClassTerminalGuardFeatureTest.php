@@ -57,7 +57,7 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         $period = $structure->definePeriod($officer, 'Terminal Term '.$seed, new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'term-per-'.$seed);
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'term-per-pub-'.$seed);
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'term-class-'.$seed);
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'term-class-'.$seed, null, $this->bootstrapBranchId());
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'term-teacher-'.$seed, new CarbonImmutable('2026-09-01'), null, 'term-teach-'.$seed);
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'published', 'term-pub-'.$seed);
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'active', 'term-act-'.$seed);
@@ -282,7 +282,7 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         $this->assertSame('closed', $closed['lifecycle_state']);
 
         try {
-            app(MaintainClass::class)->defineClass($officer, ClassModel::query()->findOrFail($classId)->program_version_id, $periodId, 4, 'term-period-late');
+            app(MaintainClass::class)->defineClass($officer, ClassModel::query()->findOrFail($classId)->program_version_id, $periodId, 4, 'term-period-late', null, $this->bootstrapBranchId());
             $this->fail('no class may be defined in a closed period');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.class_period_unavailable', $rejection->errorCode());

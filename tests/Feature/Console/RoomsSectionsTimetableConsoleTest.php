@@ -61,7 +61,7 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
         $maintainClass = app(MaintainClass::class);
         $this->buildActiveTeacher('rst-teacher-1', null, 'roomssec4b5');
         foreach (['rst-class' => 'classId', 'rst-class-2' => 'secondClassId'] as $key => $property) {
-            $class = $maintainClass->defineClass($officer, $version['version_id'], $period['period_id'], 4, $key);
+            $class = $maintainClass->defineClass($officer, $version['version_id'], $period['period_id'], 4, $key, null, $this->bootstrapBranchId());
             $this->{$property} = $class['class_id'];
             $maintainClass->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'rst-teacher-1', new CarbonImmutable('2026-09-01'), null, $key.'-ta');
             $maintainClass->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'published', $key.'-pub');

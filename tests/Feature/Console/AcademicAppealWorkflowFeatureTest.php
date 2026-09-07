@@ -72,7 +72,7 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicappealworkflowfe-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicappealworkflowfe-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'afw-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'afw-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $this->buildActiveTeacher('afw-teacher-1', null, 'academic8a8');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'afw-teacher-1', new CarbonImmutable('2026-09-01'), null, 'afw-ta');

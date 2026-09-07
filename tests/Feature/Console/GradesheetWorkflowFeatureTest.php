@@ -65,7 +65,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-gradesheetworkflowfeatur-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-gradesheetworkflowfeatur-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $period['period_id'], 2, 'gs-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $period['period_id'], 2, 'gs-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $this->buildActiveTeacher('gs-teacher-1', null, 'gradeshec83');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'gs-teacher-1', new CarbonImmutable('2026-09-01'), null, 'gs-ta');

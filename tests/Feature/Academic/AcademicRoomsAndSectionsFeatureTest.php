@@ -52,7 +52,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         $period = $structure->definePeriod($officer, 'Scheduling Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'sched-period');
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'sched-period-pub');
 
-        $this->classId = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 20, 'sched-class')['class_id'];
+        $this->classId = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 20, 'sched-class', null, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, 'sched-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'sched-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'sched-class-active');

@@ -79,9 +79,9 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-crossmoduleboundaryattac-offering');
 
         // Class A holds two seats; class B holds one.
-        $classA = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 2, $this->k('class-a'));
+        $classA = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 2, $this->k('class-a'), null, $this->bootstrapBranchId());
         $this->classIdA = $classA['class_id'];
-        $classB = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 1, $this->k('class-b'));
+        $classB = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 1, $this->k('class-b'), null, $this->bootstrapBranchId());
         $this->classIdB = $classB['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classIdA), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, $this->k('ta-a'));
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classIdB), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, $this->k('ta-b'));

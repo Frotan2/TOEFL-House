@@ -64,7 +64,7 @@ final class GraduationWorkflowFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-graduationworkflowfeatur-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-graduationworkflowfeatur-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $this->versionId, $period['period_id'], 2, 'gwf-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $this->versionId, $period['period_id'], 2, 'gwf-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $this->buildActiveTeacher('gwf-teacher-1', null, 'graduatida0');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'gwf-teacher-1', new CarbonImmutable('2026-09-01'), null, 'gwf-ta');

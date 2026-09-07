@@ -50,7 +50,7 @@ final class AcademicScheduleApiTest extends TestCase
         $period = $structure->definePeriod($this->asOfficer('api-sched-officer'), 'API Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'api-sched-per');
         $structure->transitionPeriod($this->asOfficer('api-sched-officer'), AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'api-sched-per-pub');
 
-        $class = app(MaintainClass::class)->defineClass($this->asOfficer('api-sched-officer'), $version['version_id'], $period['period_id'], 4, 'api-sched-class');
+        $class = app(MaintainClass::class)->defineClass($this->asOfficer('api-sched-officer'), $version['version_id'], $period['period_id'], 4, 'api-sched-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         app(MaintainClass::class)->assignTeacher($this->asOfficer('api-sched-officer'), ClassModel::query()->findOrFail($this->classId), 'api-sched-teacher', new CarbonImmutable('2026-09-01'), null, 'api-sched-teach');
         app(MaintainClass::class)->transition($this->asOfficer('api-sched-officer'), ClassModel::query()->findOrFail($this->classId), 'published', 'api-sched-pub');
@@ -155,7 +155,7 @@ final class AcademicScheduleApiTest extends TestCase
         $officer = $this->asOfficer('api-sched-officer');
         $versionId = ClassModel::query()->findOrFail($this->classId)->program_version_id;
         $periodId = ClassModel::query()->findOrFail($this->classId)->period_id;
-        $planned = app(MaintainClass::class)->defineClass($officer, $versionId, $periodId, 4, 'api-sched-planned')['class_id'];
+        $planned = app(MaintainClass::class)->defineClass($officer, $versionId, $periodId, 4, 'api-sched-planned', null, $this->bootstrapBranchId())['class_id'];
 
         $this->postJson('/api/v1/academic/sessions', [
             'class_id' => $planned,

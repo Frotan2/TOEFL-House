@@ -125,7 +125,7 @@ final class SkillFeatureTest extends TestCase
         $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-skillfeaturetest', 1, 'Level', 'A1', 'canon-skillfeaturetest-lvl');
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-skillfeaturetest-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-skillfeaturetest-offering');
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'p16-class-1');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'p16-class-1', null, $this->bootstrapBranchId());
         $assignment = app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'p16-teacher-1', new CarbonImmutable('2026-08-01'), null, 'p16-class-2');
 
         app(MaintainClass::class)->assignSkill($officer, TeacherAssignment::query()->findOrFail($assignment['assignment_id']), $ids['speaking_listening'], 'p16-skill-a1');
@@ -170,7 +170,7 @@ final class SkillFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'p16-prog-4');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-08-01'), new CarbonImmutable('2026-12-18'), 'p16-per-3');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'p16-per-4');
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'p16-class-3');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'p16-class-3', null, $this->bootstrapBranchId());
         $classId = $class['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($classId), 'p16-teacher-2', new CarbonImmutable('2026-08-01'), null, 'p16-class-4');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', 'p16-class-5');

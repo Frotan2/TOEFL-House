@@ -51,7 +51,7 @@ final class AcademicDeliveryFeatureTest extends TestCase
         $version = ['version_id' => $chain['program_version_id']];
         $period = ['period_id' => $chain['period_id']];
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'class-key-1');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'class-key-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, 'class-key-2');
     }
@@ -110,7 +110,7 @@ final class AcademicDeliveryFeatureTest extends TestCase
 
         app(MaintainClass::class)->transition($officer, $class, 'published', 'class-key-7');
 
-        $teacherless = app(MaintainClass::class)->defineClass($officer, $class->program_version_id, $class->period_id, 10, 'class-key-8');
+        $teacherless = app(MaintainClass::class)->defineClass($officer, $class->program_version_id, $class->period_id, 10, 'class-key-8', null, $this->bootstrapBranchId());
         try {
             app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($teacherless['class_id']), 'published', 'class-key-9');
             app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($teacherless['class_id']), 'active', 'class-key-10');
@@ -168,7 +168,7 @@ final class AcademicDeliveryFeatureTest extends TestCase
         $this->assertDatabaseHas('enrollments', ['id' => $seatC['enrollment_id'], 'lifecycle_state' => 'requested']);
 
         // second class for transfer
-        $class2 = app(MaintainClass::class)->defineClass($officer, ClassModel::query()->findOrFail($classId)->program_version_id, ClassModel::query()->findOrFail($classId)->period_id, 5, 'class2-key-1');
+        $class2 = app(MaintainClass::class)->defineClass($officer, ClassModel::query()->findOrFail($classId)->program_version_id, ClassModel::query()->findOrFail($classId)->period_id, 5, 'class2-key-1', null, $this->bootstrapBranchId());
         $this->personWithAuthority('acad-teacher-2', []);
         // assignTeacher requires an active canonical teacher profile.
         $this->buildActiveTeacher('acad-teacher-2', null, 'academic50a');

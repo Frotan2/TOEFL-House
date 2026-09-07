@@ -127,7 +127,7 @@ final class AcademicEligibilitySnapshotFeatureTest extends TestCase
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Eligibility Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'elig2-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'elig2-period-pub');
         $this->buildActiveTeacher('elig2-teacher-1', null, 'academicdaf');
-        $class = app(MaintainClass::class)->defineClass($officer, (string) $profile->program_version_id, $period['period_id'], 10, 'elig2-class');
+        $class = app(MaintainClass::class)->defineClass($officer, (string) $profile->program_version_id, $period['period_id'], 10, 'elig2-class', null, $this->bootstrapBranchId());
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'elig2-teacher-1', new CarbonImmutable('2026-09-01'), null, 'elig2-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'published', 'elig2-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'active', 'elig2-class-active');

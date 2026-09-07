@@ -59,7 +59,7 @@ final class AcademicDecisionFeatureTest extends TestCase
         $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicdecisionfeaturet', 1, 'Level', 'A1', 'canon-academicdecisionfeaturet-lvl');
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicdecisionfeaturet-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicdecisionfeaturet-offering');
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $this->grantedActor('dec-teacher-1', []);
         // assignTeacher requires an active canonical teacher profile.
