@@ -121,7 +121,14 @@ final class Browser
     }
 }
 
-$pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=$E2E_DB", 'postgres', 'postgres');
+// Connection details come from the environment so the journey runs against
+// whichever PostgreSQL instance is under verification (see
+// docs/RUNTIME_ENVIRONMENT_LOCK.md); the defaults match a stock local server.
+$E2E_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$E2E_PORT = getenv('DB_PORT') ?: '5432';
+$E2E_USER = getenv('DB_USERNAME') ?: 'postgres';
+$E2E_PASS = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : 'postgres';
+$pdo = new PDO("pgsql:host=$E2E_HOST;port=$E2E_PORT;dbname=$E2E_DB", $E2E_USER, $E2E_PASS);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 function q(string $sql, array $p = []): ?array
 {
@@ -180,8 +187,8 @@ $owner = new Browser($BASE);
 $owner->prime();
 $r = $owner->post('/login', ['username' => 'owner', 'password' => 'Owner-Pass-123']);
 in_array($r['status'], [302, 303], true) ? ok('owner login → '.$r['status']) : finding('login.owner', "{$r['status']}");
-$me = $owner->get('/api/me');
-($me['status'] === 200 && ($me['json']['username'] ?? '') === 'owner') ? ok('GET /api/me over console session → owner (API session stack)') : finding('api.session', "/api/me → {$me['status']}");
+$me = $owner->get('/api/v1/me');
+($me['status'] === 200 && ($me['json']['data']['username'] ?? '') === 'owner') ? ok('GET /api/me over console session → owner (API session stack)') : finding('api.session', "/api/v1/me → {$me['status']}");
 
 // ---------- STAGE 2: provision staff ----------
 step('STAGE 2 — owner provisions distinct staff accounts (intake→verify→account→password→position)');

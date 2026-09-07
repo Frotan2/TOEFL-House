@@ -169,7 +169,14 @@ final class Browser
     }
 }
 
-$pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=$E2E_DB", 'postgres', 'postgres');
+// Connection details come from the environment so the journey runs against
+// whichever PostgreSQL instance is under verification (see
+// docs/RUNTIME_ENVIRONMENT_LOCK.md); the defaults match a stock local server.
+$E2E_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$E2E_PORT = getenv('DB_PORT') ?: '5432';
+$E2E_USER = getenv('DB_USERNAME') ?: 'postgres';
+$E2E_PASS = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : 'postgres';
+$pdo = new PDO("pgsql:host=$E2E_HOST;port=$E2E_PORT;dbname=$E2E_DB", $E2E_USER, $E2E_PASS);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 function q(string $sql, array $p = []): ?array
 {
@@ -218,8 +225,8 @@ qc('SELECT count(*) FROM user_accounts') === 1 ? pass('bootstrap: exactly 1 owne
 $owner = new Browser($BASE);
 $owner->prime();
 $owner->post('/login', ['username' => 'owner', 'password' => 'Owner-Pass-123']);
-$me = $owner->get('/api/me');
-($me['status'] === 200 && ($me['json']['username'] ?? '') === 'owner') ? pass('owner signed in') : fail('owner.login', "/api/me {$me['status']}");
+$me = $owner->get('/api/v1/me');
+($me['status'] === 200 && ($me['json']['data']['username'] ?? '') === 'owner') ? pass('owner signed in') : fail('owner.login', "/api/v1/me {$me['status']}");
 
 $positionId = qv('SELECT id FROM positions ORDER BY id LIMIT 1');
 $provision = function (string $fullName, string $username, string $password) use ($owner, $positionId): Browser {
@@ -329,18 +336,18 @@ $mathOk ? pass('Gross = Net = '.SAL_GROSS.' = base '.SAL_BASE.' + allowance '.SA
 // ---------- Stage 10-11: approval + SoD ----------
 step('STAGE 10-11 — approval lifecycle and segregation of duties');
 // Self-approval (operator A prepared it) over the JSON API → 403 independence denial.
-$rSelf = $payrollOp->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rSelf = $payrollOp->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 $stillPrepared = qv('SELECT lifecycle_state FROM payroll_calculations WHERE id=?', [$calculationId]);
 $selfErr = $rSelf['json']['error'] ?? '';
 info("self-approve by preparer → HTTP {$rSelf['status']} $selfErr (expect 403 payroll.approval_not_independent)");
 $selfOk = $rSelf['status'] === 403 && $selfErr === 'payroll.approval_not_independent' && $stillPrepared === 'prepared';
 // Unprivileged user cannot approve (JSON API → 403).
-$rNo = $nobody->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rNo = $nobody->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 $noErr = $rNo['json']['error'] ?? '';
 info("unprivileged approve → HTTP {$rNo['status']} $noErr (expect 403 payroll.approve_denied)");
 $noOk = $rNo['status'] === 403;
 // Independent approver B approves via the JSON API.
-$rAppr = $payrollAppr->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rAppr = $payrollAppr->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 $resultState = qv('SELECT lifecycle_state FROM payroll_calculations WHERE id=?', [$calculationId]);
 $resultId = qv('SELECT id FROM payroll_results WHERE calculation_id=?', [$calculationId]);
 $resultAmount = qv('SELECT amount FROM payroll_results WHERE id=?', [$resultId]);
@@ -536,7 +543,7 @@ step('STAGE 21 — RBAC: unprivileged / wrong-authority actors cannot calculate,
 $rbacOk = true;
 // unprivileged calculate via the JSON API (POST /api/payroll/calculations on the period) → 403, no mutation.
 $calcBefore = qc('SELECT count(*) FROM payroll_calculations WHERE period_id=? AND employment_id=?', [$octPeriodId, $employmentId]);
-$rNc = $nobody->post('/api/payroll/calculations', ['period_id' => $octPeriodId, 'employment_id' => $employmentId], true);
+$rNc = $nobody->post('/api/v1/payroll/calculations', ['period_id' => $octPeriodId, 'employment_id' => $employmentId], true);
 $calcAfter = qc('SELECT count(*) FROM payroll_calculations WHERE period_id=? AND employment_id=?', [$octPeriodId, $employmentId]);
 $ncErr = $rNc['json']['error'] ?? '';
 info("unprivileged calculate → HTTP {$rNc['status']} $ncErr; rows created=".($calcAfter - $calcBefore));
@@ -545,7 +552,7 @@ if ($rNc['status'] !== 403 || ($calcAfter - $calcBefore) !== 0) {
     info('unprivileged calculate not properly denied');
 }
 // unprivileged approve (authoritative: must 403 and create no result)
-$rNa = $nobody->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rNa = $nobody->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 if ($rNa['status'] !== 403) {
     $rbacOk = false;
     info("nobody approve → {$rNa['status']}");
