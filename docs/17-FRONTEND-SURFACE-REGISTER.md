@@ -19,12 +19,12 @@ The interactive frontend follows the canonical boundary: React renders and orche
 | Placement | React | Placement has a versioned API with attempt, scoring, moderation, recommendation, decision and eligibility queries/commands. |
 | Identity | React | Identity has a versioned API for person, verification, account link, credential, and account deactivation operations. |
 | Access | React | Access has a dedicated v1 boundary for assignments, policy publication, named-scope grants, staged organization-wide approvals, and dated delegations. |
+| Organization | React | Organization has a scoped v1 projection for topology and position catalog. It is intentionally read-only; structural mutations remain organization-domain commands. |
 
 ## Transitional or API-blocked surfaces
 
 | Surface | Classification | Reason |
 |---|---|---|
-| Organization | API BLOCKED / transitional | Current organization console is server-rendered and no complete stable v1 organization administration boundary is exposed to the SPA. |
 | Documents | API BLOCKED / specialized | Document lifecycle commands exist in the web boundary, but there is no complete v1 document/evidence projection suitable for a safe SPA migration. |
 | Library | API BLOCKED / specialized | Library is not currently exposed through a complete versioned interactive API boundary. |
 | Privacy | API BLOCKED / governance-specialized | Consent, disclosure, export, approval and execution flows need a versioned read/write governance contract before React migration. |
