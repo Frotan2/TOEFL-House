@@ -816,3 +816,107 @@ for a quiet one that proves less.
 `RELEASE CERTIFIABLE` is **not** issued: legacy fixture convergence and
 database baseline consolidation remain open. No production-readiness claim is
 made.
+
+---
+
+# Part F — Canonical Suite Expansion & Escape Audit (2026-09-07)
+
+## F.1 Production Defect Found: Nondeterministic Employment Status
+
+Building the canonical enrollment fixture exposed a defect no amount of
+re-running would have explained away.
+
+`teacher_authority_reference_guard` resolved the current employment status with:
+
+```sql
+ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+```
+
+`employment_statuses.created_at` has **second** precision, so two rows written
+in the same second tie and the query falls through to `id DESC` — a random
+UUID. The resolved status was therefore nondeterministic: an employment could
+read as `candidate` immediately after being hired, and the active-class guard
+would reject a legitimately employed teacher.
+
+Observed directly: three identical canonical runs produced **2, 3 and 3**
+errors.
+
+The table already carries a `bigIncrements` **`seq`** column — strictly
+monotonic and unique. All 8 orderings now use `effective_from DESC, seq DESC`.
+Three consecutive runs are now byte-identical.
+
+This is exactly the class of bug a flaky suite hides and a deterministic one
+surfaces.
+
+## F.2 A Test That Was Wrong Was Fixed, Not The Product
+
+My first capacity test asserted that capacity is enforced at **activation**.
+It is not. `EnrollmentConstraints::assertCapacity` counts `requested`, `active`
+and `frozen` claims at **request** time, so a pending request already holds the
+seat.
+
+The test was corrected to assert the rule the system actually enforces. The
+production behaviour was not touched.
+
+## F.3 Canonical Suite
+
+| Class | Proves |
+|---|---|
+| `Finance/MonetaryIntegrityTest` | allocation ≤ obligation; conservation after rejection; idempotent retry is one fact |
+| `Access/NegativeAuthorizationTest` | per-capability authority; denial persists nothing |
+| `Academic/ClassLifecycleAndCapacityTest` | offering required; capacity bounds; no lifecycle skipping |
+| `Academic/EnrollmentCapacityTest` | request-time capacity; approval is a separate authority |
+| `Api/ApiContractTest` | every console endpoint routed; 401 unauthenticated; documented shape; no unversioned paths |
+| `Journeys/StudentToEnrollmentJourneyTest` | Admissions → Academic → Finance in one workflow |
+
+**24 tests, 63 assertions, ~10.3s, deterministic across runs, 0 failures.**
+
+New canonical fixture: `BuildsEnrollments` (active class: open offering →
+class → teacher assignment inside the academic period → planned → published →
+active).
+
+## F.4 Escape Audit
+
+Each row was **executed**, not reasoned about:
+
+| Can this escape? | Answer | Evidence |
+|---|---|---|
+| Finance over-allocation bug | **No** | guards disabled → 2 failures |
+| Academic capacity bug | **No** | guards disabled → 3 failures |
+| Enrollment capacity bug | **No** | assertion disabled → 1 failure |
+| Authorization bypass | **No** | `decide()` forced allow → 4 failures |
+| Unregistered API route | **No** | payroll route removed → 2 failures, path named |
+| Dropped database invariant | **No** | unique index dropped → 6/6 → 5/6 |
+| Broken Blade page | **No** | title unbalanced → 7 failures |
+| Broken React mount | **No** | `createRoot` removed → mount failure |
+| Old test strategy returning | **No** | `DatabaseMigrations` restored → 3 failures |
+| Runtime version drift | **No** | `verify:environment` |
+| Terminology drift | **Advisory only** | audit reports, does not fail |
+
+All mutations were reverted and every suite returned to green.
+
+## F.5 Position On The Legacy Suite
+
+| | Tests | Failing |
+|---|---|---|
+| Canonical | 24 | **0** |
+| Whole repository | 895 | 406 |
+
+The legacy suite is **not** retired, and I am not claiming convergence. The 406
+failures remain concentrated in fixture provenance chains; none is an
+unrepaired production defect.
+
+`docs/TEST_SUITE_ARCHITECTURE.md` §11 now defines the retirement policy:
+classify (`RETAIN` / `REWRITE` / `MIGRATED` / `OBSOLETE` / `DUPLICATE` /
+`INVALID FIXTURE`), port the intent canonically, then delete the legacy class
+in the same commit as its replacement. **Deleting failing tests to lower the
+count is prohibited** — the failures mark precisely where fixtures do not yet
+match the current domain.
+
+## F.6 Certification
+
+**RUNTIME VERIFIED WITH LIMITATIONS.**
+
+`RELEASE CERTIFIABLE` is **not** issued: legacy fixture convergence and
+database baseline consolidation remain open. No production-readiness claim is
+made.

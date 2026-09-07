@@ -191,3 +191,9 @@ mandatory for new tests.
   never overrides current implementation behaviour.
 - Every canonical invariant test must be shown to fail when the production rule
   it protects is broken. Record the mutation result in the commit message.
+
+### Retirement policy
+
+`docs/TEST_SUITE_ARCHITECTURE.md` §11 governs legacy retirement. A legacy test
+is deleted only once its intent exists canonically. Deleting failing tests to
+reduce the failure count is prohibited.

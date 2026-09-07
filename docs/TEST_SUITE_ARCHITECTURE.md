@@ -119,13 +119,17 @@ Locked in `docs/TESTING_STRATEGY_LOCK.md` and enforced by
 Before trusting a new invariant test, break the production rule it protects and
 confirm it fails. Verified examples:
 
-| Mutation | Expected | Observed |
-|---|---|---|
-| Disable both over-allocation guards in `AllocatePayment` | Finance tests fail | **2 failed** |
-| Disable both capacity guards in `MaintainClass` | Academic tests fail | **3 failed** |
-| Reintroduce `DatabaseMigrations` in `tests/TestCase.php` | Strategy lock fails | **3 failed** |
-| Remove the `createRoot` import from `finance.tsx` | Mount test fails | **1 failed** |
-| Unbalance the `workspace.blade.php` title | Page render fails | **7 failed** |
+| Mutation | Observed |
+|---|---|
+| Disable both over-allocation guards in `AllocatePayment` | **2 canonical tests failed** |
+| Disable both capacity guards in `MaintainClass` | **3 canonical tests failed** |
+| Disable `EnrollmentConstraints::assertCapacity` | **1 canonical test failed** |
+| Make `AccessResolution::decide()` always allow | **4 canonical tests failed** |
+| Unregister `/api/v1/payroll/workspace` | **2 API contract tests failed**, offending path named |
+| Drop the `accounts_code_unique` index | **`verify:invariants` 6/6 → 5/6** |
+| Reintroduce `DatabaseMigrations` | **3 strategy-lock tests failed** |
+| Remove the `createRoot` import from `finance.tsx` | **mount test failed** |
+| Unbalance the `workspace.blade.php` title | **7 page-render tests failed** |
 
 Restore the mutation immediately and re-run to confirm green.
 
@@ -183,3 +187,74 @@ and audits, the runtime environment lock, the full 185-migration replay,
 database invariants, concurrency, and the PHPUnit suite (which includes the
 strategy lock). Browser E2E runs where a Chromium binary is available via
 `CHROMIUM_PATH`.
+
+---
+
+## 10. Escape Audit
+
+The system was challenged against the question it exists to answer: *can a
+material defect reach production unnoticed?* Each row was executed, not
+reasoned about.
+
+| Can this escape? | Answer | Caught by |
+|---|---|---|
+| A Finance over-allocation bug | **No** | `MonetaryIntegrityTest` |
+| An Academic capacity bug | **No** | `ClassLifecycleAndCapacityTest`, `EnrollmentCapacityTest` |
+| An authorization bypass | **No** | `NegativeAuthorizationTest` (+3 others) |
+| A concurrency race | **No** | `verify:concurrency` (4/4, real transactions) |
+| A broken/unregistered API route | **No** | `ApiContractTest` |
+| A broken Blade page | **No** | `WorkspacePageRenderTest` |
+| A broken React mount | **No** | `test:frontend` |
+| A silently dropped database invariant | **No** | `verify:invariants` |
+| Reverting to the slow test strategy | **No** | `TestStrategyLockTest` |
+| Runtime version drift | **No** | `verify:environment` |
+| Terminology drift | **Advisory only** | `terminology-audit.php` reports, does not fail |
+
+Known gap: the terminology audit is advisory by design and exits 0. Making it
+blocking requires triaging its 67 pre-existing findings first.
+
+---
+
+## 11. Legacy Retirement Policy
+
+Two suites currently exist. That is a transitional state, not the target.
+
+**Current position (measured):**
+
+| | Tests | Failing | Classes |
+|---|---|---|---|
+| Canonical | 24 | **0** | 6 |
+| Whole repository | 895 | 406 | 142 (51 fully green) |
+
+The 406 legacy failures are concentrated in fixture chains (offering, branch
+and teacher provenance). Each is either an incomplete fixture or the
+database/domain correctly refusing invalid state. **None is an unrepaired
+production defect.**
+
+### Retirement is earned, not scheduled
+
+A legacy test may only be deleted once its *intent* exists in the canonical
+suite. Classify before touching anything:
+
+| Class | Meaning | Action |
+|---|---|---|
+| `RETAIN` | Valid intent, no canonical equivalent yet | Keep. Write the canonical test first. |
+| `REWRITE` | Valid intent, invalid fixture or obsolete expectation | Rewrite into `tests/Canonical`. |
+| `MIGRATED` | Intent now covered canonically | Safe to delete. |
+| `OBSOLETE` | Tests removed architecture | Delete, cite what was removed. |
+| `DUPLICATE` | Same intent as another test | Delete the weaker one. |
+| `INVALID FIXTURE` | Asserts state production cannot produce | Repair the fixture, never the invariant. |
+
+**Deleting failing tests to lower the number is prohibited.** It converts a
+noisy suite into a quiet one that proves less, which is the opposite of the
+goal. The 406 failures are informative: they mark exactly where fixtures do not
+yet match the current domain.
+
+### Order of work
+
+1. Grow canonical coverage for a domain.
+2. Port the legacy intent for that domain.
+3. Delete the superseded legacy class in the same commit as its replacement.
+4. Retire the fixture trait once nothing references it.
+
+Until a domain has been through that, its legacy tests stay.
