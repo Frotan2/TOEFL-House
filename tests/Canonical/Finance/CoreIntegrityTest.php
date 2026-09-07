@@ -32,10 +32,11 @@ final class CoreIntegrityTest extends CanonicalTestCase
     {
         parent::setUp();
         $accountant = $this->accountant();
-        $ar = app(MaintainChartOfAccounts::class)->define($accountant, '1100', 'Accounts Receivable', 'asset', 'canon-fin-acc-1');
-        $revenue = app(MaintainChartOfAccounts::class)->define($accountant, '4100', 'Tuition Revenue', 'revenue', 'canon-fin-acc-2');
-        $this->arAccountId = $ar['account_id'];
-        $this->revenueAccountId = $revenue['account_id'];
+        $this->arAccountId = DB::table('accounts')->where('code', '1100')->value('id');
+        $this->revenueAccountId = DB::table('accounts')->where('code', '4000')->value('id');
+        if ($this->arAccountId === null || $this->revenueAccountId === null) {
+            throw new \RuntimeException('Canonical Finance fixture requires the standard seeded 1100/4000 accounts.');
+        }
         $period = app(MaintainFinancialPeriod::class)->open($accountant, '2026-09', '2026-09-01', '2026-09-30', 'canon-fin-period');
         $this->periodId = $period['period_id'];
         $this->studentId = $this->newStudent()['student']->id;
