@@ -112,3 +112,19 @@ php artisan serve --host=0.0.0.0 --port=8000
 - `/tmp` holds the toolchain; it is outside the repository and not persisted by
   Git, which is intentional.
 - No browser engine is available, so browser E2E remains unverified.
+
+---
+
+## 7. Superseded By The Lock
+
+`docs/RUNTIME_ENVIRONMENT_LOCK.md` is now the authoritative runtime
+specification and the machine-checked contract (`npm run verify:environment`).
+
+This file remains the narrative record of **how** the runtime was obtained when
+no PHP, no Composer and no package manager access existed. Read it when you
+need to rebuild the toolchain from nothing; read the lock when you need to know
+what is supported.
+
+One addition since it was written: **`curl` is now compiled in**. The root
+level E2E journey scripts drive the application over HTTP and cannot run
+without it.

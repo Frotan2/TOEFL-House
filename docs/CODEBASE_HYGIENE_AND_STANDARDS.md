@@ -288,3 +288,27 @@ php scripts/terminology-audit.php
 The audit must be reviewed semantically; it is not a license to bulk-replace legitimate historical or compatibility terminology.
 
 This policy supplements the governing architecture, data-authority, security, operations, testing, release, database-consolidation, and canonical-terminology documents; it does not override them.
+
+## Runtime and Testing Locks
+
+Two contracts are enforced by tooling and must not be relaxed to make a command
+pass:
+
+| Contract | Document | Enforcement |
+|---|---|---|
+| Runtime versions and PHP extensions | `docs/RUNTIME_ENVIRONMENT_LOCK.md` | `npm run verify:environment` |
+| Test isolation strategy | `docs/TESTING_STRATEGY_LOCK.md` | `tests/Unit/Architecture/TestStrategyLockTest.php` |
+
+Standing rules:
+
+- PostgreSQL is the only supported database. SQLite is deliberately compiled
+  out of the PHP build so nothing can silently fall back to it.
+- Laravel 13 is prohibited; do not change framework versions to work around an
+  environment problem.
+- A test failing against a database invariant is a classification problem
+  first. Fix the fixture or the expectation; never weaken a correct invariant,
+  delete a migration, or relax an assertion to obtain a green run.
+- Fixtures must build complete provenance
+  (`Person.home_branch_id -> Branch -> active CampusAssignment -> Organization`)
+  and use the shared traits `Tests\Concerns\SeedsAuthority` and
+  `Tests\Concerns\BuildsAcademicStructure` rather than re-deriving it.

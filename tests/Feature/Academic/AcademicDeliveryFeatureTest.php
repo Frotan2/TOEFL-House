@@ -31,6 +31,8 @@ use Tests\TestCase;
 
 final class AcademicDeliveryFeatureTest extends TestCase
 {
+    use \Tests\Concerns\BuildsAcademicStructure;
+
     use BuildsActors;
     use DecidesAdmissions;
 
@@ -44,10 +46,9 @@ final class AcademicDeliveryFeatureTest extends TestCase
         $officer = $this->academicOfficer();
         $this->personWithAuthority($this->teacherPersonId, []);
 
-        $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'IELTS Preparation', 'prog-key-1');
-        $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'initial rules', 'prog-key-2');
-        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'period-key-1');
-        app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'period-key-2');
+        $chain = $this->buildAcademicChain($officer, 'delivery');
+        $version = ['version_id' => $chain['program_version_id']];
+        $period = ['period_id' => $chain['period_id']];
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'class-key-1');
         $this->classId = $class['class_id'];
