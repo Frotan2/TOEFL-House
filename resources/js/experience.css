@@ -15,6 +15,16 @@
 .app-nav a.active { background: #eef4fa; border-color: #dbe7f2; }
 .app-nav a:hover { transform: none; }
 
+.mobile-nav { display: none; position: relative; }
+.mobile-nav summary { align-items: center; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 9px; color: var(--ink-700); cursor: pointer; display: inline-flex; height: 42px; justify-content: center; list-style: none; width: 42px; }
+.mobile-nav summary::-webkit-details-marker { display: none; }
+.mobile-nav[open] summary { background: var(--surface-3); color: var(--ink-950); }
+.mobile-nav nav { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-md); display: grid; gap: 3px; min-width: 210px; padding: 8px; position: absolute; right: 0; top: calc(100% + 8px); z-index: 80; }
+.mobile-nav nav a { align-items: center; border-radius: 8px; color: var(--ink-700); display: flex; gap: 9px; min-height: 42px; padding: 8px 10px; text-decoration: none; }
+.mobile-nav nav a.active { background: #eef4fa; color: var(--brand-900); font-weight: 750; }
+.mobile-nav nav a:hover { background: var(--surface-3); color: var(--ink-950); }
+.sr-only { clip: rect(0,0,0,0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+
 .workspace { max-width: var(--experience-content-max); padding: clamp(24px,3.2vw,42px) var(--experience-page-gutter) calc(72px + var(--experience-safe-bottom)); }
 .workspace > * + * { margin-top: 20px; }
 .workspace h1 { font-size: clamp(28px,3.6vw,42px); letter-spacing: -.04em; line-height: 1.08; }
@@ -56,7 +66,6 @@ tbody tr:hover td { background: #f8fbfe; }
 [id] { scroll-margin-top: 92px; }
 button, a, input, select, textarea { touch-action: manipulation; }
 
-/* Finance domain: money remains authoritative, contextual and deliberately non-dashboard-like. */
 .finance-guard { align-items: flex-start; background: var(--surface-3); border: 1px solid var(--line); border-left: 3px solid var(--brand-600); border-radius: 11px; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; }
 .finance-guard strong { color: var(--ink-900); font-size: 12px; }
 .finance-guard span { color: var(--ink-600); font-size: 12px; line-height: 1.55; }
@@ -85,9 +94,8 @@ button, a, input, select, textarea { touch-action: manipulation; }
   .app-header-inner { padding-inline: 12px; }
   .app-brand { min-width: auto; }
   .brand-copy small { display: none; }
-  .app-nav { gap: 4px; margin-inline: -2px; }
-  .app-nav a { min-height: 44px; padding: 8px 9px; }
-  .app-nav a span { font-size: 12px; }
+  .app-nav { display: none; }
+  .mobile-nav { display: block; }
   .header-utility { display: none; }
   .sign-out span { display: none; }
   .sign-out { min-height: 42px; width: 42px; justify-content: center; padding: 0; }
@@ -112,9 +120,6 @@ button, a, input, select, textarea { touch-action: manipulation; }
   .summary-grid, .quick-actions { grid-template-columns: 1fr; }
   .workspace { padding-inline: 12px; padding-bottom: calc(44px + var(--experience-safe-bottom)); }
   .workspace h1 { font-size: 29px; }
-  .app-nav a { padding-inline: 8px; }
-  .app-nav a span { display: none; }
-  .app-nav a { min-width: 42px; justify-content: center; }
   .status-chip { white-space: normal; }
 }
 @media (prefers-reduced-motion:reduce) {
