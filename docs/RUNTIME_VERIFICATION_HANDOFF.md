@@ -10,7 +10,7 @@ This document is the canonical handoff record for the next engineering agent. It
 |---|---|
 | Repository | `Frotan2/TOEFL-House` |
 | Working branch | `frontend-transformation-2026-09` |
-| Current HEAD | `b1355b4a6d615c506b56640765663db7bb80bc69` |
+| Current HEAD | `c092c92809232d93c14c962174c6623290ab1a7b` |
 | `main` HEAD | `14c9869b7193057437c621ddf26d48f49271980c` |
 | Backend | Laravel 12.x modular monolith |
 | PHP project constraint | `^8.2` |
@@ -28,7 +28,7 @@ This document is the canonical handoff record for the next engineering agent. It
 | Database baseline | Deferred; current migration chain remains the authoritative implementation candidate until PostgreSQL schema freeze/replay |
 | Release state | Not runtime-certified; no production-readiness claim |
 
-Repository evidence for versions is in `composer.json` and `package.json`. The branch and `main` heads were verified immediately before this handoff was written.
+Repository evidence for versions is in `composer.json` and `package.json`. The branch and `main` heads were verified immediately before this handoff was updated.
 
 ## 2. Work Completed Before Runtime
 
