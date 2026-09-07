@@ -32,6 +32,7 @@ use Tests\TestCase;
 final class AcademicOfferingAndWaitlistFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $branchId;
@@ -51,7 +52,7 @@ final class AcademicOfferingAndWaitlistFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'academic7c9');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('offering-officer-setup');
 

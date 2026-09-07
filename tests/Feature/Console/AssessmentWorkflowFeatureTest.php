@@ -38,6 +38,7 @@ use Tests\TestCase;
 final class AssessmentWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -62,7 +63,7 @@ final class AssessmentWorkflowFeatureTest extends TestCase
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'awf-class');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('awf-teacher-1', []);
+        $this->buildActiveTeacher('awf-teacher-1', null, 'assessme3ee');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'awf-teacher-1', new CarbonImmutable('2026-09-01'), null, 'awf-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'awf-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'awf-cls-act');

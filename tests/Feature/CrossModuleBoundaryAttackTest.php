@@ -44,6 +44,7 @@ use Tests\TestCase;
 final class CrossModuleBoundaryAttackTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'bd-teacher-1';
@@ -63,7 +64,7 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         parent::setUp();
 
         $officer = $this->academicOfficer();
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'crossmod515');
 
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'IELTS Preparation', $this->k('prog'));
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'boundary rules', $this->k('ver'));

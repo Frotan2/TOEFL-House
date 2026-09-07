@@ -42,6 +42,7 @@ use Tests\TestCase;
 final class GraduationIntegrityFeatureTest extends TestCase
 {
     use BuildsStudents;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $programVersionId;
 
@@ -52,7 +53,7 @@ final class GraduationIntegrityFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority('grad-teacher-1', []);
+        $this->buildActiveTeacher('grad-teacher-1', null, 'graduatiad0');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('grad-officer');
 

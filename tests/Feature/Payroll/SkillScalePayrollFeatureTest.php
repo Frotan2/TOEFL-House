@@ -50,6 +50,7 @@ use Tests\TestCase;
 final class SkillScalePayrollFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'p16-pay-teacher-1';
@@ -72,7 +73,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
         parent::setUp();
 
         $hrManager = $this->grantedActor('p16-pay-hr-1', ['hr.employ']);
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'skillscaf8b');
         $employment = app(MaintainEmployment::class)->employ($hrManager, $this->teacherPersonId, 'p16-pay-emp-1');
         $this->employmentId = $employment['employment_id'];
 
@@ -551,7 +552,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
     public function test_two_teachers_same_skill_different_contracts_do_not_cross_bill(): void
     {
         $hrManager = $this->grantedActor('p16-pay-hr-1', ['hr.employ']);
-        $this->personWithAuthority('p16-pay-teacher-2', []);
+        $this->buildActiveTeacher('p16-pay-teacher-2', null, 'skillsca958');
         $otherEmployment = app(MaintainEmployment::class)->employ($hrManager, 'p16-pay-teacher-2', 'p16-t10-emp');
 
         // A session delivered by the setUp teacher must never bill the other employment.

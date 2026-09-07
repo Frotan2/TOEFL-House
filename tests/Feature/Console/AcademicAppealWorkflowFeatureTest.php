@@ -45,6 +45,7 @@ use Tests\TestCase;
 final class AcademicAppealWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -73,7 +74,7 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'afw-class');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('afw-teacher-1', []);
+        $this->buildActiveTeacher('afw-teacher-1', null, 'academic8a8');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'afw-teacher-1', new CarbonImmutable('2026-09-01'), null, 'afw-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'afw-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'afw-cls-act');

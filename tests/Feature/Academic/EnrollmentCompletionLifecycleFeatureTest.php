@@ -42,6 +42,7 @@ use Tests\TestCase;
 final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
 {
     use BuildsStudents;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $programVersionId;
 
@@ -58,7 +59,7 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority('comp-teacher-1', []);
+        $this->buildActiveTeacher('comp-teacher-1', null, 'enrollme2a2');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('comp-officer');
 

@@ -47,6 +47,7 @@ use Tests\TestCase;
 final class LevelProgressionFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $programVersionId;
@@ -76,7 +77,7 @@ final class LevelProgressionFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority('lp-teacher-1', []);
+        $this->buildActiveTeacher('lp-teacher-1', null, 'levelpro9fd');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('lp-officer');
 

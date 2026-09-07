@@ -39,6 +39,7 @@ use Tests\TestCase;
 final class GradesheetWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -66,7 +67,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
 
         $class = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $period['period_id'], 2, 'gs-class');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('gs-teacher-1', []);
+        $this->buildActiveTeacher('gs-teacher-1', null, 'gradeshec83');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'gs-teacher-1', new CarbonImmutable('2026-09-01'), null, 'gs-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'gs-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'gs-cls-act');

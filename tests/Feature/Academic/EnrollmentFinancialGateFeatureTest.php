@@ -46,13 +46,14 @@ use Tests\TestCase;
 final class EnrollmentFinancialGateFeatureTest extends TestCase
 {
     use BuildsStudents;
+    use \Tests\Concerns\BuildsTeachers;
 
     /** @return array{class_id: string, student_id: string, enrollment_id: string, period_id: string, program_version_id: string, level_id: string} */
     private function makeEnrollmentRequest(string $seed): array
     {
         $officer = $this->academicOfficer('gate-officer-'.$seed);
         $structure = app(MaintainAcademicStructure::class);
-        $this->personWithAuthority('gate-teacher-'.$seed, []);
+        $this->buildActiveTeacher('gate-teacher-'.$seed, null, 'enrollme20f');
 
         $program = $structure->defineProgram($officer, 'Gate Program '.$seed, 'gate-prog-'.$seed);
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Gate v1', 'gate-ver-'.$seed);

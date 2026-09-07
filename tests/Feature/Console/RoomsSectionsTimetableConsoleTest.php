@@ -29,6 +29,7 @@ use Tests\TestCase;
 final class RoomsSectionsTimetableConsoleTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $branchId;
 
@@ -58,7 +59,7 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'rst-period-pub');
 
         $maintainClass = app(MaintainClass::class);
-        $this->personWithAuthority('rst-teacher-1', []);
+        $this->buildActiveTeacher('rst-teacher-1', null, 'roomssec4b5');
         foreach (['rst-class' => 'classId', 'rst-class-2' => 'secondClassId'] as $key => $property) {
             $class = $maintainClass->defineClass($officer, $version['version_id'], $period['period_id'], 4, $key);
             $this->{$property} = $class['class_id'];

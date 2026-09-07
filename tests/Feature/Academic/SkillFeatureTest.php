@@ -30,6 +30,7 @@ use Tests\TestCase;
 final class SkillFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $skillRegistrarId = 'p16-skill-reg-1';
 
@@ -113,7 +114,7 @@ final class SkillFeatureTest extends TestCase
     {
         $ids = $this->registerInitialSkills();
         $officer = $this->academicOfficer();
-        $this->personWithAuthority('p16-teacher-1', []);
+        $this->buildActiveTeacher('p16-teacher-1', null, 'skillfea915');
 
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'TOEFL Course', 'p16-prog-1');
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'p16-prog-2');
@@ -163,7 +164,7 @@ final class SkillFeatureTest extends TestCase
     {
         $ids = $this->registerInitialSkills();
         $officer = $this->academicOfficer();
-        $this->personWithAuthority('p16-teacher-2', []);
+        $this->buildActiveTeacher('p16-teacher-2', null, 'skillfea11b');
 
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'TOEFL Course', 'p16-prog-3');
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'p16-prog-4');

@@ -42,6 +42,7 @@ use Tests\TestCase;
 final class AcademicEligibilitySnapshotFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     public function test_release_produces_signed_versioned_immutable_eligibility_snapshot(): void
@@ -125,7 +126,7 @@ final class AcademicEligibilitySnapshotFeatureTest extends TestCase
         $officer = $this->academicOfficer('elig2-officer');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Eligibility Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'elig2-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'elig2-period-pub');
-        $this->personWithAuthority('elig2-teacher-1', []);
+        $this->buildActiveTeacher('elig2-teacher-1', null, 'academicdaf');
         $class = app(MaintainClass::class)->defineClass($officer, (string) $profile->program_version_id, $period['period_id'], 10, 'elig2-class');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'elig2-teacher-1', new CarbonImmutable('2026-09-01'), null, 'elig2-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'published', 'elig2-class-pub');

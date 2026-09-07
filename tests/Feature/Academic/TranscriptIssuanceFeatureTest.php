@@ -59,6 +59,7 @@ use Tests\TestCase;
 final class TranscriptIssuanceFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $programVersionId;
 
@@ -82,7 +83,7 @@ final class TranscriptIssuanceFeatureTest extends TestCase
         $this->periodId = (string) app(MaintainAcademicStructure::class)->definePeriod($officer, 'Transcript Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'trx-period')['period_id'];
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'trx-period-pub');
 
-        $this->personWithAuthority('trx-teacher-1', []);
+        $this->buildActiveTeacher('trx-teacher-1', null, 'transcri1a0');
         $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'trx-class', $this->levelA1Id)['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'trx-teacher-1', new CarbonImmutable('2026-09-01'), null, 'trx-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'trx-class-pub');

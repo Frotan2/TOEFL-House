@@ -50,6 +50,7 @@ use Tests\TestCase;
 final class ReportingFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $financialPeriodKey = '2026-12';
@@ -457,7 +458,7 @@ final class ReportingFeatureTest extends TestCase
         $this->academicPeriodId = $period['period_id'];
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'rep-class-1');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('rep-teacher-1', []);
+        $this->buildActiveTeacher('rep-teacher-1', null, 'reportin454');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'rep-teacher-1', new CarbonImmutable('2026-12-05'), null, 'rep-class-2');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'rep-class-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'rep-class-4');

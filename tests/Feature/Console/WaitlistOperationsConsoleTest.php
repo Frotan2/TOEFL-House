@@ -37,6 +37,7 @@ use Tests\TestCase;
 final class WaitlistOperationsConsoleTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $branchId;
@@ -81,7 +82,7 @@ final class WaitlistOperationsConsoleTest extends TestCase
         $structure->declareBranchAvailability($officer, $this->branchId, $this->levelId, $this->periodId, 'wl-avail');
         $this->offeringId = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 1, 'wl-offering')['offering_id'];
 
-        $this->personWithAuthority('wl-teacher-1', []);
+        $this->buildActiveTeacher('wl-teacher-1', null, 'waitlist8f4');
         $this->classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 1, 'wl-class', $this->levelId)['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'wl-teacher-1', new CarbonImmutable('2026-09-01'), null, 'wl-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'wl-class-pub');

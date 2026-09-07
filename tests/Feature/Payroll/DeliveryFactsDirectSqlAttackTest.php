@@ -43,6 +43,7 @@ use Tests\TestCase;
 final class DeliveryFactsDirectSqlAttackTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'p16atk-teacher-1';
@@ -63,7 +64,7 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
         parent::setUp();
 
         $hrManager = $this->grantedActor('p16atk-hr-1', ['hr.employ']);
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'delivery918');
         $employment = app(MaintainEmployment::class)->employ($hrManager, $this->teacherPersonId, 'p16atk-emp-1');
         $this->employmentId = $employment['employment_id'];
 

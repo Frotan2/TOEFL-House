@@ -25,6 +25,7 @@ use Tests\TestCase;
 final class AcademicRoomsAndSectionsFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $branchId;
 
@@ -35,7 +36,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'academicf3f');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('sched-officer-setup');
 

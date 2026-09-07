@@ -36,6 +36,7 @@ use Tests\TestCase;
 final class TransportWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -56,7 +57,7 @@ final class TransportWorkflowFeatureTest extends TestCase
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'twt-class');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('twt-teacher-1', []);
+        $this->buildActiveTeacher('twt-teacher-1', null, 'transpor33a');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'twt-teacher-1', new CarbonImmutable('2026-09-01'), null, 'twt-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'twt-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'twt-cls-act');

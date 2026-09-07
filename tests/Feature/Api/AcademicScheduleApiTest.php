@@ -30,6 +30,7 @@ use Tests\TestCase;
 final class AcademicScheduleApiTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -41,7 +42,7 @@ final class AcademicScheduleApiTest extends TestCase
 
         $this->personWithAuthority('api-sched-officer', ['academic.structure', 'academic.skill', 'academic.schedule']);
         $scheduler = $this->personWithAuthority('api-scheduler', ['academic.schedule']);
-        $this->personWithAuthority('api-sched-teacher', []);
+        $this->buildActiveTeacher('api-sched-teacher', null, 'academic871');
 
         $structure = app(MaintainAcademicStructure::class);
         $program = $structure->defineProgram($this->asOfficer('api-sched-officer'), 'API Schedule Program', 'api-sched-prog');

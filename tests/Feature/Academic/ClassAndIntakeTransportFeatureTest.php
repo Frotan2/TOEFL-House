@@ -34,6 +34,7 @@ use Tests\TestCase;
 final class ClassAndIntakeTransportFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private function signInAs(string $personId, string $username): void
     {
@@ -102,7 +103,7 @@ final class ClassAndIntakeTransportFeatureTest extends TestCase
 
         // 2. Assign a teacher over HTTP (previously no route existed) — a class
         //    needs an open teacher assignment to become active.
-        $teacher = $this->personWithAuthority('class-teacher', []);
+        $teacher = $this->buildActiveTeacher('class-teacher', null, 'classand837');
         $this->post('/academic/teacher-assignments', [
             'class_id' => $class->id,
             'teacher_person_id' => $teacher->id,

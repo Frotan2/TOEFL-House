@@ -170,6 +170,8 @@ final class AcademicDeliveryFeatureTest extends TestCase
         // second class for transfer
         $class2 = app(MaintainClass::class)->defineClass($officer, ClassModel::query()->findOrFail($classId)->program_version_id, ClassModel::query()->findOrFail($classId)->period_id, 5, 'class2-key-1');
         $this->personWithAuthority('acad-teacher-2', []);
+        // assignTeacher requires an active canonical teacher profile.
+        $this->buildActiveTeacher('acad-teacher-2', null, 'academic50a');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class2['class_id']), 'acad-teacher-2', new CarbonImmutable('2026-09-01'), null, 'class2-key-2');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class2['class_id']), 'published', 'class2-key-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class2['class_id']), 'active', 'class2-key-4');

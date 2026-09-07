@@ -36,6 +36,7 @@ use Tests\TestCase;
 final class GraduationWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -65,7 +66,7 @@ final class GraduationWorkflowFeatureTest extends TestCase
 
         $class = app(MaintainClass::class)->defineClass($officer, $this->versionId, $period['period_id'], 2, 'gwf-class');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('gwf-teacher-1', []);
+        $this->buildActiveTeacher('gwf-teacher-1', null, 'graduatida0');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'gwf-teacher-1', new CarbonImmutable('2026-09-01'), null, 'gwf-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'gwf-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'gwf-cls-act');

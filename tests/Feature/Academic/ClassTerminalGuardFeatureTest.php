@@ -43,12 +43,13 @@ use Tests\TestCase;
 final class ClassTerminalGuardFeatureTest extends TestCase
 {
     use BuildsStudents;
+    use \Tests\Concerns\BuildsTeachers;
 
     /** @return array{version_id: string, period_id: string, class_id: string} */
     private function freshActiveClass(string $seed): array
     {
         $officer = $this->academicOfficer('term-officer-'.$seed);
-        $this->personWithAuthority('term-teacher-'.$seed, []);
+        $this->buildActiveTeacher('term-teacher-'.$seed, null, 'classteref6');
         $structure = app(MaintainAcademicStructure::class);
 
         $program = $structure->defineProgram($officer, 'Terminal Guard Program '.$seed, 'term-prog-'.$seed);

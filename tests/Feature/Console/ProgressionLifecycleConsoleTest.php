@@ -36,6 +36,7 @@ use Tests\TestCase;
 final class ProgressionLifecycleConsoleTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
 
     private string $classId;
 
@@ -56,7 +57,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'plc-class');
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('plc-teacher-1', []);
+        $this->buildActiveTeacher('plc-teacher-1', null, 'progress311');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'plc-teacher-1', new CarbonImmutable('2026-09-01'), null, 'plc-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'plc-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'plc-cls-act');

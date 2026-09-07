@@ -34,6 +34,7 @@ use Tests\TestCase;
 final class OfferingOperationsConsoleTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $branchId;
@@ -193,7 +194,7 @@ final class OfferingOperationsConsoleTest extends TestCase
         $this->signOut();
 
         $officer = $this->academicOfficer('offering-console-teach');
-        $this->personWithAuthority('con-teacher-1', []);
+        $this->buildActiveTeacher('con-teacher-1', null, 'offeringc43');
         $classId = app(MaintainClass::class)->defineClass(
             $officer, $this->programVersionId, $this->periodId, 4, 'con-class', $this->levelId,
         )['class_id'];

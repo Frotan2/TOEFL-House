@@ -37,6 +37,7 @@ use Tests\TestCase;
 final class AcademicDecisionFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
     private string $classId;
@@ -61,6 +62,8 @@ final class AcademicDecisionFeatureTest extends TestCase
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1');
         $this->classId = $class['class_id'];
         $this->grantedActor('dec-teacher-1', []);
+        // assignTeacher requires an active canonical teacher profile.
+        $this->buildActiveTeacher('dec-teacher-1', null, 'academic731');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'dec-teacher-1', new CarbonImmutable('2026-09-01'), null, 'dec-class-2');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'dec-class-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'dec-class-4');
