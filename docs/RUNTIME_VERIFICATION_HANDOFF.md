@@ -700,3 +700,119 @@ Not certified: the outstanding fixture-driven test failures (all classified,
 none an unrepaired production defect) and database baseline consolidation.
 
 `RELEASE CERTIFIABLE` is **not** issued. No production-readiness claim is made.
+
+---
+
+# Part E — Test System Reconstruction (2026-09-07)
+
+Part D locked the runtime and testing strategy. Part E addresses the deeper
+question: **is a passing result meaningful?**
+
+## E.1 Classification Of The Existing Suite
+
+Before changing anything, the 871-test suite was classified from its own JUnit
+output rather than by reading it:
+
+| Measure | Value |
+|---|---|
+| Test classes | 136 |
+| Fully green classes | 45 (267 tests) |
+| Classes with any failure | 91 (48 fully red) |
+| **Failures traced through fixture traits / `setUp`** | **322 of 407 (79%)** |
+
+The conclusion drove everything that follows: the tests largely encode valid
+intent, but the **fixtures** could not construct valid current-domain state.
+That makes the suite untrustworthy in both directions — it fails on correct
+behaviour, and it cannot be relied on to catch real defects.
+
+## E.2 Production Defects Found By Rebuilding Fixtures
+
+Building one canonical fixture through the real commands exposed three genuine
+defects that the entire legacy suite had never reached.
+
+| # | Defect | Impact |
+|---|---|---|
+| D18 | `teacher_authority_reference_guard` referenced `NEW.qualification_type` | PL/pgSQL resolves the whole boolean before the `TG_TABLE_NAME` conjunct, so **every UPDATE on 3 of the 4 guarded tables failed** |
+| D19 | Same guard referenced `NEW.effective_to` | `teacher_qualifications` has no such column, so **every qualification write failed** |
+| D20 | `DomainEventContext` emitted branch envelopes with `organization_id = null` | `domain_events_context_provenance_guard` requires both ids, so **every branch-scoped domain event was rejected** |
+
+D18/D19 were fixed by nesting the table test so each table's columns are only
+referenced in its own branch. D20 now derives the organization from the
+branch's effective campus assignment **on the server**, so a producer still
+cannot widen its own scope.
+
+These were unreachable from the old suite: its fixtures failed earlier, at
+provenance.
+
+## E.3 The Canonical Suite
+
+`tests/Canonical` (PHPUnit testsuite `Canonical`) is the authority for new
+domain coverage, derived from the current implementation rather than from
+older tests' expectations. Architecture: `docs/TEST_SUITE_ARCHITECTURE.md`.
+
+| Class | Proves |
+|---|---|
+| `Finance/MonetaryIntegrityTest` | allocation ≤ obligation; conservation after rejection; idempotent retry is one financial fact; successful allocation conserved and provenanced |
+| `Access/NegativeAuthorizationTest` | each verb needs its **own** capability (a neighbouring Finance capability is insufficient); a denied command persists nothing |
+| `Academic/ClassLifecycleAndCapacityTest` | chain yields an open offering; class requires a matching offering; capacity ≤ offering and > 0; `planned` cannot skip to `active`; rejection leaves no row |
+
+**13 tests, 23 assertions, ~4.9s.** Every assertion is against persisted state.
+
+### Canonical fixtures
+
+`BuildsTeachers::buildActiveTeacher()` was added to encode the real chain —
+identity → employment → signed contract → hire → profile → verified
+qualification → activation — with register and approve performed by **distinct
+actors** to preserve separation of duties.
+
+## E.4 The Tests Were Tested
+
+A test that stays green while its target behaviour is broken is defective.
+Each protective test was verified by mutation:
+
+| Mutation | Observed |
+|---|---|
+| Disable both over-allocation guards in `AllocatePayment` | **2 canonical tests failed** |
+| Disable both capacity guards in `MaintainClass` | **3 canonical tests failed** |
+| Reintroduce `DatabaseMigrations` | **3 strategy-lock tests failed** |
+| Remove `createRoot` import from `finance.tsx` | **1 mount test failed** |
+| Unbalance the `workspace.blade.php` title | **7 page-render tests failed** |
+
+All mutations were reverted and the suites returned to green.
+
+## E.5 Current Evidence
+
+| Gate | Status | Evidence |
+|---|---|---|
+| Runtime lock | **VERIFIED** | 8/8 satisfied |
+| Canonical suite | **VERIFIED** | 13/13, mutation-checked |
+| Database invariants | **VERIFIED** | 6/6 rejected by PostgreSQL |
+| Concurrency | **VERIFIED** | 4/4 under simultaneous transactions |
+| Frontend mount | **VERIFIED** | 8/8 consoles |
+| **Browser E2E** | **VERIFIED** | Chromium 149, **21/21**, 25 API calls, 0 console errors |
+| Operational readiness | **VERIFIED** | `/health` 200, `database: ok` |
+| Legacy suite | **EXECUTED** | 884 tests, 3,500 assertions, 406 errors+failures |
+
+## E.6 Honest Position On The Legacy Suite
+
+The legacy suite is **not** yet retired, and I am not claiming it is converged.
+406 failures remain, still dominated by fixture chains
+(offering/branch/teacher provenance). They are classified, and **none is an
+unrepaired production defect** — each is an incomplete fixture or the
+database/domain correctly refusing invalid state.
+
+Deleting those tests now would destroy real regression intent while the
+canonical suite is still small. The deliberate sequence is: grow canonical
+coverage per domain, migrate the intent of each legacy class into it, then
+retire the legacy class. Removing them before that would trade a noisy suite
+for a quiet one that proves less.
+
+**No invariant was weakened, no migration deleted, no assertion relaxed.**
+
+## E.7 Certification
+
+**RUNTIME VERIFIED WITH LIMITATIONS.**
+
+`RELEASE CERTIFIABLE` is **not** issued: legacy fixture convergence and
+database baseline consolidation remain open. No production-readiness claim is
+made.
