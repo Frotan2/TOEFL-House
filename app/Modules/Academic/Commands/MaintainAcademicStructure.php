@@ -606,6 +606,17 @@ final class MaintainAcademicStructure
      */
     private function requireCapability(Actor $actor, ?string $branchId): void
     {
+        // An explicit null is a governance verb operating on branchless
+        // curriculum records, which is a different decision from a
+        // branch-bound verb whose target provenance could not be resolved.
+        // Routing null through the branch-scoped path would collapse the two
+        // and fail closed on "target provenance is unknown".
+        if ($branchId === null) {
+            $this->access->requireGlobal($actor, self::CAPABILITY, 'academic.structure_denied');
+
+            return;
+        }
+
         $this->access->require($actor, self::CAPABILITY, $branchId, 'academic.structure_denied');
     }
 }
