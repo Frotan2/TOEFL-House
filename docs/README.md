@@ -23,7 +23,12 @@ This is the single human/AI entry point to the TOEFL House engineering knowledge
 15. [`14-CURRENT-STATE-ROADMAP.md`](14-CURRENT-STATE-ROADMAP.md) — current implementation, target gaps and priorities.
 16. [`15-REQUIREMENT-TRACEABILITY.md`](15-REQUIREMENT-TRACEABILITY.md) — requirement traceability.
 17. [`16-DECISION-REGISTER.md`](16-DECISION-REGISTER.md) — decision authority index.
-18. [`ai/00-AI-ENTRYPOINT.md`](ai/00-AI-ENTRYPOINT.md) — mandatory AI engineering entry point.
+18. [`CODEBASE_HYGIENE_AND_STANDARDS.md`](CODEBASE_HYGIENE_AND_STANDARDS.md) — repository coding, cleanup, compatibility, naming, comment, testing and runtime-readiness standard.
+19. [`ai/00-AI-ENTRYPOINT.md`](ai/00-AI-ENTRYPOINT.md) — mandatory AI engineering entry point.
+
+## Authority chain for implementation work
+
+For implementation/cleanup work, apply the canonical architecture and data/security decisions first, then the repository-wide hygiene standard. The hygiene standard never overrides a domain, security, database, or release decision.
 
 ## Three-state rule
 
@@ -37,10 +42,10 @@ Never treat a target capability as implemented merely because it is documented. 
 
 ## Where to go next
 
-- Humans: read the numbered canonical documents in order, then consult `history/` only for provenance.
-- AI agents: start with `ai/00-AI-ENTRYPOINT.md`, then follow its mandatory reading sequence.
-- Operators: use `12-OPERATIONS-DEPLOYMENT-DR.md` and the current production procedure.
-- Auditors: use `15-REQUIREMENT-TRACEABILITY.md`, `16-DECISION-REGISTER.md`, and the evidence sources they point to.
+- Humans: read the numbered canonical documents in order, then `CODEBASE_HYGIENE_AND_STANDARDS.md`, then consult `history/` only for provenance.
+- AI agents: start with `ai/00-AI-ENTRYPOINT.md`, then follow its mandatory reading sequence and apply the hygiene/legacy policy during code changes.
+- Operators: use `12-OPERATIONS-DEPLOYMENT-DR.md` and `SETUP.md` for the actual deployment procedure.
+- Auditors: use `13-TESTING-QUALITY-RELEASE.md`, `15-REQUIREMENT-TRACEABILITY.md`, `16-DECISION-REGISTER.md`, and the evidence sources they point to.
 
 ## Historical archive
 
