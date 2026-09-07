@@ -30,6 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::prefix('api/v1')
                 ->middleware(['api', 'employee'])
                 ->group(base_path('routes/payroll-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee'])
+                ->group(base_path('routes/identity-api.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
