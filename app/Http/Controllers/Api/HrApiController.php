@@ -45,8 +45,8 @@ final class HrApiController extends Controller
                 'contract_versions' => $versions,
                 'scales' => Scale::query()->orderBy('rank_order')->get(),
                 'capabilities' => [
-                    'employ' => $this->can('hr.employ'),
-                    'contract' => $this->can('hr.contract'),
+                    'employ' => $this->can(MaintainEmployment::CAPABILITY),
+                    'contract' => $this->can(MaintainContractVersion::CAPABILITY_PREPARE),
                 ],
             ],
         ]);
@@ -61,10 +61,7 @@ final class HrApiController extends Controller
 
     public function employmentTransition(Request $request, string $employmentId, string $action): JsonResponse
     {
-        $input = $request->validate([
-            'effective_from' => ['required', 'date'],
-            'reason' => ['nullable', 'string', 'max:1000'],
-        ]);
+        $input = $request->validate(['effective_from' => ['required', 'date'], 'reason' => ['nullable', 'string', 'max:1000']]);
         $employment = Employment::query()->findOrFail($employmentId);
         $idempotency = $this->idempotencyKey('hr.employment.'.$action);
         $effectiveFrom = $input['effective_from'];
@@ -81,12 +78,7 @@ final class HrApiController extends Controller
 
     public function requestLeave(Request $request, string $employmentId): JsonResponse
     {
-        $input = $request->validate([
-            'category' => ['required', 'string', 'max:120'],
-            'date_from' => ['required', 'date'],
-            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
-            'reason' => ['required', 'string', 'max:1000'],
-        ]);
+        $input = $request->validate(['category' => ['required', 'string', 'max:120'], 'date_from' => ['required', 'date'], 'date_to' => ['required', 'date', 'after_or_equal:date_from'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainLeave::class)->request($this->actor(), Employment::query()->findOrFail($employmentId), $input['category'], $input['date_from'], $input['date_to'], $input['reason'], $this->idempotencyKey('hr.leave.request'));
         return response()->json(['status' => 'requested', 'result' => $result], 201);
     }
@@ -106,20 +98,14 @@ final class HrApiController extends Controller
 
     public function prepareVersion(Request $request): JsonResponse
     {
-        $input = $request->validate([
-            'employment_id' => ['required', 'string'], 'terms_ref' => ['required', 'string', 'max:255'], 'scale_id' => ['nullable', 'string'],
-            'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'],
-        ]);
+        $input = $request->validate(['employment_id' => ['required', 'string'], 'terms_ref' => ['required', 'string', 'max:255'], 'scale_id' => ['nullable', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from']]);
         $result = app(MaintainContractVersion::class)->prepare($this->actor(), Employment::query()->findOrFail($input['employment_id']), $input['terms_ref'], ($input['scale_id'] ?? '') !== '' ? $input['scale_id'] : null, $input['effective_from'], $input['effective_to'] ?? null, $this->idempotencyKey('hr.version.prepare'));
         return response()->json(['status' => 'prepared', 'result' => $result], 201);
     }
 
     public function addRule(Request $request, string $versionId): JsonResponse
     {
-        $input = $request->validate([
-            'method' => ['required', 'in:fixed_monthly,session_rate,hourly_rate,scale_rate,allowance'], 'rate' => ['required', 'numeric', 'money', 'gte:0'],
-            'skill_id' => ['nullable', 'string'], 'scale_id' => ['nullable', 'string'], 'label' => ['nullable', 'string', 'max:120'],
-        ]);
+        $input = $request->validate(['method' => ['required', 'in:fixed_monthly,session_rate,hourly_rate,allowance'], 'rate' => ['required', 'numeric', 'money', 'gte:0'], 'skill_id' => ['nullable', 'string'], 'scale_id' => ['nullable', 'string'], 'label' => ['nullable', 'string', 'max:120']]);
         $result = app(MaintainContractVersion::class)->addRule($this->actor(), ContractVersion::query()->findOrFail($versionId), $input['method'], $input['rate'], ($input['skill_id'] ?? '') !== '' ? $input['skill_id'] : null, ($input['scale_id'] ?? '') !== '' ? $input['scale_id'] : null, ($input['label'] ?? '') !== '' ? $input['label'] : null, $this->idempotencyKey('hr.version.rule'));
         return response()->json(['status' => 'rule_added', 'result' => $result], 201);
     }
