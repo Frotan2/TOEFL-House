@@ -12,9 +12,11 @@ use App\Modules\Hr\Commands\MaintainContract;
 use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Models\Contract;
 use App\Modules\Hr\Models\Employment;
+use App\Modules\Hr\Models\EmploymentStatus;
 use App\Support\Authorization\Actor;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Canonical teacher fixture.
@@ -45,7 +47,15 @@ trait BuildsTeachers
     private function buildActiveTeacher(string $personId, ?string $branchId = null, string $keyPrefix = 'teacher'): array
     {
         $branchId ??= $this->bootstrapBranchId();
-        $effectiveFrom = CarbonImmutable::today()->subMonths(3)->toDateString();
+        // employ() stamps a `candidate` employment_status effective TODAY.
+        // The active-class guard reads the newest status with
+        // effective_from <= CURRENT_DATE, ordered by effective_from, then
+        // created_at, then id. A backdated hire would rank *below* that
+        // candidate row, and a same-day hire would depend on the created_at/id
+        // tiebreak. Dating the hire in the recent past is therefore wrong and
+        // A backdated hire would rank below it, so the hire is dated today and
+        // ordered above the candidate row by employment_statuses.seq.
+        $effectiveFrom = CarbonImmutable::today()->toDateString();
 
         // Identity: verified, homed in the branch. Set on insert because a
         // verified person is immutable (people_identity_guard).
@@ -89,6 +99,21 @@ trait BuildsTeachers
             $keyPrefix.'-hire',
         );
 
+        // Fail loudly here rather than letting a later guard reject an
+        // apparently unrelated operation: the fixture's whole purpose is to
+        // produce an employment the domain reads as active.
+        $effectiveStatus = EmploymentStatus::query()
+            ->where('employment_id', $employment['employment_id'])
+            ->whereDate('effective_from', '<=', CarbonImmutable::today()->toDateString())
+            ->orderByDesc('effective_from')->orderByDesc('seq')
+            ->value('status');
+        if ($effectiveStatus !== 'active') {
+            throw new \RuntimeException(
+                "BuildsTeachers: employment resolves as '{$effectiveStatus}', not 'active'; "
+                .'the active-class guard would reject this teacher.'
+            );
+        }
+
         $profiles = app(MaintainTeacherProfile::class);
         $registered = $profiles->register(
             $academicOfficer,
@@ -129,7 +154,10 @@ trait BuildsTeachers
             ->firstOrFail();
         $attributes = $existing->getAttributes();
         $existing->delete();
-        $attributes['effective_from'] = $effectiveFrom;
+        // Backdate only the branch authorization so assignments dated from the
+        // start of an academic period are inside it. Employment status dates
+        // are deliberately left alone (see the note above).
+        $attributes['effective_from'] = CarbonImmutable::today()->subYear()->toDateString();
         TeacherProfileBranch::query()->create($attributes);
 
         $profiles->transition(

@@ -6,6 +6,7 @@ namespace Tests\Canonical;
 
 use Tests\Concerns\BuildsAcademicStructure;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsEnrollments;
 use Tests\Concerns\BuildsStudents;
 use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
@@ -33,6 +34,7 @@ abstract class CanonicalTestCase extends TestCase
     // rather than by widening the traits (which legacy tests still rely on).
     use BuildsAcademicStructure;
     use BuildsActors;
+    use BuildsEnrollments;
     use BuildsStudents;
     use BuildsTeachers;
 
@@ -63,5 +65,21 @@ abstract class CanonicalTestCase extends TestCase
     protected function newAcademicChain(\App\Support\Authorization\Actor $officer, string $keyPrefix, int $capacity = 25, ?string $branchId = null): array
     {
         return $this->buildAcademicChain($officer, $keyPrefix, $capacity, $branchId);
+    }
+
+    /**
+     * An active class with a teacher, ready to accept enrollments.
+     *
+     * @return array<string, string>
+     */
+    protected function newActiveClass(\App\Support\Authorization\Actor $officer, string $keyPrefix, int $classCapacity = 2, int $offeringCapacity = 25): array
+    {
+        return $this->buildActiveClass($officer, $keyPrefix, $classCapacity, $offeringCapacity);
+    }
+
+    /** @return array{enrollment_id: string, correlation_id: string} */
+    protected function newSeatRequest(\App\Support\Authorization\Actor $requester, string $studentId, string $classId, string $key, ?string $offeringId = null): array
+    {
+        return $this->requestSeat($requester, $studentId, $classId, $key, $offeringId);
     }
 }

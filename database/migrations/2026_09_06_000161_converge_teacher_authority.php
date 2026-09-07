@@ -675,7 +675,7 @@ return new class extends Migration
                        COALESCE((SELECT es.status FROM employment_statuses es
                                   WHERE es.employment_id = e.id
                                     AND es.effective_from <= NEW.effective_from
-                                  ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                  ORDER BY es.effective_from DESC, es.seq DESC
                                   LIMIT 1), e.lifecycle_state)
                   INTO profile_person, profile_state, assignment_employment_id, employment_state
                   FROM teacher_profiles tp
@@ -693,7 +693,7 @@ return new class extends Migration
                     SELECT COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = assignment_employment_id
                                         AND es.effective_from <= NEW.effective_to - 1
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state)
                       INTO end_employment_state
                       FROM employments e
@@ -909,7 +909,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.scheduled_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND EXISTS (
                            SELECT 1 FROM teacher_profile_branches tpb
@@ -1023,7 +1023,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.scheduled_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                      ORDER BY ta.teacher_profile_id, ta.branch_id
                 LOOP
@@ -1103,7 +1103,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= session_date
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                        AND ta.teacher_profile_id IS NOT NULL
@@ -1171,7 +1171,7 @@ return new class extends Migration
                            AND COALESCE((SELECT es.status FROM employment_statuses es
                                           WHERE es.employment_id = e.id
                                             AND es.effective_from <= CURRENT_DATE
-                                          ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                          ORDER BY es.effective_from DESC, es.seq DESC
                                           LIMIT 1), e.lifecycle_state) = 'active'
                            AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                            AND ta.branch_id = NEW.branch_id
@@ -1228,7 +1228,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.assessed_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                        AND ta.effective_from <= NEW.assessed_on
@@ -1276,7 +1276,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.assessed_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                        AND ta.effective_from <= NEW.assessed_on
