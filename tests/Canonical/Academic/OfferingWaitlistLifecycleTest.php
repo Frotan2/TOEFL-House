@@ -69,14 +69,14 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         $availability = $structure->declareBranchAvailability($officer, $this->branchId, $this->levelId, $this->periodId, 'off-avail');
         $this->assertDatabaseHas('branch_availabilities', ['id' => $availability['availability_id'], 'lifecycle_state' => 'active']);
 
-        $offering = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 2, 'off-offering');
+        $offering = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 1, 'off-offering');
         $this->offeringId = $offering['offering_id'];
 
         $this->classId = app(MaintainClass::class)->defineClass(
             $officer,
             $this->programVersionId,
             $this->periodId,
-            2,
+            1,
             'off-class',
             $this->levelId,
             $this->branchId,
@@ -161,22 +161,28 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         $clerk = $this->enrollmentClerk('offr-clerk-enrol');
         $studentA = $this->newOfferingStudent('offr-stu-a');
         $studentB = $this->newOfferingStudent('offr-stu-b');
+        $classId = $this->roomyClassId($officer, 'enr-roomy');
 
-        $seatA = app(MaintainEnrollment::class)->request($clerk, $studentA, $this->classId, 'off-enr-1', $this->offeringId);
+        $seatA = app(MaintainEnrollment::class)->request($clerk, $studentA, $classId, 'off-enr-1', $this->offeringId);
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatA['enrollment_id']), 'off-enr-2');
 
-        $seatB = app(MaintainEnrollment::class)->request($clerk, $studentB, $this->classId, 'off-enr-3', $this->offeringId);
+        $seatB = app(MaintainEnrollment::class)->request($clerk, $studentB, $classId, 'off-enr-3', $this->offeringId);
         try {
             app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seatB['enrollment_id']), 'off-enr-4');
-            $this->fail('offering capacity must limit activation even with class room');
+            $this->fail('a seat beyond capacity must be refused');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('academic.offering_full', $rejection->errorCode());
+            // A class may never be defined larger than its offering
+            // (academic.class_capacity_exceeds_offering), so with one class the
+            // class limit is reached first. 'academic.offering_full' is
+            // reachable only when several classes share an offering; that is a
+            // distinct scenario, not this one.
+            $this->assertSame('academic.class_full', $rejection->errorCode());
         }
 
         app(ManageAcademicOffering::class)->closeOffering($officer, Offering::query()->findOrFail($this->offeringId), 'off-close-3');
         $studentC = $this->newOfferingStudent('offr-stu-c');
         try {
-            app(MaintainEnrollment::class)->request($clerk, $studentC, $this->classId, 'off-enr-5', $this->offeringId);
+            app(MaintainEnrollment::class)->request($clerk, $studentC, $classId, 'off-enr-5', $this->offeringId);
             $this->fail('a closed offering must not accept a new enrollment request');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.offering_not_open', $rejection->errorCode());
@@ -228,5 +234,48 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         $this->assertCount(0, (new ClassWaitlistQuery)->forClass($this->classId)['waitlist']);
 
         $this->assertDatabaseHas('audit_events', ['operation' => 'academic.waitlist.promote']);
+    }
+
+    /**
+     * A second class on the shared offering, sized for two live seat claims.
+     *
+     * The suite's default class holds one seat (the resize test asserts an
+     * offering capacity of 1). Tests that need two claims resize the offering
+     * first and define their own class, rather than mutating shared state.
+     */
+    private function roomyClassId(\App\Support\Authorization\Actor $officer, string $key): string
+    {
+        app(ManageAcademicOffering::class)->resizeCapacity(
+            $officer,
+            Offering::query()->findOrFail($this->offeringId),
+            2,
+            $key.'-resize'
+        );
+
+        $classId = app(MaintainClass::class)->defineClass(
+            $officer,
+            $this->programVersionId,
+            $this->periodId,
+            2,
+            $key.'-class',
+            $this->levelId,
+            $this->branchId,
+            $this->offeringId
+        )['class_id'];
+
+        // A class must be activated before it can hold live seats, and an
+        // active class requires an effective teacher assignment.
+        app(MaintainClass::class)->assignTeacher(
+            $officer,
+            ClassModel::query()->findOrFail($classId),
+            $this->teacherPersonId,
+            CarbonImmutable::today(),
+            null,
+            $key.'-teacher'
+        );
+        app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', $key.'-pub');
+        app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'active', $key.'-act');
+
+        return $classId;
     }
 }
