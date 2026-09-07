@@ -5,6 +5,7 @@
   --experience-panel-padding: clamp(16px, 1.8vw, 24px);
   --experience-control-height: 44px;
   --experience-focus-ring: 0 0 0 4px rgba(76,143,227,.16);
+  --experience-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .app-header-inner { max-width: var(--experience-content-max); min-height: 68px; padding-inline: var(--experience-page-gutter); }
@@ -14,7 +15,7 @@
 .app-nav a.active { background: #eef4fa; border-color: #dbe7f2; }
 .app-nav a:hover { transform: none; }
 
-.workspace { max-width: var(--experience-content-max); padding: clamp(24px,3.2vw,42px) var(--experience-page-gutter) 72px; }
+.workspace { max-width: var(--experience-content-max); padding: clamp(24px,3.2vw,42px) var(--experience-page-gutter) calc(72px + var(--experience-safe-bottom)); }
 .workspace > * + * { margin-top: 20px; }
 .workspace h1 { font-size: clamp(28px,3.6vw,42px); letter-spacing: -.04em; line-height: 1.08; }
 .workspace h2 { font-size: 19px; }
@@ -28,6 +29,7 @@
 .text-button { min-height: 34px; }
 input, select, textarea { min-height: var(--experience-control-height); border-radius: 8px; }
 input:focus, select:focus, textarea:focus { box-shadow: var(--experience-focus-ring); }
+input[type="checkbox"], input[type="radio"] { appearance: auto; min-height: 20px; width: 20px; padding: 0; }
 
 .summary-grid, .metric-grid, .quick-actions { gap: 12px; }
 .summary-grid .panel, .metric-grid .panel { min-height: 112px; }
@@ -46,33 +48,67 @@ tbody tr:hover td { background: #f8fbfe; }
 .status-page { min-height: 42vh; }
 .loading-orb { width: 14px; height: 14px; box-shadow: 0 0 0 7px rgba(49,114,187,.08); }
 
+/* Operational density: long lists remain scannable without turning into spreadsheet UI. */
+.work-list > li, .notification-list > li, .fact-list > li, .compact-list > li, .report-list > li { gap: 12px; }
+.work-list > li > div:first-child, .notification-list > li > div:first-child { min-width: 0; }
+.work-list a, .notification-list strong, .fact-list strong, .compact-list strong { overflow-wrap: anywhere; }
+
+/* Strong non-colour status semantics. */
+.status-chip { line-height: 1.25; }
+.status-chip::before { content: ''; background: currentColor; border-radius: 50%; display: inline-block; flex: 0 0 auto; height: 6px; margin: 0 6px 0 0; width: 6px; }
+
+/* Prevent focus loss behind sticky UI and keep interactive targets usable. */
+[id] { scroll-margin-top: 92px; }
+button, a, input, select, textarea { touch-action: manipulation; }
+
 @media (max-width:1120px) {
   .app-brand { min-width: 150px; }
   .crm-layout, .academic-layout, .student-detail-grid { grid-template-columns: 1fr; }
   .crm-detail, .student-detail-side { position: static; }
+  .app-nav { order: 3; flex-basis: 100%; }
+  .app-header-inner { flex-wrap: wrap; }
 }
 @media (max-width:840px) {
   .app-header-inner { padding-block: 8px 10px; }
   .workspace-header, .workspace-context-bar { gap: 14px; }
   .summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .app-header-actions { margin-left: 0; }
 }
 @media (max-width:680px) {
   .app-header-inner { padding-inline: 12px; }
+  .app-brand { min-width: auto; }
+  .brand-copy small { display: none; }
+  .app-nav { gap: 4px; margin-inline: -2px; }
+  .app-nav a { min-height: 44px; padding: 8px 9px; }
+  .app-nav a span { font-size: 12px; }
+  .header-utility { display: none; }
+  .sign-out span { display: none; }
+  .sign-out { min-height: 42px; width: 42px; justify-content: center; padding: 0; }
   .workspace { padding-inline: 14px; }
+  .workspace-header, .workspace-context-bar { align-items: stretch; flex-direction: column; }
+  .workspace-header .button, .workspace-context-bar .button { width: 100%; }
   .panel, .search { border-radius: 12px; padding: 15px; }
   .section-heading { flex-direction: column; gap: 12px; }
+  .source-note { max-width: none; text-align: left; }
   .form-grid, .compact-grid, .detail-grid, .filter-row { grid-template-columns: 1fr; }
   .search-row { flex-direction: column; }
   .search-row .button { width: 100%; }
   .metric-grid { grid-template-columns: 1fr; }
   .table-wrap table { min-width: 580px; }
   .detail-facts div, .detail-list div { grid-template-columns: 1fr; gap: 3px; }
+  .work-list > li, .notification-list > li { align-items: stretch; flex-direction: column; }
+  .work-actions, .notification-actions { justify-content: flex-start; }
+  .button, .text-button { max-width: 100%; }
 }
 @media (max-width:440px) {
   .summary-grid, .quick-actions { grid-template-columns: 1fr; }
-  .workspace { padding-inline: 12px; padding-bottom: 44px; }
+  .workspace { padding-inline: 12px; padding-bottom: calc(44px + var(--experience-safe-bottom)); }
   .workspace h1 { font-size: 29px; }
+  .app-nav a { padding-inline: 8px; }
+  .app-nav a span { display: none; }
+  .app-nav a { min-width: 42px; justify-content: center; }
+  .status-chip { white-space: normal; }
 }
 @media (prefers-reduced-motion:reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; }
