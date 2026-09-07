@@ -116,9 +116,9 @@ return new class extends Migration
                 expected_period_authority text;
             BEGIN
                 IF TG_OP = 'UPDATE' THEN
-                    // Definition identity and lineage are historical evidence.
-                    // A revision appends a metric_version and advances only the
-                    // version pointer; it never rewrites its original claim.
+                    -- Definition identity and lineage are historical evidence.
+                    -- A revision appends a metric_version and advances only the
+                    -- version pointer; it never rewrites its original claim.
                     IF OLD.key IS DISTINCT FROM NEW.key
                        OR OLD.name IS DISTINCT FROM NEW.name
                        OR OLD.source_owner IS DISTINCT FROM NEW.source_owner

@@ -114,7 +114,7 @@ return new class extends Migration
         // Test-level weights are an immutable part of every version's scoring
         // contract. The original key-existence check accepted extra, negative,
         // non-numeric, or non-100-total weights through raw SQL.
-        DB::statement(<<<'SQL'
+        DB::unprepared(<<<'SQL'
             CREATE OR REPLACE FUNCTION placement_v2_component_weights_valid(p_weights jsonb) RETURNS boolean AS $fn$
             DECLARE
                 invalid_weight boolean;
@@ -246,7 +246,7 @@ return new class extends Migration
             END;
             $fn$ LANGUAGE plpgsql IMMUTABLE;
         SQL);
-        DB::statement(<<<'SQL'
+        DB::unprepared(<<<'SQL'
             CREATE OR REPLACE FUNCTION placement_v2_assert_recommendation_derivation(
                 p_attempt_id char(36),
                 p_program_version_id char(36),

@@ -94,10 +94,10 @@ return new class extends Migration
                         AND OLD.scope_id IS NOT DISTINCT FROM NEW.scope_id
                         AND OLD.organization_id IS NOT DISTINCT FROM fund_organization;
                     IF NOT old_snapshot_matches_source THEN
-                        // Preserve an old unknown/wrong snapshot exactly. A
-                        // version revision may only make it stale; it cannot
-                        // repair its organization, value, or evidence in
-                        // place and thereby rewrite history.
+                        -- Preserve an old unknown/wrong snapshot exactly. A
+                        -- version revision may only make it stale; it cannot
+                        -- repair its organization, value, or evidence in
+                        -- place and thereby rewrite history.
                         IF OLD.metric_version_id IS NOT DISTINCT FROM NEW.metric_version_id
                            AND OLD.period_key IS NOT DISTINCT FROM NEW.period_key
                            AND OLD.scope_type IS NOT DISTINCT FROM NEW.scope_type

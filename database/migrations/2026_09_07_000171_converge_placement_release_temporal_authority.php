@@ -62,8 +62,8 @@ return new class extends Migration
                         USING ERRCODE = 'check_violation';
                 END IF;
 
-                // Pre-convergence profile history has no trustworthy event
-                // timestamp. It may not be relabeled by a direct update.
+                -- Pre-convergence profile history has no trustworthy event
+                -- timestamp. It may not be relabeled by a direct update.
                 IF OLD.lineage_version IS DISTINCT FROM 'placement-evidence-v2' THEN
                     IF OLD.released_at IS DISTINCT FROM NEW.released_at
                        OR OLD.release_time_basis IS DISTINCT FROM NEW.release_time_basis THEN
@@ -73,8 +73,8 @@ return new class extends Migration
                     RETURN NEW;
                 END IF;
 
-                // Once recorded, a release event clock and its provenance are
-                // immutable even after the profile is superseded or retired.
+                -- Once recorded, a release event clock and its provenance are
+                -- immutable even after the profile is superseded or retired.
                 IF OLD.released_at IS NOT NULL OR OLD.release_time_basis IS NOT NULL THEN
                     IF OLD.released_at IS DISTINCT FROM NEW.released_at
                        OR OLD.release_time_basis IS DISTINCT FROM NEW.release_time_basis THEN
@@ -85,9 +85,9 @@ return new class extends Migration
                 END IF;
 
                 IF OLD.lifecycle_state = 'approved' AND NEW.lifecycle_state = 'released' THEN
-                    // Ignore a caller-supplied clock. The database records the
-                    // moment it accepts the legal release transition, so raw
-                    // SQL cannot fabricate an earlier reporting cohort.
+                    -- Ignore a caller-supplied clock. The database records the
+                    -- moment it accepts the legal release transition, so raw
+                    -- SQL cannot fabricate an earlier reporting cohort.
                     NEW.released_at := timezone('UTC', clock_timestamp());
                     NEW.release_time_basis := 'database_transition';
                     RETURN NEW;
