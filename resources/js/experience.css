@@ -66,19 +66,23 @@ tbody tr:hover td { background: #f8fbfe; }
 [id] { scroll-margin-top: 92px; }
 button, a, input, select, textarea { touch-action: manipulation; }
 
-.finance-guard { align-items: flex-start; background: var(--surface-3); border: 1px solid var(--line); border-left: 3px solid var(--brand-600); border-radius: 11px; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; }
-.finance-guard strong { color: var(--ink-900); font-size: 12px; }
-.finance-guard span { color: var(--ink-600); font-size: 12px; line-height: 1.55; }
-.finance-command-grid { display: grid; gap: 12px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.finance-guard, .reporting-boundary { align-items: flex-start; background: var(--surface-3); border: 1px solid var(--line); border-left: 3px solid var(--brand-600); border-radius: 11px; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; }
+.finance-guard strong, .reporting-boundary strong { color: var(--ink-900); font-size: 12px; }
+.finance-guard span, .reporting-boundary span { color: var(--ink-600); font-size: 12px; line-height: 1.55; }
+.finance-command-grid, .reporting-command-grid { display: grid; gap: 12px; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .finance-detail { border-color: #cdd9e6; box-shadow: var(--shadow-sm); }
 .finance-detail h3 { margin-top: 24px; }
 #finance-main .table-wrap tbody tr { cursor: pointer; }
 #finance-main .table-wrap tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 #finance-main .metric-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.dashboard-list { display: grid; gap: 12px; }
+.nested-panel { background: var(--surface-2); box-shadow: none; }
+.nested-panel:hover { box-shadow: 0 5px 16px rgba(15,23,42,.045); }
+#reporting-main .table-wrap tbody tr { cursor: default; }
 
 @media (max-width:1120px) {
   .app-brand { min-width: 150px; }
-  .crm-layout, .academic-layout, .student-detail-grid, .finance-command-grid { grid-template-columns: 1fr; }
+  .crm-layout, .academic-layout, .student-detail-grid, .finance-command-grid, .reporting-command-grid { grid-template-columns: 1fr; }
   .crm-detail, .student-detail-side, .finance-detail { position: static; }
   .app-nav { order: 3; flex-basis: 100%; }
   .app-header-inner { flex-wrap: wrap; }
@@ -114,12 +118,13 @@ button, a, input, select, textarea { touch-action: manipulation; }
   .work-list > li, .notification-list > li { align-items: stretch; flex-direction: column; }
   .work-actions, .notification-actions { justify-content: flex-start; }
   .button, .text-button { max-width: 100%; }
-  .finance-command-grid { grid-template-columns: 1fr; }
+  .finance-command-grid, .reporting-command-grid { grid-template-columns: 1fr; }
 }
 @media (max-width:440px) {
   .summary-grid, .quick-actions { grid-template-columns: 1fr; }
   .workspace { padding-inline: 12px; padding-bottom: calc(44px + var(--experience-safe-bottom)); }
   .workspace h1 { font-size: 29px; }
+  .app-nav a { padding-inline: 8px; }
   .status-chip { white-space: normal; }
 }
 @media (prefers-reduced-motion:reduce) {
