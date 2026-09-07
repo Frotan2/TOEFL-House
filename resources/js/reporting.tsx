@@ -2,52 +2,15 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './app.css';
 import { AppShell, PageStatus } from './ui';
-
-type ApiErrorPayload = { message?: string; error?: string; category?: string; correlation_id?: string; retryable?: boolean };
-class ApiError extends Error {
-  readonly status: number;
-  readonly code: string | null;
-  readonly correlationId: string | null;
-  readonly retryable: boolean;
-  constructor(status: number, payload: ApiErrorPayload, fallback: string) {
-    const code = payload.error ?? null;
-    super(`${payload.message ?? code ?? fallback}${code && payload.message && code !== payload.message ? ` (${code})` : ''}`);
-    this.name = 'ApiError'; this.status = status; this.code = code; this.correlationId = payload.correlation_id ?? null; this.retryable = payload.retryable === true;
-  }
-}
+import { createApiClient } from './core/api';
 
 const root = document.getElementById('reporting-console');
-const apiBase = root?.getAttribute('data-api-base') ?? '/api/v1';
+const api = createApiClient({
+  apiBase: root?.getAttribute('data-api-base') ?? '/api/v1',
+  csrfToken: root?.getAttribute('data-csrf-token') ?? '',
+});
+const { getJson, postJson } = api;
 const csrfToken = root?.getAttribute('data-csrf-token') ?? '';
-
-async function readApi<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.toLowerCase().includes('application/json')) {
-    const payload = await response.json() as ApiErrorPayload & T;
-    if (!response.ok) throw new ApiError(response.status, payload, `Request failed with ${response.status}`);
-    return payload as T;
-  }
-  const text = await response.text();
-  throw new ApiError(response.status, {}, text.trim() || `Request failed with ${response.status}`);
-}
-
-async function getJson<T>(path: string): Promise<T> {
-  return readApi(await fetch(`${apiBase}${path}`, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } }));
-}
-
-async function postJson<T>(path: string, body?: Record<string, unknown>): Promise<T> {
-  return readApi(await fetch(`${apiBase}${path}`, {
-    method: 'POST', credentials: 'same-origin', cache: 'no-store',
-    headers: {
-      Accept: 'application/json',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      'X-CSRF-TOKEN': csrfToken,
-      'X-Requested-With': 'XMLHttpRequest',
-      'Idempotency-Key': `reporting-ui-${crypto.randomUUID()}`,
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  }));
-}
 
 function humanize(value: string): string { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
