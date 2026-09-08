@@ -43,6 +43,8 @@ PSQL_BIN="${PSQL_BIN:-psql}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib/retention.sh
 source "$SCRIPT_DIR/lib/retention.sh"
+# shellcheck source=./lib/nginx-edge-config.sh
+source "$SCRIPT_DIR/lib/nginx-edge-config.sh"
 SCHEMA_PROBE="${SCHEMA_PROBE:-$SCRIPT_DIR/schema-compatibility.sh}"
 # Where the operator installed the FPM pool (a glob, since the PHP version
 # prefix differs per distribution). Read once, used by the pool syntax test and
@@ -52,9 +54,17 @@ PHP_FPM_POOL="${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf}"
 # Both are host facts, like the pool path and the web user below.
 PHP_FPM_RELOAD_CMD="${PHP_FPM_RELOAD_CMD:-}"
 PHP_FPM_PID_FILE="${PHP_FPM_PID_FILE:-}"
+# Where the web server's config comes from. Nothing else in the repository installs
+# deploy/nginx/toefl-house.conf on the host, so without this the edge keeps its own
+# copy and the security headers shipped in a release never reach the paths nginx
+# serves directly. Unset = managed elsewhere, which the deploy step reports instead
+# of assuming.
+NGINX_CONF_DEST="${NGINX_CONF_DEST:-}"
+NGINX_RELOAD_CMD="${NGINX_RELOAD_CMD:-}"
 
 log()  { printf '[deploy] %s\n' "$*"; }
 die()  { printf '[deploy][ERROR] %s\n' "$*" >&2; exit 1; }
+warn() { printf '[deploy][WARN] %s\n' "$*"; }
 
 # Database connection settings come from the one persistent env file, and both
 # the deploy and the rollback path need them, so they are parsed in one place.
@@ -340,7 +350,7 @@ if ! reload_php_fpm; then
     die "PHP-FPM was not reloaded, so the new release is not actually serving traffic (opcache.validate_timestamps=0 keeps the previous release loaded). Set PHP_FPM_RELOAD_CMD (for example: kill -USR2 \$(cat /run/php/php-fpm.pid), or your supervisor's restart command) and optionally PHP_FPM_PID_FILE, then re-run. NOTE: the database was already migrated by this release; restoring the symlink does not undo that."
 fi
 
-nginx -t >/dev/null 2>&1 && systemctl reload nginx 2>/dev/null || true
+install_nginx_edge_config "$RELEASE_DIR/deploy/nginx/toefl-house.conf"
 
 log "verifying release at $HEALTH_URL"
 for i in 1 2 3 4 5; do
@@ -367,7 +377,7 @@ if [ -n "$PREV_RELEASE" ] && [ "$SCHEMA_AFTER" = "$SCHEMA_BEFORE" ]; then
     log "schema did not advance; verifying application-only rollback target"
     schema_compatibility_check "$PREV_RELEASE"
     ln -sfn "$PREV_RELEASE" "$CURRENT_LINK"
-    nginx -t >/dev/null 2>&1 && systemctl reload nginx 2>/dev/null || true
+    restore_nginx_edge_config
     die "deployment of $RELEASE_ID failed health verification and was safely rolled back to $PREV_RELEASE"
 fi
 

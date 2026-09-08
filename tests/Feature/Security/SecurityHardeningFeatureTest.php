@@ -138,6 +138,60 @@ final class SecurityHardeningFeatureTest extends TestCase
         preg_match('/add_header Content-Security-Policy "([^"]+)" always;/', $conf, $match);
         $this->assertNotFalse($match[1] ?? false, 'the web server must send the CSP with `always`, or it disappears on error responses');
         $this->assertSame(SecurityHeaders::CSP_PRODUCTION, $match[1]);
+
+        // Placement is coverage, and in nginx the rule is about block *depth*, not
+        // order: an `add_header` inside a `location` applies only to that location, and
+        // a location that declares any `add_header` of its own stops inheriting the
+        // server-level set entirely. So the policy has to be a direct child of `server`,
+        // and no location may hold an `add_header` that would displace it. Static files,
+        // 404s and 5xx pages are the responses with no middleware behind them, and on
+        // 2026-09-08 they were measured as the only paths where the web server's copy of
+        // the header is the one the browser receives.
+        $scopes = $this->nginxHeaderScopes($conf);
+
+        $this->assertArrayHasKey('Content-Security-Policy', $scopes);
+        foreach ($scopes as $name => $scope) {
+            $this->assertSame(
+                'server',
+                $scope,
+                "`{$name}` must be declared directly inside the server block: at any other depth nginx either skips it or lets a location's own add_header set replace it"
+            );
+        }
+    }
+
+    /**
+     * Which nginx block each `add_header` in a config sits in, keyed by header name.
+     *
+     * Depth is tracked by counting braces outside quoted strings, which is enough for a
+     * config this flat and is the only thing nginx itself consults for inheritance.
+     *
+     * @param  string  $conf  the contents of an nginx config file
+     * @return array<string,string> header name => name of the enclosing block
+     */
+    private function nginxHeaderScopes(string $conf): array
+    {
+        $stack = [];
+        $scopes = [];
+
+        foreach (explode("\n", $conf) as $line) {
+            $stripped = trim((string) preg_replace('/"[^"]*"/', '""', $line));
+
+            if (preg_match('/^add_header\s+([A-Za-z0-9-]+)/', $stripped, $m)) {
+                $scopes[$m[1]] = end($stack) ?: 'root';
+            }
+
+            if (preg_match('/^((?:upstream|server|location|if|map|http)[^{}]*)\{/', $stripped, $m)) {
+                $keyword = preg_split('/\s+/', trim($m[1]))[0] ?? '';
+                $stack[] = (string) $keyword;
+            }
+
+            $closed = substr_count($stripped, '}') - (str_contains($stripped, '{') ? 1 : 0);
+            for ($i = 0; $i < $closed; $i++) {
+                array_pop($stack);
+            }
+        }
+
+        return $scopes;
     }
 
     public function test_the_dev_server_carve_out_is_scoped_to_a_hot_file_in_a_non_production_environment(): void

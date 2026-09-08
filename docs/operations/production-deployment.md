@@ -183,6 +183,22 @@ the web server (`deploy/nginx/toefl-house.conf`) send the same policy; a test
 asserts the two strings are identical, because two sources of truth drift and the
 weaker one silently wins on whichever path serves the response.
 
+**The web server's copy has to be installed, not just written.** `deploy.sh`
+copies `deploy/nginx/toefl-house.conf` from the activated release to
+`$NGINX_CONF_DEST` and reloads, refusing the change if `nginx -t` rejects it and
+putting the previous file back if the reload does not take. Before that step
+existed the script only reloaded whatever the host already had, so a header added
+in a release reached PHP responses and never reached static files, 404s or 5xx
+pages — the paths nginx serves without touching PHP. If the edge is managed
+outside this repository, leave `NGINX_CONF_DEST` unset; the deploy then says so
+instead of reporting a header set nobody applied.
+
+Because the directive is at server scope, a proxied response carries the policy
+twice — once from the middleware, once from `add_header` — and the browser enforces
+all of them. Identical copies are harmless by construction here (the parity test is
+what keeps them identical), and it is the single copy on a static file that has to
+exist at all, since nothing else can put a header on it.
+
 ```
 default-src 'self'; base-uri 'self'; script-src 'self';
 style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self';
@@ -363,7 +379,7 @@ green health check):
 6. `php artisan migrate --force` (forward-only).
 7. Ensure runtime dirs exist and are owned by the web user.
 8. `config:cache` + `route:cache` + `view:cache`.
-9. Switch `current` → new release; reload FPM + nginx.
+9. Switch `current` → new release; reload FPM, install + reload the edge config.
 10. Poll `GET /health` until 200. If it fails, rollback is automatic only when
     the database schema did not advance and the previous release is compatible;
     otherwise the script stops and requires a forward-fix or database restore.
