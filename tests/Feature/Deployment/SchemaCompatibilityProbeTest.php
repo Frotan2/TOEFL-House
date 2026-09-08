@@ -132,7 +132,9 @@ final class SchemaCompatibilityProbeTest extends TestCase
             $prefix .= sprintf('%s=%s ', $key, escapeshellarg($value));
         }
 
-        $command = $prefix.'bash '.escapeshellarg($this->probe);
+        // Executed directly, not through `bash <path>`: the script documents the
+        // first form, so its executable bit is part of the contract under test.
+        $command = $prefix.escapeshellarg($this->probe);
         foreach ($args as $arg) {
             $command .= ' '.escapeshellarg($arg);
         }
