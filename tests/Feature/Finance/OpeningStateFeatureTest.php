@@ -52,8 +52,8 @@ final class OpeningStateFeatureTest extends TestCase
         parent::setUp();
         $this->financeManager(); // seeds authority + the opening period + chart accounts below
         app(MaintainFinancialPeriod::class)->open($this->financeManager(), $this->openingPeriodKey, '2026-08-01', '2026-08-31', 'op-per-1');
-        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '1000', 'Cash on hand', 'asset', 'op-acc-1');
-        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '3000', 'Opening equity', 'equity', 'op-acc-2');
+        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '1900', 'Cash on hand', 'asset', 'op-acc-1');
+        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '3900', 'Opening equity', 'equity', 'op-acc-2');
 
         // a live student of the operating business
         $this->personWithAuthority('op-person-student', []);

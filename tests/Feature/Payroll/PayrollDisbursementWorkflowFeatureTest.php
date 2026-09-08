@@ -80,7 +80,7 @@ final class PayrollDisbursementWorkflowFeatureTest extends TestCase
 
         $chart = $this->grantedActor('pdw-chart-1', ['finance.chart']);
         $cash = app(MaintainChartOfAccounts::class)->define($chart, '1010', 'Cash at Bank', 'asset', 'pdw-acc-cash');
-        $exp = app(MaintainChartOfAccounts::class)->define($chart, '5100', 'Teacher Salary Expense', 'expense', 'pdw-acc-exp');
+        $exp = app(MaintainChartOfAccounts::class)->define($chart, '5900', 'Teacher Salary Expense', 'expense', 'pdw-acc-exp');
         $this->cashAccountId = $cash['account_id'];
         $this->expenseAccountId = $exp['account_id'];
     }
