@@ -516,6 +516,16 @@ traffic this application is built for, and it is the first place to look (cache 
 resolved authority set per request, then per session) if the JSON API gains subscribers
 or a dashboard starts polling.
 
+**The tail is set by the pool, not by SQL.** Measured on a 2-core box with the same
+request (~15 ms of work): one `php -S` worker produced mean latencies of 12 / 46 / 74 /
+182 ms at 1 / 8 / 16 / 32 concurrent clients, while eight workers stayed at 13 / 34 / 31
+/ 41 ms. Uncontended the two are the same request; under overlap a single server turns
+every additional in-flight request into latency. FPM behaves like the multi-worker case,
+so the practical consequence for this deployment is that `pm.max_children = 20` is what
+absorbs a morning when every branch opens a console at once, and requests beyond 20
+start waiting regardless of how fast the queries are. If a burst ever shows multi-second
+latency, check `max_children` and the box's core count before optimizing a query.
+
 **What is not known.** The students, reporting, finance and payroll read paths are not
 measured at volume: their tables refuse a copied fixture (`Gate F` §5 of
 `docs/AUDIT-2026-09-08-GATE-EVIDENCE.md` explains the guard chain), and building 1,000

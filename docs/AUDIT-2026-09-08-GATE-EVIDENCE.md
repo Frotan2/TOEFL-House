@@ -795,34 +795,66 @@ then `create extension pg_stat_statements` per database — it is per-database, 
 the part an operator is likely to get wrong), because a measurement that disagrees
 with the server's own accounting is a measurement to throw away.
 
-### 2. The ~500 ms signal: queueing rejected, per-request cost retained
+### 2. The ~500 ms signal: it was queueing, and the first instrument missed it
 
-The queueing hypothesis was the attractive one — `artisan serve` without
-`PHP_CLI_SERVER_WORKERS` is a single process, so eight simultaneous requests would
-serialize behind one worker and a burst of 14 consoles would look like a 500 ms
-endpoint. It was measured and it does not hold. Same command, same app, one variable
-(`PHP_CLI_SERVER_WORKERS=1` vs `=8`), `/health` on a warmed server, 2026-09-08:
+The queueing hypothesis looked attractive and the first measurement of it looked like
+a refutation, so this section is written in the order it happened, because the middle
+step is the interesting part.
 
-| Shape | 1 worker | 8 workers |
-| --- | --- | --- |
-| single request | 13–29 ms | 16–29 ms |
-| 8 concurrent, wall | 118 ms | 120 ms |
-| 8 concurrent, per-request range | 25–89 ms | 19–76 ms |
-| 8 concurrent, full page render (`/login`) | 111 ms wall | 103 ms wall |
+The first attempt fired eight requests with a shell loop (`curl … &` seven times, then
+`wait`) against a 1-worker and an 8-worker `php -S`, and reported 118 ms and 120 ms of
+wall time. Same command, same app, one variable, no difference — "therefore worker
+count is not the constraint". That conclusion was **wrong, and the instrument was the
+reason**: each `&` in the loop costs a fork/exec of `curl`, tens of milliseconds on this
+box, so the eight requests arrived spread over a quarter of a second and the single
+worker never had two requests to choose between. A burst generator that cannot produce
+a burst cannot measure a queue, and the 118 ms figure was the *serial* cost of eight
+requests, which is identical whether one worker or eight serve them.
 
-Eight requests complete in ~120 ms either way, because at ~15 ms of work per request
-on 2 cores, worker count is not the constraint — CPU is. A queue in front of one
-worker would have shown ~8× the wall time of the same requests issued serially; it
-showed 0.8×. So the register's ~500 ms was not a harness artefact: it was real work
-under contention from 14 concurrently driven browsers on a 2-core box, which is the
-same measurement environment the figure came from and not a property of the endpoints.
-The follow-up — what that real work is — is §3.
+Firing the same requests with `xargs -P` instead — genuinely simultaneous — makes the
+difference appear and grow with concurrency (same `/health` request, warmed servers,
+2026-09-08; mean and worst client-observed time over the burst, `n` = 8 at c ≤ 8 and
+`n` = c above that):
 
-One harness note worth recording because it changes what a worker-count experiment
-means: `PHP_CLI_SERVER_WORKERS` is ignored unless `--no-reload` is passed, because
+| Concurrent clients | 1 worker, mean | 8 workers, mean | 1 worker, worst | 8 workers, worst |
+| --- | --- | --- | --- | --- |
+| 1 | 12.3 ms | 13.0 ms | 15.8 ms | 16.0 ms |
+| 8 | 45.6 ms | 34.0 ms | 70.3 ms | 57.8 ms |
+| 16 | 73.5 ms | 31.4 ms | 125.7 ms | 50.1 ms |
+| 32 | 181.7 ms | 40.8 ms | 307.1 ms | 85.9 ms |
+
+Uncontended, the two servers are the same request (12.3 vs 13.0 ms): there is nothing
+in the worker count that makes one request faster. Under load they separate, and the
+1-worker column grows roughly linearly in concurrency while the 8-worker column stays
+near-flat to c=32 — that is Little's law doing what it does, a queue in front of one
+server. So the register's ~500 ms is exactly what a single-worker dev server produces
+when 14 consoles fire concurrently: fourteen-ish in-flight requests at tens of
+milliseconds of service time each, and three *different* endpoints all reporting
+500.36 / 500.91 / 501.07 ms is the signature of a shared queue, not of three slow
+queries. The `php -S` access log of that run confirms it from the other side — two
+lines reading `~ 500.59ms`, identically, for requests whose burst completed in 107 ms
+of wall time once the app had warmed.
+
+Two things follow, and they point in opposite directions for the operator:
+
+* For the audit: the ~500 ms figure is **not** evidence of an expensive endpoint, and
+  the per-request cost of the read paths has to be measured where the queue cannot
+  contaminate it (§3).
+* For production: nginx + PHP-FPM with `pm.max_children = 20` resembles the
+  8-worker column, so this specific artefact should not be expected there — but the
+  mechanism is not a dev-server quirk. Beyond roughly `pm.max_children` simultaneous
+  requests, extra arrivals convert one-for-one into latency, and on 2 cores the app
+  itself absorbed c=32 at ~40 ms mean without the queue. Sizing the pool, not shaving
+  a query, is the lever for the tail: §6.
+
+One harness note earned by the wrong first answer, recorded because it will be
+re-trod: `PHP_CLI_SERVER_WORKERS` is ignored unless `--no-reload` is passed, because
 `artisan serve` restarts the `php -S` child on file changes and the reload path does
 not carry the variable. Without the flag, an "8 worker" measurement silently measures
-1. Both servers in the table above were started with `--no-reload`.
+1. Both servers in the table above were started with `--no-reload`, and both were
+warmed with an unmeasured burst first — a cold server's first requests are dominated by
+opcode compilation, which flattered the 1-worker number in an earlier run to 240 ms at
+c=8.
 
 ### 3. Read path at volume, measured
 
@@ -1006,10 +1038,10 @@ so the operations doc now states what to set it to.
 
 **PASS with recorded limits.** For the surface the register named, "no N+1, no
 unbounded queries" is now a measured property with a committed test that fails if it
-regresses, and the register's unexplained ~500 ms has been attributed by experiment
-rather than by preference: it is per-request cost under CPU contention, not a queue in
-front of a single worker, and the queueing explanation is worth 0.8× of the wall time
-it would have needed to be true. Gate C's deferred question is answered in the
+regresses, and the register's unexplained ~500 ms has been attributed by
+experiment — it is a queue in front of a single-worker dev server, not an expensive
+endpoint, with the caveat that the first instrument for that question was itself wrong
+(§2) and the conclusion only survived when the burst generator was fixed. Gate C's deferred question is answered in the
 direction the policy assumed — the permitted migration forms are millisecond-cheap at
 1M rows and the forbidden ones stall writers for seconds — with the caveat that both
 `ALTER TABLE` and index builds were measured on a synthetic table in a sandbox. What
