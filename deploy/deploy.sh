@@ -33,6 +33,10 @@ PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 NPM_BIN="${NPM_BIN:-npm}"
 PSQL_BIN="${PSQL_BIN:-psql}"
+# The schema probe ships next to this script, so it stays available even when
+# the release being inspected has no vendor tree (or is an older release).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCHEMA_PROBE="${SCHEMA_PROBE:-$SCRIPT_DIR/schema-compatibility.sh}"
 EXPECTED_PHP_VERSION="${EXPECTED_PHP_VERSION:-8.2.27}"
 EXPECTED_NODE_VERSION="${EXPECTED_NODE_VERSION:-22.23.1}"
 EXPECTED_NPM_VERSION="${EXPECTED_NPM_VERSION:-10.9.2}"
@@ -41,29 +45,50 @@ EXPECTED_POSTGRES_VERSION="${EXPECTED_POSTGRES_VERSION:-18.4}"
 log()  { printf '[deploy] %s\n' "$*"; }
 die()  { printf '[deploy][ERROR] %s\n' "$*" >&2; exit 1; }
 
-# The rollback path still needs the official PHP runtime because it queries the
-# live migration table through the target release's Laravel application.
-ACTUAL_PHP_VERSION="$($PHP_BIN -r 'echo PHP_VERSION;' 2>/dev/null || true)"
-[ "$ACTUAL_PHP_VERSION" = "$EXPECTED_PHP_VERSION" ] || die "PHP $EXPECTED_PHP_VERSION is required; found '${ACTUAL_PHP_VERSION:-unavailable}'"
+# Database connection settings come from the one persistent env file, and both
+# the deploy and the rollback path need them, so they are parsed in one place.
+load_db_settings() {
+    [ -f "$ENV_FILE" ] || die "missing persistent env file at $ENV_FILE (create it from .env.example with APP_ENV=production, APP_DEBUG=false, APP_KEY, and DB credentials)"
+    DB_NAME_VAL="$(grep -m1 '^DB_DATABASE=' "$ENV_FILE" | cut -d= -f2-)"
+    DB_HOST_VAL="$(grep -m1 '^DB_HOST=' "$ENV_FILE" | cut -d= -f2-)"
+    DB_PORT_VAL="$(grep -m1 '^DB_PORT=' "$ENV_FILE" | cut -d= -f2-)"
+    DB_USER_VAL="$(grep -m1 '^DB_USERNAME=' "$ENV_FILE" | cut -d= -f2-)"
+    DB_PASS_VAL="$(grep -m1 '^DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
+    DB_SSLMODE_VAL="$(grep -m1 '^DB_SSLMODE=' "$ENV_FILE" | cut -d= -f2-)"
+}
 
-# --- Actions ----------------------------------------------------------------
+# Read live schema state with the first-party psql probe (see
+# deploy/schema-compatibility.sh for why this is not an `artisan tinker` call).
+schema_probe() {
+    DB_NAME="${DB_NAME_VAL:-toefl_house}" DB_HOST="${DB_HOST_VAL:-127.0.0.1}" \
+        DB_PORT="${DB_PORT_VAL:-5432}" DB_USER="${DB_USER_VAL:-postgres}" \
+        PGPASSWORD="${DB_PASS_VAL:-}" PSQL_BIN="$PSQL_BIN" \
+        bash "$SCHEMA_PROBE" "$@"
+}
+
+# Exit 0 -> the target release can run against the live schema; 1 -> the schema
+# is ahead of it; 2 -> unverifiable. Only 0 may be pointed at by `current`.
 schema_compatibility_check() {
     target_release="$1"
-    [ -x "$target_release/artisan" ] || die "cannot verify schema compatibility: missing artisan in $target_release"
+    [ -f "$SCHEMA_PROBE" ] || die "cannot verify schema compatibility: missing probe at $SCHEMA_PROBE"
 
-    local output
-    output="$(cd "$target_release" && "$PHP_BIN" artisan tinker --execute='$applied = Illuminate\Support\Facades\DB::table("migrations")->pluck("migration")->all(); $files = array_map(static fn (string $file): string => pathinfo($file, PATHINFO_FILENAME), glob(base_path("database/migrations/*.php")) ?: []); $missing = array_values(array_diff($applied, $files)); echo implode(PHP_EOL, $missing);' 2>/dev/null)" \
-        || die "cannot verify schema compatibility for target release $target_release; refusing application-only rollback"
-
-    if [ -n "$output" ]; then
-        die "refusing application-only rollback: live database contains migration(s) absent from target release $(basename "$target_release"): $output. Use a compatible release or perform an explicit database restore/forward-fix."
-    fi
+    local output status
+    set +e
+    output="$(schema_probe --check "$target_release" 2>&1)"
+    status=$?
+    set -e
+    case "$status" in
+        0) log "target release verified against the live schema: $(basename "$target_release")" ;;
+        1) die "refusing application-only rollback: live database contains migration(s) absent from target release $(basename "$target_release"): $(printf '%s' "$output" | tr '\n' ' '). Use a compatible release or perform an explicit database restore/forward-fix." ;;
+        *) die "cannot verify schema compatibility for target release $target_release (probe exit $status); refusing application-only rollback" ;;
+    esac
 }
 
 if [ "${1:-}" = "--rollback" ]; then
     current_release="$(basename "$(readlink "$CURRENT_LINK" 2>/dev/null || true)")"
     prev="$(ls -1 "$RELEASES_DIR" 2>/dev/null | grep -v "^${current_release}$" | sort | tail -1 || true)"
     [ -n "$prev" ] || die "no previous release to roll back to"
+    load_db_settings
     schema_compatibility_check "$RELEASES_DIR/$prev"
     ln -sfn "$RELEASES_DIR/$prev" "$CURRENT_LINK"
     log "rolled back application -> $prev (schema compatibility verified)"
@@ -121,12 +146,8 @@ cp "$ENV_FILE" "$RELEASE_DIR/.env"
 #    uses the persistent .env's DB settings; without the client tools this
 #    deploy is refused (a migration without a fresh backup is not a deploy
 #    this script will perform).
-DB_NAME_VAL="$(grep -m1 '^DB_DATABASE=' "$ENV_FILE" | cut -d= -f2-)"
-DB_HOST_VAL="$(grep -m1 '^DB_HOST=' "$ENV_FILE" | cut -d= -f2-)"
-DB_PORT_VAL="$(grep -m1 '^DB_PORT=' "$ENV_FILE" | cut -d= -f2-)"
-DB_USER_VAL="$(grep -m1 '^DB_USERNAME=' "$ENV_FILE" | cut -d= -f2-)"
-DB_PASS_VAL="$(grep -m1 '^DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
-DB_SSLMODE_VAL="$(grep -m1 '^DB_SSLMODE=' "$ENV_FILE" | cut -d= -f2-)"
+load_db_settings
+
 case "${DB_HOST_VAL:-127.0.0.1}" in
     127.0.0.1|localhost|::1) ;;
     *)
@@ -166,9 +187,9 @@ fi
 #    aborts the deployment before the release goes live. Record whether the
 #    database schema advanced so a later health failure can never trigger an
 #    unsafe application-only rollback against an incompatible schema.
-SCHEMA_BEFORE="$(cd "$RELEASE_DIR" && "$PHP_BIN" artisan tinker --execute='echo Illuminate\Support\Facades\DB::table(\"migrations\")->count();' --no-ansi 2>/dev/null)" || die "unable to read current migration state before deployment"
+SCHEMA_BEFORE="$(schema_probe --count)" || die "unable to read current migration state before deployment"
 ( cd "$RELEASE_DIR" && "$PHP_BIN" artisan migrate --force --no-interaction )
-SCHEMA_AFTER="$(cd "$RELEASE_DIR" && "$PHP_BIN" artisan tinker --execute='echo Illuminate\Support\Facades\DB::table(\"migrations\")->count();' --no-ansi 2>/dev/null)" || die "unable to read migration state after deployment"
+SCHEMA_AFTER="$(schema_probe --count)" || die "unable to read migration state after deployment"
 
 # 7. Runtime directories exist and are owned by the web user (the repo now
 #    tracks them, but ensure ownership/permissions for the FPM user).
