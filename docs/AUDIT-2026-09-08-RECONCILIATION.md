@@ -116,7 +116,7 @@ inference from "green locally" to "production-ready, no changes required".
 | ID | Claim as issued | What the repository shows | Disposition |
 |---|---|---|---|
 | R.1 | "CERTIFIED PRODUCTION-READY … zero blocking defects" | CI at the certified commit: static FAIL, backend FAIL (`34230674669`); `docs/ai/07-RELEASE-CERTIFICATION-PROTOCOL.md` additionally requires deployment rehearsal, readiness verification and demonstrated schema compatibility, none of which the audit evidences | Certification **withdrawn** |
-| R.2 | "No changes to the codebase are required before production deployment" | 230 files across `293fee2` / `84eb9ce` / `54d7e1a` were required before CI went green | **Refuted** |
+| R.2 | "No changes to the codebase are required before production deployment" | 230 files across `293fee2` / `84eb9ce` / `54d7e1a` were required before CI went green — and the baseline's own handoff says so: Part J records **222 pre-existing Pint style issues**, **24 pre-existing PHPStan level-6 errors**, and a **broken helper call site that Pint's own auto-fix introduced** (`TestStrategyLockTest::testFiles()` renamed at the definition but not at two call sites → `Call to undefined method`), all of them present at the certified commit | **Refuted, and refuted by the source branch's own record** |
 | R.3 | ADV-002 "no rate limiting middleware"; ADV-003 "no HTTPS enforcement" | `RateLimiter::for('login', …)` → `Limit::perMinute(5)` keyed on IP+username (`app/Support/Providers/AppServiceProvider.php`), applied via `throttle:login` (`routes/web.php:38`); `deploy/nginx/toefl-house.conf` does `listen 80` + `return 301 https://` with `ssl_protocols TLSv1.2 TLSv1.3`, `SecurityHeaders` emits HSTS `max-age=31536000; includeSubDomains`, `.env.example` sets `SESSION_SECURE_COOKIE=true` | Both **withdrawn** — the recommendations were already implemented |
 | R.4 | Commits `e696678` and `bf08353` authored the audit | Neither object exists (`git cat-file -t` fails on both); the branch has exactly one commit | **Unverifiable citation** — flagged in place |
 | R.5 | "Idempotency-Key header on all mutations" | Header honoured with an `idempotency_key` field fallback by `Controller::idempotencyKey()`, used by 28 controllers; 433 mutation routes exist overall | **Overstated** — restated as measured |
@@ -149,7 +149,7 @@ Re-run on this branch in the repository's own provisioned runtime
 | Readiness on a running instance | `GET /up`, `GET /health` | 200 / `{"status":"ok","checks":{"database":"ok","application_key":"ok","frontend_build":"ok"}}` |
 | Security headers on a live response | `curl -I /login` | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `Cache-Control: no-store, private` |
 | Deployment bootstrap path | `db:seed --class=FirstRunBootstrapSeeder` | PASS — `organization "The TOEFL House", Owner role (133 capabilities) and account "runtime.owner" created`, i.e. the privileged-bootstrapping route a fresh install actually uses |
-| CI on this branch | `Verification` workflow, run `34252336159` | Frontend **PASS** · Static analysis **PASS** · Backend *running* (this is the gate that was red at `f0e1424` and at `9225b33`) |
+| CI on this branch | `Verification` workflow | run `34252336159` (reconciled code state) **and** run `34253638765` (branch tip): Frontend **PASS** · Static analysis **PASS** · Backend **PASS**. This is the gate that was red at `f0e1424` and red at `9225b33` — the reconciled branch is the only one of the three states that passes all three jobs |
 
 **A correction of this correction (kept for the record).** While reviewing §7's
 schema row, a static reading of `database/migrations` produced 165 `Schema::create`
@@ -357,5 +357,9 @@ php artisan route:list --json | jq -r '.[] | select(.method | test("POST|PUT|PAT
 4. `FINAL-ENGINEERING-REPORT.md`, `AUDIT-SUMMARY.md` — the superseded summary layer,
    retained for provenance.
 
-CI runs carrying this state: `34252336159` (corrections commit) and `34253354294`
-(reconciliation + hygiene commit, the branch tip).
+CI evidence: `34252336159` → all three jobs **success** (that run is what proves the
+reconciled *code* state is green); `34253638765` → all three jobs **success** on
+`d087d7f`, which already includes the `recovery/` removal and the full
+reconciliation record. Any later commit on this branch touches only these two
+Markdown documents. The authoritative branch state is therefore **CI-green as
+verified, not CI-green as asserted**.

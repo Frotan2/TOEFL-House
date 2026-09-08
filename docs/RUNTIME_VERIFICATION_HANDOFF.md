@@ -1,6 +1,6 @@
 # TOEFL House — Runtime Verification Handoff
 
-**STATUS: FULL PHPUNIT SUITE GREEN ON A PROVISIONED RUNTIME (900 tests, 0 failures) — RUNTIME REPRODUCIBLE VIA `scripts/runtime/provision.sh`; SEE PART I**
+**STATUS: FULL PHPUNIT SUITE GREEN ON A PROVISIONED RUNTIME AND GREEN IN CI (899 tests, 0 failures, 1 network-gated skip) — RUNTIME REPRODUCIBLE VIA `scripts/runtime/provision.sh`; SEE PART I (convergence), PART J (CI) AND PART K (reconciliation, re-verification, certification correction)**
 
 This document is the canonical handoff record for the next engineering agent. It records what has been established before real runtime verification and what still requires an executable environment.
 
@@ -9,8 +9,8 @@ This document is the canonical handoff record for the next engineering agent. It
 | Item | Current evidence |
 |---|---|
 | Repository | `Frotan2/TOEFL-House` |
-| Working branch | `arena/01a07c87-toefl-house` (branched from `frontend-transformation-2026-09`) |
-| Base commit | `25e4f425b53baa012ac655b8d9459e66ae161859` |
+| Working branch | `arena/01a081d4-toefl-house` — the reconciled authoritative branch (previous: `arena/01a07c87-toefl-house`, branched from `frontend-transformation-2026-09`) |
+| Base commit | `54d7e1a` = tip of `arena/01a080c8-toefl-house`, with `9225b33` (`arena/01a0814a-toefl-house`) merged as a second parent (previous base: `25e4f425b53baa012ac655b8d9459e66ae161859`) |
 | `main` HEAD | `14c9869b7193057437c621ddf26d48f49271980c` |
 | Backend | Laravel 12.x modular monolith |
 | PHP project constraint | `^8.2` |
@@ -1231,3 +1231,120 @@ PHPUnit **900 / 6,991 / 0 failures / 2 skips** on **both PHP 8.4.14 and
 concurrency **4/4** · frontend typecheck **clean** · Vite build **clean** ·
 console mount **8/8** · migration-discipline audit **PASS** · terminology audit
 **exit 0**.
+
+---
+
+# Part K — Branch Reconciliation, Re-Verification and Certification Correction (2026-09-08)
+
+Part J closed the CI gap that Part I's local-green claim left open. Separately,
+another line of work (`arena/01a0814a-toefl-house`) declared this project
+**PRODUCTION-READY, no changes required** on top of the Part I commit and never
+went green. Part K is the reconciliation of those two lines and the fresh
+verification of the result. Full record:
+[`AUDIT-2026-09-08-RECONCILIATION.md`](AUDIT-2026-09-08-RECONCILIATION.md).
+
+## K.1 What Was Reconciled, and How
+
+- `arena/01a0814a` @ `9225b33` is an **orphan snapshot of `f0e1424`** (the Part I
+  commit) plus three Markdown files. Verified by tree comparison, not ancestry:
+  `git diff --name-status origin/01a080c8 origin/01a0814a` → **3 A, 230 M**, and
+  the three additions are `AUDIT-SUMMARY.md`, `FINAL-ENGINEERING-REPORT.md`,
+  `docs/AUDIT-2026-09-08-PRODUCTION-READINESS.md`. It carries **no unique code,
+  migration, test or config file**, and its `verification.yml` is the *pre-J*
+  version (`PHP_VERSION: '8.2'`) — i.e. a regression.
+- The reconciled branch takes `arena/01a080c8` @ `54d7e1a` as authoritative for
+  code and joins the other line's history with `git merge -s ours
+  --allow-unrelated-histories`, so `9225b33` is an ancestor (attribution, blame and
+  bisect keep working) while nothing from the red snapshot is adopted. The three
+  reports were then imported **byte-for-byte** and corrected **in place**.
+- `git diff origin/01a080c8 HEAD` on the result is: 4 docs added, `docs/README.md`
+  updated, and `recovery/` removed (the inoperative applier left behind by
+  `7a2c00f`). **Zero code changes** — the Part J green baseline is preserved
+  exactly.
+
+## K.2 Fresh Verification On The Reconciled Branch (re-run, not quoted)
+
+Provisioned with `bash scripts/runtime/provision.sh`; PostgreSQL started with
+`scripts/runtime/pg.sh`.
+
+| Gate | Result |
+|---|---|
+| `npm run verify:environment` | **8/8** (PHP 8.4.14, Composer 2.9.2, Laravel 12.67.0, PostgreSQL 18.4, Node 22.22.3, 21 extensions) |
+| `php artisan migrate:fresh --force` | **185/185**, 0 pending |
+| live schema measurement | 168 tables · 1,765 columns · 230 PK · 380 FK · 101 unique · 336 CHECK · 2 exclusion · 392 indexes (65 partial) · 525 functions · 285 triggers |
+| `vendor/bin/pint --test` | **PASS** (859 files) |
+| `vendor/bin/phpstan analyse` (level 6) | **[OK] No errors** |
+| `database-migration-audit.php` / `terminology-audit.php` | **PASS** / exit 0 advisory |
+| `npm run verify:invariants` | **6/6** enforced by PostgreSQL |
+| `npm run verify:concurrency` | **4/4** |
+| `phpunit --testsuite Canonical` | **63 tests / 243 assertions / OK** |
+| `phpunit` (full) | **899 / 6,990 / 1 skipped / 0 failures** (5m54s) |
+| `tsc --noEmit` · `vite build` · `test:frontend` | clean · clean · **8/8** |
+| `npm ci` | "found 0 vulnerabilities" |
+| **live browser E2E** | **21/21 PASS** — real Chromium 152.0.7977.0, 14 consoles render, 25/25 `/api/v1` calls, 0 console errors, 0 failed requests, sign-out ends session |
+| **live readiness** | `artisan serve` after migrate + `StandardFinanceChartSeeder` + `FirstRunBootstrapSeeder` → `/up` 200, `/health` 200 `{database, application_key, frontend_build: ok}` |
+| CI (`Verification`) | run `34253638765` on the tip: Frontend **PASS** · Static **PASS** · Backend **PASS** |
+
+**Test totals moved from 900 → 899 and this is not a regression.** Part I/J measured
+900 / 6,991 / 2 skips. `84eb9ce` replaced
+`WindowsLauncherContractTest::test_php_urls_resolve_over_http()`'s
+`#[DataProvider('phpUrlProvider')]` (two rows: `releases (current)`,
+`archives (permanent fallback)`) with one test that probes both mirror tiers and
+skips only if neither resolves. One case → one fewer test and assertion, and one
+fewer offline skip.
+
+**The browser-E2E gap that Part I.5 called host-gated is now closed for this class of
+runner.** `@sparticuz/chromium`'s `chromium.br` decompresses to a bare ELF binary
+(not a tarball); Chromium 152 cannot start with the script's `--single-process`
+here, so run it through a shim that drops that flag and adds `--no-zygote`. The
+repository's `browser-e2e.mjs` was not modified, and no repo file needs to change
+for this to work again.
+
+## K.3 Where The Inherited Certification Was Wrong
+
+The three reports are kept with inline `[R.n]` corrections; §6 of
+`AUDIT-2026-09-08-RECONCILIATION.md` has the full register. In one line each:
+
+- **R.1** it certifies `f0e1424` as production-ready while that commit's CI was red
+  (Part J documents *why*: 222 Pint style issues, 24 PHPStan errors, a
+  Pint-introduced broken helper call site).
+- **R.2** "no code changes were required" — Part J itself is the refutation, and 230
+  files followed.
+- **R.3** two of its three "advisory findings" are contradicted by the files they
+  name: login throttling exists (`RateLimiter::for('login')` → 5/min per
+  IP+username), and HTTPS enforcement exists (`deploy/nginx/toefl-house.conf`
+  301-to-https + TLS 1.2/1.3, HSTS, `SESSION_SECURE_COOKIE=true`).
+- **R.4** it cites commits `e696678` and `bf08353`, which do not exist in this
+  repository.
+- **R.5** "Idempotency-Key header on all mutations" overstates a helper used by 28
+  controllers across 433 mutation routes.
+- **R.6** its **database evidence was sound** — every figure re-measured exactly,
+  including one where this reconciliation's own first judgement (164 vs 168 tables)
+  was wrong and was retracted in favour of the live measurement.
+
+## K.4 Honest Status
+
+**Established:** CI-green on all three jobs at the branch tip, full local chain
+re-run, live browser journeys verified, readiness probes answered by a running
+instance reached through the supported first-run bootstrap, route surface
+enumerated (511 routes / 433 mutations / 1 unauthenticated, framework-default and
+signature-gated).
+
+**Still open before a release claim** — and, per
+[`ai/07-RELEASE-CERTIFICATION-PROTOCOL.md`](ai/07-RELEASE-CERTIFICATION-PROTOCOL.md),
+required by one:
+
+1. rehearsal of the authored **nginx + php-fpm** topology (only `artisan serve` has
+   been exercised here);
+2. an **executed, timed backup → drop → restore → verify** DR drill (C-28 in
+   `reference/current-state-compliance-evidence.md` still says PARTIALLY ACHIEVED);
+3. a demonstrated **migrate → rollback → re-apply** schema-compatibility cycle;
+4. an **observability** path — `config/logging.php` has file channels and a `null`
+   deprecations channel only; no metrics or alert sink exists in-repo;
+5. **Content-Security-Policy**, which neither line recorded and both layers omit
+   (`SecurityHeaders` and the nginx config emit the same five headers, no CSP);
+6. realistic-volume **performance** evidence for the reporting journeys.
+
+The next agent should treat this branch as the baseline, work items 1–6, and never
+promote a local or documented green state to a release claim without the CI run and
+the protocol's rehearsal items in hand.
