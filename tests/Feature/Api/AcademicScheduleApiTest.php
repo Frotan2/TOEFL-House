@@ -31,6 +31,7 @@ final class AcademicScheduleApiTest extends TestCase
 {
     use BuildsActors;
     use \Tests\Concerns\BuildsTeachers;
+    use \Tests\Concerns\BuildsSessions;
 
     private string $classId;
 
@@ -62,6 +63,14 @@ final class AcademicScheduleApiTest extends TestCase
         app(MaintainClass::class)->transition($this->asOfficer('api-sched-officer'), ClassModel::query()->findOrFail($this->classId), 'active', 'api-sched-act');
 
         $this->skillId = app(MaintainSkill::class)->register($this->asOfficer('api-sched-officer'), 'api_reading', 'API Reading', 'api-sched-skill')['skill_id'];
+
+        // Registering a skill is not authority to teach it: the teacher needs an
+        // effective subject authority and availability, and the assignment must
+        // carry the skill. Establish that through the real commands.
+        $apiProfileId = (string) \App\Modules\Academic\Models\TeacherProfile::query()
+            ->where('person_id', 'api-sched-teacher')->value('id');
+        $this->makeTeacherDeliveryReady($apiProfileId, $this->skillId, $this->bootstrapBranchId(), 'apisch');
+        $this->attributeSkill($this->classId, $this->skillId, 'apisch-at');
 
         UserAccount::query()->create([
             'id' => RandomIdentifier::new(),
@@ -98,40 +107,43 @@ final class AcademicScheduleApiTest extends TestCase
         ]);
     }
 
-    public function test_api_schedules_a_session_without_skill(): void
+    public function test_api_refuses_a_session_without_a_skill_through_the_same_command_path(): void
     {
+        // The original blocker was that the API passed the skill into the
+        // idempotency-key slot, so a skill-less request raised a TypeError
+        // (500). Scheduling now REQUIRES a skill, so the durable guarantee is
+        // that the API refuses it as a governed 409 from the same command the
+        // console uses — never a 500 and never a silent skill-less session.
         $this->postJson('/api/v1/academic/sessions', [
             'class_id' => $this->classId,
             'scheduled_on' => '2026-09-09',
             'starts_at' => '11:00',
             'ends_at' => '12:00',
-        ])->assertCreated()
-            ->assertJsonPath('status', 'scheduled');
+        ])->assertStatus(409)
+            ->assertJsonPath('error', 'scheduling.skill_required');
 
-        $this->assertDatabaseHas('class_sessions', [
+        $this->assertDatabaseMissing('class_sessions', [
             'class_id' => $this->classId,
             'scheduled_on' => '2026-09-09',
-            'skill_id' => null,
         ]);
     }
 
     public function test_api_treats_an_empty_skill_like_an_absent_one(): void
     {
-        // Transport parity with the console: an empty skill is normalized to
-        // null rather than reaching the command as a skill lookup.
+        // An empty string must not be smuggled through as "no skill"; it is
+        // refused identically to an absent one.
         $this->postJson('/api/v1/academic/sessions', [
             'class_id' => $this->classId,
-            'scheduled_on' => '2026-09-09',
-            'starts_at' => '13:00',
-            'ends_at' => '14:00',
+            'scheduled_on' => '2026-09-10',
+            'starts_at' => '11:00',
+            'ends_at' => '12:00',
             'skill_id' => '',
-        ])->assertCreated()
-            ->assertJsonPath('status', 'scheduled');
+        ])->assertStatus(409)
+            ->assertJsonPath('error', 'scheduling.skill_required');
 
-        $this->assertDatabaseHas('class_sessions', [
+        $this->assertDatabaseMissing('class_sessions', [
             'class_id' => $this->classId,
-            'scheduled_on' => '2026-09-09',
-            'skill_id' => null,
+            'scheduled_on' => '2026-09-10',
         ]);
     }
 
@@ -147,7 +159,7 @@ final class AcademicScheduleApiTest extends TestCase
             'ends_at' => '10:00',
             'skill_id' => 'skill-that-does-not-exist',
         ])->assertStatus(409)
-            ->assertJsonPath('error', 'academic.session_skill_unknown');
+            ->assertJsonPath('error', 'scheduling.skill_unknown');
 
         $this->assertDatabaseMissing('class_sessions', [
             'class_id' => $this->classId,
@@ -168,7 +180,7 @@ final class AcademicScheduleApiTest extends TestCase
             'starts_at' => '09:00',
             'ends_at' => '10:00',
         ])->assertStatus(409)
-            ->assertJsonPath('error', 'academic.session_class_not_active');
+            ->assertJsonPath('error', 'scheduling.class_not_active');
     }
 
     public function test_api_rejects_an_inverted_time_window_and_malformed_input(): void
@@ -179,7 +191,7 @@ final class AcademicScheduleApiTest extends TestCase
             'starts_at' => '10:00',
             'ends_at' => '09:00',
         ])->assertStatus(409)
-            ->assertJsonPath('error', 'academic.session_window');
+            ->assertJsonPath('error', 'scheduling.window_invalid');
 
         $this->postJson('/api/v1/academic/sessions', [
             'class_id' => $this->classId,
