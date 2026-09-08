@@ -83,7 +83,7 @@ final class WaitlistOperationsConsoleTest extends TestCase
         $this->offeringId = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 1, 'wl-offering')['offering_id'];
 
         $this->buildActiveTeacher('wl-teacher-1', null, 'waitlist8f4');
-        $this->classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 1, 'wl-class', $this->levelId, $this->bootstrapBranchId())['class_id'];
+        $this->classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 1, 'wl-class', $this->levelId, $this->branchId)['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'wl-teacher-1', new CarbonImmutable('2026-09-01'), null, 'wl-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'wl-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'wl-class-act');

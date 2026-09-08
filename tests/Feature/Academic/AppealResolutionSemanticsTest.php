@@ -95,7 +95,7 @@ final class AppealResolutionSemanticsTest extends TestCase
         // Level-agnostic classes: progression needs no assessment basis here.
         $this->classA = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $period, 8, 'sem-class-a', null, $this->bootstrapBranchId())['class_id'];
         $this->classB = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $period, 8, 'sem-class-b', null, $this->bootstrapBranchId())['class_id'];
-        $teacher = $this->buildActiveTeacher('sem-teacher-1', null, 'appealre2ed')->id;
+        $teacher = $this->buildActiveTeacher('sem-teacher-1', null, 'appealre2ed')['person_id'];
         foreach (['sem-cls-a', 'sem-cls-b'] as $index => $key) {
             $class = $index === 0 ? $this->classA : $this->classB;
             app(MaintainClass::class)->assignTeacher($org, ClassModel::query()->findOrFail($class), $teacher, new CarbonImmutable('2026-09-01'), null, $key.'-teacher');

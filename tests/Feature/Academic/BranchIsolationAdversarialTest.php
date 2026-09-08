@@ -54,6 +54,7 @@ final class BranchIsolationAdversarialTest extends TestCase
 {
     use BuildsActors;
     use \Tests\Concerns\BuildsTeachers;
+    use \Tests\Concerns\BuildsSessions;
     use DecidesAdmissions;
 
     private const CAPS = [
@@ -120,7 +121,7 @@ final class BranchIsolationAdversarialTest extends TestCase
         $this->levelId = $structure->defineLevel($org, $this->programVersionId, 'iso-l1', 1, 'Iso One', 'A1', 'iso-lvl1')['level_id'];
         $this->level2Id = $structure->defineLevel($org, $this->programVersionId, 'iso-l2', 2, 'Iso Two', 'A2', 'iso-lvl2')['level_id'];
 
-        $this->periodId = $structure->definePeriod($org, 'Isolation Term', new CarbonImmutable('2026-10-01'), new CarbonImmutable('2026-12-30'), 'iso-period')['period_id'];
+        $this->periodId = $structure->definePeriod($org, 'Isolation Term', CarbonImmutable::today()->subMonth(), CarbonImmutable::today()->addMonths(3), 'iso-period')['period_id'];
         $structure->transitionPeriod($org, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'iso-period-pub');
 
         $structure->declareBranchAvailability($org, $this->branchA, $this->levelId, $this->periodId, 'iso-avail-a');
@@ -128,13 +129,16 @@ final class BranchIsolationAdversarialTest extends TestCase
         $this->offeringA = $structure->openOffering($org, $this->branchA, $this->levelId, $this->periodId, 4, 'iso-off-a')['offering_id'];
         $this->offeringB = $structure->openOffering($org, $this->branchB, $this->levelId, $this->periodId, 4, 'iso-off-b')['offering_id'];
 
-        $this->classId = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $this->periodId, 8, 'iso-class', $this->levelId, $this->bootstrapBranchId())['class_id'];
-        $teacher = $this->buildActiveTeacher('iso-teacher-1', null, 'branchisd71')->id;
-        app(MaintainClass::class)->assignTeacher($org, ClassModel::query()->findOrFail($this->classId), $teacher, new CarbonImmutable('2026-09-01'), null, 'iso-class-teacher');
+        $this->classId = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $this->periodId, 4, 'iso-class', $this->levelId, $this->branchA)['class_id'];
+        $teacher = $this->buildActiveTeacher('iso-teacher-1', $this->branchA, 'branchisd71')['person_id'];
+        app(MaintainClass::class)->assignTeacher($org, ClassModel::query()->findOrFail($this->classId), $teacher, CarbonImmutable::today(), null, 'iso-class-teacher');
         app(MaintainClass::class)->transition($org, ClassModel::query()->findOrFail($this->classId), 'published', 'iso-class-pub');
         app(MaintainClass::class)->transition($org, ClassModel::query()->findOrFail($this->classId), 'active', 'iso-class-active');
+        // Scheduling needs an authorized, available teacher whose assignment
+        // carries the session skill; the domain will not infer any of it.
+        $isoSkillId = $this->makeClassSchedulable($org, $this->classId, $this->branchA, 'iso-sess');
         $this->sessionId = app(MaintainClass::class)->scheduleSession(
-            $org, ClassModel::query()->findOrFail($this->classId), new CarbonImmutable('2026-10-05'), '09:00', '10:30', 'iso-session'
+            $org, ClassModel::query()->findOrFail($this->classId), CarbonImmutable::today()->addWeek(), '09:00', '10:30', 'iso-session', $isoSkillId
         )['session_id'];
 
         $this->studentA = $this->newStudent('iso-student-a');
