@@ -35,6 +35,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Tests\Concerns\BuildsStudents;
 use Tests\TestCase;
+use Illuminate\Support\Facades\DB;
 
 /**
  * AC3 financial gate: Academic activation is allowed only when the
@@ -63,8 +64,8 @@ final class EnrollmentFinancialGateFeatureTest extends TestCase
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($periodId), 'published', 'gate-period-pub-'.$seed);
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
-        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $levelId, $periodId['period_id'], 'ofenrollme-av');
-        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $levelId, $periodId['period_id'], 200, 'ofenrollme-of');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $levelId, $periodId, 'ofenrollme-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $levelId, $periodId, 200, 'ofenrollme-of');
 
         $classId = (string) app(MaintainClass::class)->defineClass(
             $officer,
@@ -110,10 +111,14 @@ final class EnrollmentFinancialGateFeatureTest extends TestCase
 
     private function postTuitionObligation(string $seed, FinancialPeriod $period, string $studentId): Obligation
     {
-        $poster = $this->grantedActor('gate-obligation-'.$seed, ['finance.obligation']);
+        // Actor ids are char(36) and this prefix is 16 characters, so a long
+        // descriptive seed overflows the column with a confusing 'value too
+        // long' error. Collapse it to a short stable tag.
+        $tag = strlen($seed) > 12 ? substr($seed, 0, 8).substr(md5($seed), 0, 4) : $seed;
+        $poster = $this->grantedActor('gate-oblig-'.$tag, ['finance.obligation']);
         $post = app(PostObligation::class)->post($poster, $period, $studentId, 'admissions/tuition', 'Gate tuition', [
-            ['category' => 'tuition', 'amount' => '1000.00', 'source_ref' => 'gate-tuition-'.$seed],
-        ], 'gate-obligation-'.$seed);
+            ['category' => 'tuition', 'amount' => '1000.00', 'source_ref' => 'gate-tuition-'.$tag],
+        ], 'gate-oblig-'.$tag);
 
         return Obligation::query()->findOrFail($post['obligation_id']);
     }
@@ -325,10 +330,17 @@ final class EnrollmentFinancialGateFeatureTest extends TestCase
         $credit = app(MaintainFinancialCredit::class)->propose($proposer, $setup['student_id'], '1000.00', 'credit', 'gate-immutable-credit-src', 'gate-immutable-credit-propose');
         app(MaintainFinancialCredit::class)->approve($approver, FinancialCredit::query()->findOrFail($credit['credit_id']), 'gate-immutable-credit-approve');
         $creditModel = FinancialCredit::query()->findOrFail($credit['credit_id']);
+        // A rejected write aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and the assertions after it can
+        // still read. Without this the test dies on the next query with
+        // 'current transaction is aborted'.
+        DB::beginTransaction();
         try {
             $creditModel->forceFill(['amount' => '2000.00'])->save();
+            DB::rollBack();
             $this->fail('an approved credit cannot be mutated');
         } catch (QueryException) {
+            DB::rollBack();
         }
         $refreshedCredit = $creditModel->fresh();
         $this->assertNotNull($refreshedCredit);
@@ -342,10 +354,17 @@ final class EnrollmentFinancialGateFeatureTest extends TestCase
         $installment = app(MaintainInstallmentPlan::class)->propose($proposer, $setup['student_id'], null, '1000.00', 2, '2026-09-15', 'gate-immutable-installment', 'gate-immutable-installment-propose');
         app(MaintainInstallmentPlan::class)->approve($approver, EnrollmentInstallmentPlan::query()->findOrFail($installment['plan_id']), 'gate-immutable-installment-approve');
         $planModel = EnrollmentInstallmentPlan::query()->findOrFail($installment['plan_id']);
+        // A rejected write aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and the assertions after it can
+        // still read. Without this the test dies on the next query with
+        // 'current transaction is aborted'.
+        DB::beginTransaction();
         try {
             $planModel->forceFill(['installments_count' => 9])->save();
+            DB::rollBack();
             $this->fail('an approved installment plan cannot be mutated');
         } catch (QueryException) {
+            DB::rollBack();
         }
         $refreshedPlan = $planModel->fresh();
         $this->assertNotNull($refreshedPlan);
@@ -355,10 +374,17 @@ final class EnrollmentFinancialGateFeatureTest extends TestCase
         $exception = app(MaintainFinancialGateException::class)->propose($proposer, $setup['student_id'], null, null, '1000.00', 'exception', '2026-09-01', null, 'gate-immutable-exception-propose');
         app(MaintainFinancialGateException::class)->approve($approver, FinancialGateException::query()->findOrFail($exception['exception_id']), 'gate-immutable-exception-approve');
         $exceptionModel = FinancialGateException::query()->findOrFail($exception['exception_id']);
+        // A rejected write aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and the assertions after it can
+        // still read. Without this the test dies on the next query with
+        // 'current transaction is aborted'.
+        DB::beginTransaction();
         try {
             $exceptionModel->forceFill(['reason' => 'changed'])->save();
+            DB::rollBack();
             $this->fail('an approved gate exception cannot be mutated');
         } catch (QueryException) {
+            DB::rollBack();
         }
         $refreshedException = $exceptionModel->fresh();
         $this->assertNotNull($refreshedException);
