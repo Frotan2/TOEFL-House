@@ -39,7 +39,7 @@ files. Commands that are *part of the product contract* (`deploy/*.sh`,
 | A | Deployment rehearsal in the documented production topology | **PASS**, one labelled substitution (nginx reproduced by a TLS→FastCGI edge; its config is static-reviewed only) |
 | B | Backup and disaster recovery | **PASS**, four limits recorded (off-host durability, cron schedule, `age` encryption, dataset size) |
 | C | Migration forward-safety and rollback discipline | **PASS**, limits recorded (the `down()` chain is exercised as far as the one-way policy allows; no production-volume `ALTER TABLE` measurement — that is Gate F) |
-| D | Error surface and observability | not yet executed |
+| D | Error surface and observability | **PASS with recorded gaps** — no leakage on any measured path; two serious defects found and fixed (readiness probe, FPM reload); envelope normalisation, request id and metrics/alerting recorded as open |
 | E | Content Security Policy | not yet executed (basis recorded: `SecurityHeaders.php` and `deploy/nginx/toefl-house.conf` emit the same five headers, with no CSP anywhere; only `ServeFile` sets a per-file policy) |
 | F | Performance and capacity | not yet executed |
 
@@ -436,3 +436,128 @@ further migration step, and the rollback refusals are deliberate rather than abs
 One hazard was documented (non-atomic batch rollback) and four static rules added to
 CI with bidirectional fixtures, after two of my own first drafts of those rules
 produced false positives that the fixtures now prevent.
+
+---
+
+## Gate D — Error surface and observability
+
+Executed 2026-09-08 against the **deployed** release through the TLS edge (not the
+working tree): a real `pg_ctl -m fast stop` of the cluster under `APP_ENV=production`,
+`APP_DEBUG=false`, `SESSION_DRIVER=database`, `CACHE_STORE=database`,
+`LOG_CHANNEL=stack`, `LOG_LEVEL=warning` — the configuration the procedure ships.
+
+### 1. What a client sees, measured
+
+| Request | Response | Assessment |
+| --- | --- | --- |
+| `GET /this-page-does-not-exist` | `404 text/html`, 6659 bytes, app layout | fine |
+| `GET /api/v1/management` (unauthenticated) | `401 {"error":"authentication_required","message":"Sign in as an employee to continue."}` | fine — the app's own envelope |
+| `GET /api/v1/nope` | `404 {"message":"The route api/v1/nope could not be found."}` | **inconsistent envelope**: no `error` code field |
+| `POST /api/v1/identity/people` (no token) | `419 {"message":"CSRF token mismatch."}` | same inconsistency |
+| `DELETE /login` | `405` HTML with `noindex,nofollow,noarchive` robots meta | fine |
+| `GET /login` without a session, `POST` without a token | `419` "Page Expired" HTML | fine for a browser |
+| every response above | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, HSTS | present (see Gate E for what is *not* present) |
+| every error body, grepped for `SQLSTATE`, `PDOException`, the DSN user/database, `vendor/`, `#0` frames | **nothing leaked** | clean, including during the database outage |
+
+### 2. The database outage, which is the case that matters
+
+With PostgreSQL stopped and nothing else changed:
+
+| Probe | Observed | Correct? |
+| --- | --- | --- |
+| `/health` | was `500 text/html` "Server Error" (6665 bytes) **before the fix**; `503 {"status":"error","checks":{"database":"error","application_key":"ok","frontend_build":"ok"}}` **after** | the fix is what the documentation already promised |
+| `/up` | `200` | by design — liveness, not readiness |
+| `/login` | `500` | correct: it genuinely needs the database |
+| `/api/v1/management` | `500 {"message":"Server Error"}` | correct status, JSON maintained |
+| after restart | `/health` `200` in ~20 ms, no FPM reload required | the app self-heals; a connection per request |
+
+`/health`'s 500 was not the controller's answer. The route lived in the `web`
+group, so `StartSession` opened a **database-backed session** before
+`HealthController` ran and threw there; the controller's own (correct) try/catch was
+never reached. The consequence is the worst available one for an operator: the
+endpoint whose entire job is to distinguish "database down" from "application broken"
+answered with a generic application-broken 500, to the load balancer that was about
+to act on it — and to `deploy.sh`, which polls the same URL to decide whether the
+release it just activated is healthy.
+
+Fix: `->withoutMiddleware([StartSession, ShareErrorsFromSession, ValidateCsrfToken, VerifyCsrfToken])`.
+Removing only the session middleware is *not* enough and the first attempt did
+exactly that: `VerifyCsrfToken::addCookieToResponse()` reads
+`$request->session()->token()` on GET requests too, so the exception simply moved to
+the next middleware (`Session store not set on request`) and the probe still answered
+500. A public read-only side-effect-free GET has nothing for CSRF to protect;
+`SecurityHeaders` is appended globally, so the response headers are unchanged
+(`SecurityHardeningFeatureTest`, 8 tests, still green).
+
+### 3. Where the evidence of the failure went — and what that exposed
+
+During the outage the exception **was** logged, with a full stack trace (29 KB from
+two requests). What made it worth reading was the *location*: it was written to
+`releases/20260908191449/storage/logs/laravel.log`, while `current` pointed at
+`releases/20260908191650`. `deploy.sh` moves a symlink, and with
+`opcache.validate_timestamps=0` the running master never stats a PHP file again, so
+the pool was still executing the **previous release** — the reload step was written
+`( systemctl reload … || service … reload || true )` and this host has neither. The
+deployment had reported "deployment OK", `/health` had agreed, and the live
+application was one release behind while its migrations had already advanced the
+database.
+
+Two defects, both fixed:
+
+* **`deploy.sh` activation now requires a proven reload** — `PHP_FPM_RELOAD_CMD`,
+  then `systemctl`, then `service`, then `kill -USR2` on the master read from
+  `PHP_FPM_PID_FILE`; if none succeeds the symlink is restored to the release that is
+  actually executing and the deployment **fails** with the remedy and the caveat that
+  the database migration is not undone. Rehearsed both ways: without an override the
+  deploy now stops at that step (`logs/gateD-negative-reload.log`, exit 1, `current`
+  unchanged); with `PHP_FPM_PID_FILE` set it reloads via SIGUSR2 and activates
+  (`logs/gateD-positive-reload.log`, exit 0), and the next outage wrote its log into
+  the **new** release's `storage/logs/` with the old release's absent — the same
+  detector, inverted.
+* **Log location is now configurable and documented** (`LOG_PATH`): with release
+  retention keeping 4 directories, a release-local log is a log that gets deleted,
+  so the record of an incident can vanish while the incident is open. The
+  `emergency` channel deliberately keeps the local path — it is the target used when
+  the configured one fails, so it must not live on the storage that just failed.
+
+### 4. Recorded, not fixed (this is where the honest limit of the audit sits)
+
+* **Two error shapes on one API.** The application's envelope is
+  `{"error","category","message","correlation_id","retryable"}` (built for
+  `DomainError` in `bootstrap/app.php`), but framework-generated responses — 404,
+  419, 405, and every 500 — bypass it and emit a bare `{"message": …}`. So clients
+  must special-case "did the domain reject me or did the framework reject me", and
+  the `correlation_id` that the envelope advertises exists exactly when it is *not*
+  useful. A `Handler::renderable`/`respondUsing` normalisation would close it; it is
+  a small API-contract change with front-end consequences, so it is recorded for
+  decision rather than slipped into an operations fix.
+* **No request identifier.** Nothing correlates a response with a log line: no
+  `X-Request-Id` in any response, and log entries carry no request id. With one
+  `laravel.log` and no metrics, "which burst caused this" is unrecoverable.
+* **No metrics, no alert channel, no pager path.** `config/integrations.php` has no
+  transports; nothing reports a rising 5xx rate, a failed job, or `/health` flipping
+  to 503 — the deployment procedure's own "if it fails, roll back" logic is the only
+  place a failure is acted on. §18 now states this in the docs instead of implying a
+  monitoring story that does not exist.
+* **Log volume is unbounded by default** unless an operator opts into
+  `LOG_STACK=daily`; nothing enforces or even checks it.
+* The unauthenticated-error paths that *did* stay clean (no stack, no DSN, no
+  internal paths) were verified by grep over the captured bodies only for the cases
+  exercised above; a debug-mode misconfiguration is not caught by anything, since no
+  check asserts `APP_DEBUG=false` in the running process (only in the `.env` text).
+
+### 5. Verdict
+
+**PASS with recorded gaps.** No information leaked on any path measured, including a
+live total database outage, and the application self-heals when the database returns
+without needing a reload. The gate found the two most serious defects of the whole
+audit, because it exercised the *failure* path against the *deployed* artefact rather
+than the working tree: a readiness probe that could not report the one condition it
+exists for, and an activation step that could report success while the pool kept
+serving the previous release. Both are fixed, covered by tests
+(`HealthProbeContractTest`, 5 tests; `PhpFpmActivationReloadTest`, 4 tests;
+`LogLocationTest`, 4 tests) and verified executably against the live deployment in
+both directions — including the non-vacuity check that the health tests fail with
+"Failed asserting that 500 is not identical to 500" when the fix is reverted.
+What remains is recorded in §4: a normalised API error envelope, a request id, and
+any form of metrics or alerting.
