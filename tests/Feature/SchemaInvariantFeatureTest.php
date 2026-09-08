@@ -60,7 +60,7 @@ final class SchemaInvariantFeatureTest extends TestCase
         $this->assertContains('metric_definitions_key_unique', $this->indexNames('metric_definitions'));
         $this->assertContains('metric_versions_one_per_no', $this->indexNames('metric_versions'));
         $this->assertContains('metric_projections_one_slice', $this->indexNames('metric_projections'));
-        $this->assertContains('dashboards_name_unique', $this->indexNames('dashboards'));
+        $this->assertContains('dashboards_organization_name_unique', $this->indexNames('dashboards'));
         $this->assertContains('dashboard_pins_one_per_slice', $this->indexNames('dashboard_pins'));
         $this->assertContains('integration_endpoints_key_unique', $this->indexNames('integration_endpoints'));
         $this->assertContains('integration_deliveries_one_per_key', $this->indexNames('integration_deliveries'));
@@ -925,7 +925,11 @@ final class SchemaInvariantFeatureTest extends TestCase
         $this->assertContains('finance_refunds_lifecycle_guard_trigger', $refundTriggers, 'recorded refunds must be immutable at the schema level');
 
         $discountTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'discounts')->pluck('tgname')->all();
-        $this->assertContains('discounts_approved_immutable_trigger', $discountTriggers, 'approved discounts must be immutable at the schema level');
+        // The standalone approved-discount immutability trigger was consolidated
+        // into the discounts finance guard, which enforces the same rule (a
+        // discount transitions only proposed -> approved, no field of an
+        // approved discount may change, and rows can never be deleted).
+        $this->assertContains('discounts_finance_guard_trigger', $discountTriggers, 'approved discounts must be immutable at the schema level');
 
         $fundTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'funding_sources')->pluck('tgname')->all();
         $this->assertContains('funding_sources_immutable_trigger', $fundTriggers, 'funding agreements must be immutable at the schema level');

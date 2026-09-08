@@ -20,7 +20,8 @@ use Tests\Support\PgWire\PgWirePdo;
  *                and commits (COMMITTED);
  *   - 'cleanup': removes the race rows in their own committed statements
  *                (the staged request table is append-only for row deletes,
- *                so it is truncated).
+ *                so the guard trigger is suspended session-locally for the
+ *                targeted delete rather than locking the table with TRUNCATE).
  *
  * argv: db host port user password row_id subject ready_file result_file [mode] [delay_ms]
  *   - 'seed'    uses subject as the person id and row_id as the request id;
@@ -79,7 +80,19 @@ try {
         $pdo->exec('COMMIT');
         file_put_contents($resultFile, 'SEEDED');
     } elseif ($mode === 'cleanup') {
-        $pdo->exec('TRUNCATE org_wide_grant_requests');
+        // The race rows were committed outside the test's wrapping
+        // transaction, so they must be removed in committed statements. The
+        // append-only guard forbids row DELETEs, but TRUNCATE would need an
+        // ACCESS EXCLUSIVE lock that conflicts with the ACCESS SHARE lock the
+        // still-open test transaction holds on the table, deadlocking the run.
+        // Disabling triggers for this session (session_replication_role) needs
+        // no table lock, and a targeted DELETE takes only ROW EXCLUSIVE, which
+        // is compatible with the test transaction's reads. This removes only
+        // the race's own rows and never weakens the guard for any other path.
+        $pdo->exec("SET session_replication_role = 'replica'");
+        $del = $pdo->prepare('DELETE FROM org_wide_grant_requests WHERE requested_by = ?');
+        $del->execute([$subject]);
+        $pdo->exec("SET session_replication_role = 'origin'");
         $pdo->exec(sprintf("DELETE FROM people WHERE id = '%s'", $subject));
         file_put_contents($resultFile, 'CLEANED');
     } else {

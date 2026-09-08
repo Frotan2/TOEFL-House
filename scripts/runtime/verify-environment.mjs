@@ -36,7 +36,7 @@ function inRange(version, min, max) {
 }
 
 const LOCK = {
-  php: { min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 3, patch: 0 } },
+  php: { min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
   composer: { min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
   node: { min: { major: 22, minor: 0, patch: 0 }, max: { major: 23, minor: 0, patch: 0 } },
   postgres: { min: { major: 18, minor: 0, patch: 0 }, max: { major: 19, minor: 0, patch: 0 } },
@@ -50,7 +50,7 @@ const REQUIRED_EXTENSIONS = [
 
 const phpRaw = run('php', ['-r', 'echo PHP_VERSION;']);
 const php = parse(phpRaw);
-record('PHP within locked range (>=8.2 <8.3)', inRange(php, LOCK.php.min, LOCK.php.max), phpRaw ?? 'php not found');
+record('PHP within locked range (>=8.2 <8.5)', inRange(php, LOCK.php.min, LOCK.php.max), phpRaw ?? 'php not found');
 
 const extRaw = run('php', ['-r', 'echo implode(",", get_loaded_extensions());']);
 const loaded = new Set((extRaw ?? '').toLowerCase().split(',').map((e) => e.trim()));

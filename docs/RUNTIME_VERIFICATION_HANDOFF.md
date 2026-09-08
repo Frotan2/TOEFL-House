@@ -1,6 +1,6 @@
 # TOEFL House — Runtime Verification Handoff
 
-**STATUS: RUNTIME VERIFIED WITH LIMITATIONS — RUNTIME AND TESTING STRATEGY LOCKED; BROWSER E2E VERIFIED**
+**STATUS: FULL PHPUNIT SUITE GREEN ON A PROVISIONED RUNTIME (900 tests, 0 failures) — RUNTIME REPRODUCIBLE VIA `scripts/runtime/provision.sh`; SEE PART I**
 
 This document is the canonical handoff record for the next engineering agent. It records what has been established before real runtime verification and what still requires an executable environment.
 
@@ -1073,3 +1073,87 @@ fail-closed · terminology exit 0 · migration audit PASS.
 **Not release certifiable.** 204 legacy failures remain. Every gate that can be
 green is green, and the canonical suite is the trustworthy authority, but the
 legacy set is too large to certify against.
+
+---
+
+# Part I — Full Suite Convergence On A Real Runtime (2026-09-08)
+
+## I.1 What Changed
+
+The legacy failure count is **zero**. The full PHPUnit suite — Unit, Feature
+and Canonical together — runs green on a real, provisioned runtime.
+
+| Measure | Part H | Now |
+|---|---|---|
+| Total tests | 900 | **900** |
+| Failures + errors | 204 | **0** |
+| Assertions | 5,088 | **6,991** |
+| Skipped | — | **2** (network-gated, self-skip) |
+
+The two skips are the Windows launcher's *live* PHP-mirror HTTP probes; they
+self-skip with `errno=77` when the runner has no route to the mirror (the
+sandbox's blocked egress). They are designed to skip offline and are not
+failures.
+
+## I.2 The Runtime Was Actually Built
+
+Previous handoffs described a locked runtime that had never been provisioned in
+this environment, which is why each agent re-fought the toolchain. That is now
+fixed and reproducible:
+
+- **PHP 8.4.14** (native, self-contained; `pdo_pgsql` + all locked extensions)
+  and **Composer 2.9.2**, from the npm package `@libphp/amazon-linux-2023-v84`.
+- **PostgreSQL 18.4** (native server), from the npm package
+  `@embedded-postgres/linux-x64`.
+- **Composer packages** installed from `api.github.com` (Packagist is blocked).
+
+One command rebuilds all of it: `bash scripts/runtime/provision.sh`. See
+`docs/RUNTIME_ENVIRONMENT_LOCK.md` §6 and `scripts/runtime/{provision,env,pg}.sh`.
+The lock moved PHP 8.2 → 8.4 because 8.4 is the best-compatible build that runs
+unmodified on this host; `composer.json` requires `^8.2`, so it is in range,
+and the full chain was executed on it.
+
+## I.3 The Five Genuine Defects Closed This Session
+
+After applying the recovered patch (which resolved the large fixture-provenance
+clusters), five real failures remained. Each was fixed at its true cause, not
+papered over:
+
+1. **Concurrency race child deadlock** (`ConcurrencyRaceTest`). The cleanup
+   child ran `TRUNCATE`, needing `ACCESS EXCLUSIVE`, which deadlocked against
+   the `ACCESS SHARE` lock the test's still-open RefreshDatabase transaction
+   holds. Fixed the child to suspend its guard trigger session-locally
+   (`session_replication_role = replica`) and issue a targeted `DELETE`
+   (`ROW EXCLUSIVE`, lock-compatible) — no weakening of the append-only guard.
+2. **Stale closed-catalog assertion** (`IntegrationDomainTest`). `JobCatalog`
+   legitimately grew an `outbox.relay` → `DomainEventRelayJob` entry; the test
+   expectation predated it. Updated to assert the current closed catalog.
+3. **Stale unique-index name** (`SchemaInvariantFeatureTest`). Migration
+   `000154` deliberately replaced the global `dashboards_name_unique` with the
+   organization-scoped `dashboards_organization_name_unique`. Test updated to
+   the scoped invariant.
+4. **Stale trigger name** (`SchemaInvariantFeatureTest`). Migration `000141`
+   consolidated `discounts_approved_immutable_trigger` into
+   `discounts_finance_guard_trigger` (same immutability rule). Test updated.
+5. **Incomplete capability-coverage scan** (`WindowsOneClickDeploymentContractTest`).
+   The owner-bootstrap coverage test scanned only `app/Modules`, but the
+   organization-structure separation-of-duties capabilities are canonically
+   defined in `App\Support\Authorization\StructureDecision` (outside the module
+   tree). Broadened the scan to all of `app/` so the coverage contract is
+   complete.
+
+## I.4 Every Gate Re-verified On This Runtime
+
+Environment lock **8/8** · migration replay **185/185** · full PHPUnit
+**900 tests / 6,991 assertions / 0 failures** · database invariants **6/6** ·
+concurrency **4/4** · frontend typecheck **clean** · Vite build **clean** ·
+migration-discipline audit **PASS** · terminology audit **exit 0 (advisory)**.
+
+## I.5 Honest Status
+
+The legacy-vs-canonical split described in Parts F–H is closed: there is no
+longer a large failing legacy set. Release certification still additionally
+depends on the items that remain genuinely runtime/host-gated here — the live
+browser E2E (`verify:browser` needs a Chromium binary this sandbox lacks) and
+the two network-gated launcher probes — but every gate that can be executed in
+this environment is green.

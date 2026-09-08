@@ -188,8 +188,13 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
 
     public function test_the_owner_bootstrap_covers_every_capability_in_the_source(): void
     {
+        // Capabilities are declared as CAPABILITY* constants throughout the
+        // application source. Most live under app/Modules, but cross-cutting
+        // authority contracts (e.g. the organization structure separation-of-
+        // duties chain in App\Support\Authorization\StructureDecision) define
+        // theirs outside the module tree, so the scan must cover all of app/.
         $defined = [];
-        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app/Modules')));
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app')));
         foreach ($it as $file) {
             /** @var SplFileInfo $file */
             if ($file->getExtension() !== 'php') {

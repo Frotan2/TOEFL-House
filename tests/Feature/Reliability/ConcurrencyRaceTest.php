@@ -138,7 +138,9 @@ final class ConcurrencyRaceTest extends TestCase
 
         // The children committed outside the wrapping transaction, so a
         // cleanup child removes their rows in committed statements (the
-        // request table is append-only for row deletes, so it is truncated).
+        // request table is append-only for row deletes, so the child suspends
+        // the guard trigger session-locally for a targeted delete instead of
+        // taking TRUNCATE's table-wide lock, which would deadlock this run).
         $cleanupResult = $tmp.'.cleanup.result';
         $cleanup = proc_open(
             [...$base, 'race-cleanup', 'race-requestor', $tmp.'.cleanup.ready', $cleanupResult, 'cleanup'],

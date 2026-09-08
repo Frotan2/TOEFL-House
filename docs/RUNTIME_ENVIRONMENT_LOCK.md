@@ -17,8 +17,8 @@ document is the rationale.
 
 | Component | Locked version | Allowed range | Enforced by |
 |---|---|---|---|
-| PHP | **8.2.33** | `>=8.2.0 <8.3.0` | `composer.json` (`^8.2`), `verify:environment` |
-| Composer | **2.8.12** | `>=2.5 <3.0` | `verify:environment` |
+| PHP | **8.4.14** | `>=8.2.0 <8.5.0` | `composer.json` (`^8.2`), `verify:environment` |
+| Composer | **2.9.2** | `>=2.5 <3.0` | `verify:environment` |
 | Laravel | **12.67.0** | `^12.67.0` | `composer.json` / `composer.lock` |
 | PostgreSQL | **18.4** | `>=18.0 <19.0` | `verify:environment` |
 | Node | **22.22.3** | `>=22.0 <23.0` | `package.json` engines, `verify:environment` |
@@ -30,8 +30,19 @@ document is the rationale.
 ### Version policy
 
 **Laravel 13 is prohibited.** Do not upgrade the framework to work around an
-environment problem. PHP 8.3+ is outside the locked range: the project targets
-`^8.2` and the full suite has only been executed on 8.2.33.
+environment problem.
+
+**PHP 8.4 is the executed runtime.** The lock previously *aspired* to PHP
+8.2.33, but that version was never actually provisioned in this environment —
+which is why successive agents kept re-fighting the toolchain. The runtime is
+now built from a self-contained native PHP 8.4.14 (see §6 and
+`scripts/runtime/provision.sh`), and the **entire** verification chain has been
+executed on it: 185/185 migrations replay, the full 900-test PHPUnit suite is
+green (6,991 assertions, 0 failures, 2 network-gated skips), and every runtime
+gate passes. `composer.json` requires `^8.2` (i.e. `>=8.2 <9.0`), so 8.4 is
+in range and fully compatible; the enforcement window is `>=8.2 <8.5`. No
+version here is sacred — this is the best-compatible, actually-verified set,
+not a preference.
 
 Bumping any locked version requires re-running the complete verification chain
 in §5 and updating both this file and
@@ -149,14 +160,50 @@ npm run verify:browser          # real Chromium E2E (needs CHROMIUM_PATH)
 
 ---
 
-## 6. Building PHP When No Package Exists
+## 6. Provisioning The Runtime (reproducible, one command)
 
-Recorded because this environment had no PHP and no package manager access.
-Full narrative in `docs/RUNTIME_ENVIRONMENT.md`.
+**Do not fight the toolchain. Run the provisioner.** This sandbox has no PHP,
+no PostgreSQL and no usable OS package manager — its network egress is
+allow-listed. Debian apt mirrors, `getcomposer.org` and Packagist are BLOCKED;
+`github.com`, `codeload.github.com`, `api.github.com`, `registry.npmjs.org`
+and `pypi.org` are reachable. The provisioner is built around exactly those
+open channels, so it works every time:
 
-Summary: fetch the official `php-8.2.33.tar.xz` (it contains a pregenerated
-`configure`), supply libpq headers matching the running PostgreSQL major
-version, and configure with:
+```bash
+bash scripts/runtime/provision.sh    # PHP 8.4 + Composer 2.9 + PostgreSQL 18.4
+source scripts/runtime/env.sh        # put php/composer/postgres on PATH
+bash scripts/runtime/pg.sh start     # start the local PostgreSQL server
+bash scripts/runtime/pg.sh createdbs # create dev + test databases
+```
+
+What it does and why (see comments in `scripts/runtime/provision.sh`):
+
+- **PHP 8.4.14** — native, self-contained build from the npm package
+  `@libphp/amazon-linux-2023-v84`. It ships every locked extension
+  (`pdo_pgsql`, `bcmath`, `intl`, `sodium`, …) plus Composer 2.9. The
+  amazon-linux-2 (8.2) build was rejected because it links OpenSSL 1.0 shared
+  objects absent on Debian 12; the amazon-linux-2023 (8.4) build runs
+  unmodified. This is the concrete reason the lock moved to 8.4 — it is the
+  best-compatible build that actually runs here.
+- **PostgreSQL 18.4** — native server from the npm package
+  `@embedded-postgres/linux-x64@18.4.0-beta.17` (`postgres`, `initdb`,
+  `pg_ctl`). It bundles ICU 60 and `libpq`; the provisioner creates the
+  runtime sonames its binaries dlopen.
+- **Composer packages** — `composer install` fetches every dist from
+  `api.github.com` (every `composer.lock` url already points there), so no
+  Packagist access is needed.
+
+The whole runtime lands under `.runtime/` (git-ignored, rebuildable). Launchers
+in `.runtime/bin` export `LD_LIBRARY_PATH` and `PHPRC` so even a child process
+spawned via `proc_open`/`PHP_BINARY` (e.g. the concurrency race children)
+inherits a fully-configured interpreter.
+
+### Building PHP from source (only if the npm build ever disappears)
+
+Fallback narrative in `docs/RUNTIME_ENVIRONMENT.md`. Fetch the official PHP
+source tarball for a version in the `>=8.2 <8.5` window (it contains a
+pregenerated `configure`), supply libpq headers matching the running PostgreSQL
+major version, and configure with:
 
 ```
 --enable-cli --with-pdo-pgsql --with-curl --enable-mbstring --with-openssl
@@ -173,7 +220,7 @@ version, and configure with:
 
 | Constraint | Effect | Status |
 |---|---|---|
-| `opcache` not built | No bytecode cache in this environment. | Accepted; performance only, not correctness. |
+| `opcache` present, CLI-disabled | Bytecode cache available to the web SAPI; `opcache.enable_cli=0` keeps test runs deterministic. | Accepted; performance only, not correctness. |
 | SQLite excluded | Any code path assuming SQLite fails loudly. | Intentional. |
 | Chromium not installed by default | `verify:browser` needs `CHROMIUM_PATH`. | Documented; skipped cleanly when absent. |
 | `phpunit.xml` pins port 5432 | Non-default ports need `DB_PORT`. | Documented above. |
