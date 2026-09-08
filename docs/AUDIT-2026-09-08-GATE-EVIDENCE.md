@@ -25,9 +25,11 @@ local clone (`REPO_URL`), because the GitHub credential available in this
 session expired mid-work; the clone path is otherwise identical.
 
 **Artifacts.** Raw transcripts (`logs/deploy*.log`, `logs/browser-edge-e2e.log`,
-`logs/drill/*`), the rehearsal drivers (`rehearse-deploy.sh`, `dr-drill.sh`,
-`edge/edge.mjs`) and the fingerprint helper live in the audit sandbox outside this
-repository, so they are cited by path rather than committed: they are host
+`logs/drill/*`, `logs/csp-inventory.json`, `logs/csp-probe-{NEW,OLD}-release.json`,
+`logs/deploy1[123]-edgeconfig*.log`), the rehearsal drivers (`rehearse-deploy.sh`,
+`dr-drill.sh`, `edge/edge.mjs`), the Gate E measurement scripts
+(`csp-inventory.mjs`, `csp-probe.mjs`) and the fingerprint helper live in the audit
+sandbox outside this repository, so they are cited by path rather than committed: they are host
 evidence, not application inputs. Quoted output below is verbatim from those
 files. Commands that are *part of the product contract* (`deploy/*.sh`,
 `scripts/runtime/*`) are in the repository and are named as such.
@@ -40,7 +42,7 @@ files. Commands that are *part of the product contract* (`deploy/*.sh`,
 | B | Backup and disaster recovery | **PASS**, four limits recorded (off-host durability, cron schedule, `age` encryption, dataset size) |
 | C | Migration forward-safety and rollback discipline | **PASS**, limits recorded (the `down()` chain is exercised as far as the one-way policy allows; no production-volume `ALTER TABLE` measurement — that is Gate F) |
 | D | Error surface and observability | **PASS with recorded gaps** — no leakage on any measured path; two serious defects found and fixed (readiness probe, FPM reload); envelope normalisation, request id and metrics/alerting recorded as open |
-| E | Content Security Policy | not yet executed (basis recorded: `SecurityHeaders.php` and `deploy/nginx/toefl-house.conf` emit the same five headers, with no CSP anywhere; only `ServeFile` sets a per-file policy) |
+| E | Content Security Policy | **PASS**, one gap recorded (no violation collector) — CSP now enforced at both layers, injection blocked in a real browser with a pre-CSP control, and the gate found a second defect: nothing installed the repo's edge config, so headers declared there never reached the web server |
 | F | Performance and capacity | not yet executed |
 
 
@@ -561,3 +563,199 @@ both directions — including the non-vacuity check that the health tests fail w
 "Failed asserting that 500 is not identical to 500" when the fix is reverted.
 What remains is recorded in §4: a normalised API error envelope, a request id, and
 any form of metrics or alerting.
+
+
+---
+
+## Gate E — Content Security Policy
+
+### 0. The recorded basis was wrong, and the correction matters
+
+The status table this gate replaces said the repository had five shared headers with
+"only `ServeFile` setting a per-file policy". `ServeFile` is framework code in
+`vendor/`, and this application never reaches it: `DocumentsController` returns
+metadata, not file bytes, so no response in the delivery path carried a
+per-file CSP. The measured state before this gate was plainer and worse —
+
+```
+$ grep -rn "Content-Security-Policy" app/ config/ deploy/ resources/ routes/ tests/
+(no output)
+```
+
+i.e. **no CSP at all**, at either layer, for an application whose 14 authenticated
+consoles execute JavaScript under a session cookie. The reconciliation file
+(`AUDIT-2026-09-08-RECONCILIATION.md` §8.2) had the substance right ("there is no
+`Content-Security-Policy` anywhere in the delivery path") and the parenthetical
+wrong; both are corrected here rather than left to disagree.
+
+### 1. What the deployed pages actually require, measured before writing the policy
+
+A CSP copied from a template gets relaxed until it passes, which is how headers
+become decorative. So `evidence/gates/csp-inventory.mjs` drove a real Chromium
+against the deployed release through the TLS edge — `/login` plus every console path
+taken from the repository's own E2E script — and scanned the shipped bundles:
+
+| measured | result |
+| --- | --- |
+| inline `<script>` elements / bytes | 0 / 0 on all 15 pages |
+| inline event handlers (`onclick=` etc.) | 0 |
+| script tags from another origin | 0 (every `<script src>` is `/build/…`, same origin) |
+| `blob:` / `data:` scripts, service workers | 0 |
+| `<iframe>`, `<object>`, `<embed>` | 0 |
+| `eval` / `new Function` / `document.write` in bundles | 0 / 0 / 0 |
+| `innerHTML` / `insertAdjacentHTML` assignments | 0 |
+| `URL.createObjectURL`, canvas `toDataURL` | 0 / 0 (no document preview leaves the server) |
+| `url()` or `@font-face` in built CSS, font requests | 0 `url()`, no font fetch |
+| inline CSS that *is* used | 1 `<style>` element (Vite) + 6 `style=""` attributes per page |
+| form actions | same-origin `/login`, `/logout` only |
+
+Raw output: `logs/csp-inventory.json`. That is why the policy below needs no nonce
+and no hash: there is nothing inline to allow.
+
+### 2. The policy, enforced at both layers
+
+```
+default-src 'self'; base-uri 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+img-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self';
+frame-ancestors 'none'; frame-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'self'
+```
+
+Sent identically by `App\Http\Middleware\SecurityHeaders::CSP_PRODUCTION` (documents,
+API, errors) and `deploy/nginx/toefl-house.conf` at **server scope** (static files,
+404s, 5xx). Deliberate exclusions, recorded in the middleware docblock: no
+`upgrade-insecure-requests` (it rewrites same-origin `http:` URLs and would break
+`php artisan serve`, protecting nothing here); no nonce (no inline script exists);
+`style-src 'unsafe-inline'` and nothing else (`innerHTML` is absent, Vite injects a
+`<style>` element, and inline CSS cannot execute script while inline JS can). Local
+development keeps working: outside production *and* when `public/hot` parses as an
+http(s) origin, the Vite dev-server origin is added to `script-src`/`connect-src`
+(with its `ws:` form for HMR) — production never carves out, so a stale `public/hot`
+left by a stray `npm run dev` cannot loosen a live deployment.
+
+`frame-src 'none'`/`object-src 'none'` were checked against the one feature that
+could have needed them: document/preview flows. `DocumentsController` serves metadata
+and never a file URL, and no view opens a `blob:` window — so no framing is required.
+
+### 3. Enforcement, with a control that proves the test is not vacuous
+
+Proving a CSP exists is not proving it bites. `evidence/gates/csp-probe.mjs` runs
+six injection attempts against a logged-in session and records three independent
+measurements each: the observable side effect the payload would produce, the page's
+own `securitypolicyviolation` events (which name the directive), and the number of
+requests that reached the web server (read from the edge access log, to separate
+"blocked by policy" from "the page was broken"). It was then run **twice**, against
+two releases, by moving the `current` symlink and reloading PHP-FPM — which doubles as
+a second rollback/roll-forward exercise:
+
+| probe (`evidence/gates/logs/`) | pre-CSP release `20260908201557` | with CSP, release `20260908210006` |
+| --- | --- | --- |
+| inline `<script>` sets a global | **`EXECUTED`** | `NOT-EXECUTED`, `script-src-elem`, 0 outbound |
+| inline `onclick` handler | **`EXECUTED`** | `NOT-EXECUTED`, `script-src-attr` |
+| remote `<script src>` | request reached the server | not loaded, `script-src-elem`, 0 outbound |
+| cross-origin `fetch` | request reached the server | refused, `connect-src`, 0 outbound |
+| injected `<iframe>` to a foreign origin | request reached the server | `SecurityError`, `frame-src`, 0 outbound |
+| form retargeted to a foreign origin | **navigation happened** (the page's execution context was destroyed by the POST) | no navigation, `form-action`, 0 outbound |
+| same-origin `GET /api/v1/notifications` | 200 | **200 application/json** |
+| violations during normal use (14 consoles + login + logout) | — | **0** |
+| repository browser E2E against the CSP release | 21/21 (pre-CSP baseline) | **21/21**, 25/25 API calls ok, 0 console errors, 0 failed requests |
+
+Header counts on the live deployment, after the release below was deployed:
+`/login` → 2 identical `Content-Security-Policy` lines (middleware + nginx's
+`add_header`, which *appends*; the browser enforces the union, and a real browser run
+of 21 flows plus 14 console renders shows that costs nothing), `/build/manifest.json`
+and `/robots.txt` → 1 (only the web server can header those), and `/favicon.ico`
+404 → 2 (error responses keep the header because it is declared with `always`).
+
+### 4. The second defect this gate found: the edge config was never installed
+
+While measuring (3), one control result initially looked wrong — and the reason was a
+real gap. The rehearsal's stand-in had its header set hard-coded, and when it was made
+to read the repository's config instead, the *pre-CSP* control still served a CSP,
+because it was reading the **working tree's** file rather than the deployed release's.
+Chasing that produced the actual finding for the product:
+
+```
+deploy.sh:  nginx -t >/dev/null 2>&1 && systemctl reload nginx 2>/dev/null || true
+```
+
+validates and reloads whatever the host already has; **no step in the repository ever
+copies `deploy/nginx/toefl-house.conf` to the host.** So every header declared in the
+versioned edge config applies only if an operator installed it at some earlier point —
+and the paths where the edge is the *only* header source (static files, 404s, 5xx) are
+exactly the ones left uncovered. Same class as the swallowed PHP-FPM reload from Gate
+D: an activation step that succeeds by doing nothing, with `|| true` hiding it.
+
+Fixed in `deploy/lib/nginx-edge-config.sh` (sourced helper, so it can be executed in a
+test): `NGINX_CONF_DEST` unset → warned about in the deploy output instead of
+silently skipped; identical file already installed → no reload (a release flip does
+not need one, since `root` is the `current` symlink resolved per request); host config
+already invalid → refuse *before* overwriting; new config rejected by `nginx -t` or
+not reloadable → restore the previous file, reload, exit 1. Rehearsed on the live
+cluster in all three directions:
+
+```
+logs/deploy11-edgeconfig.log   [deploy] edge config installed from the release: …/etc/nginx/conf.d/toefl-house.conf
+                               [deploy] nginx reloaded (nginx -s reload)
+                               [deploy] deployment OK: release 20260908205929 … is live and healthy
+logs/deploy12-edgeconfig-refused.log  host config pre-broken by hand:
+                               [deploy][ERROR] nginx -t already fails with the config the host has now;
+                               not replacing … with an untested file on top of a broken edge   → exit 1
+                               host file byte-identical afterwards, no backup written
+logs/deploy13-edgeconfig-recovered.log  operator repairs it differently from the release:
+                               [deploy] edge config installed from the release …  deployment OK: release 20260908210006
+                               previous host file preserved at …toefl-house.conf.pre-<release>
+```
+
+After (13) the edge was restarted reading *only* the installed path, which is how a
+real nginx gets it (`include /etc/nginx/conf.d/*.conf`), and the static-asset CSP in
+§3 is from that state — so the chain "commit → release → installed file → header the
+browser sees" is closed by execution, not by assertion.
+
+### 5. Tests added, and how each was shown to be capable of failing
+
+| test | guards | non-vacuity |
+| --- | --- | --- |
+| `SecurityHardeningFeatureTest::test_the_content_security_policy_leaves_no_hole_in_script_execution` | policy parsed into a directive map; `script-src` may not contain `unsafe-inline`/`unsafe-eval`, no `https:` wildcard anywhere, `img-src` may not allow `data:` | asserted per directive on purpose: a whole-header grep for `'unsafe-inline'` would have failed on the legitimate `style-src` allowance, and a `"script-src" is present` check passes with `script-src 'unsafe-inline'` |
+| `…::test_the_policy_covers_api_responses_as_well_as_pages` | JSON/error paths carry it too | — |
+| `…::test_the_web_server_config_and_the_middleware_agree_on_the_policy` | byte-identical strings, exactly one `add_header` for it, `always`, and **server scope** (depth scan of the config) | moving the directive into `location /` failed with `'server' !== 'location'`; the conf was then restored from git |
+| `…::test_the_dev_server_carve_out_is_scoped_to_a_hot_file_in_a_non_production_environment` | marker absent → strict; present in non-production → HMR origin only; production → never relaxes | — |
+| `NginxEdgeConfigTest` (8 tests, 39 assertions) | installs, skips reload when unchanged, refuses a broken host config, restores on rejection and on unreloadable config, requires `nginx` when a destination is set, and that `deploy.sh` sources/calls/undoes correctly | each case asserts on the file on disk and a reload marker produced by a stub `nginx`; the stub deliberately errors if it is not told which file to validate, because a stub that greps an empty path calls every config valid and all three refusal tests then pass vacuously |
+| `ShippedScriptPermissionsTest` (existing) | the new helper is non-executable and says so in its first lines | it failed on the first draft (the "sourced, not executed" note sat past line 20) and was fixed by matching `lib/retention.sh`'s header convention |
+
+Suite: **961 tests, 7,243 assertions, 1 skip** (was 957/7,205 before the CSP);
+`tests/Feature/Security` 19/124, `tests/Feature/Deployment` 75/385; Pint 872 files
+clean; PHPStan level 6 `[OK] No errors`.
+
+### 6. Recorded, not fixed
+
+* **No violation reporting.** `report-to`/`report-uri` are absent because the
+  repository has no collector to send to. The consequence is real: enforcing (rather
+  than `Content-Security-Policy-Report-Only`) means a future inline script simply
+  does not run, with the failure visible only in a browser console. Accepting a
+  report endpoint is a product decision (it receives URLs, referrers and user agents,
+  which is a privacy surface this application should not open casually), so it is
+  recorded rather than silently wired to some third party. §11 of the operations doc
+  states the consequence where someone editing a page will read it.
+* **`php artisan serve` and the Windows one-click runtime have no web-server config in
+  this repository**, so on those paths only the middleware's policy applies; static
+  files served directly are outside it. That asymmetry predates this gate (the other
+  five headers behave identically) and is the intended trade for keeping local
+  development honest rather than relaxed.
+* **Substitution, labelled:** the sandbox has no nginx binary, so `nginx -t`/`-s reload`
+  semantics are exercised through a stub that validates the installed file and records
+  the reload. The stub cannot catch a directive nginx itself would reject; that check is
+  therefore *structurally* verified (refuse-before-overwrite, restore-on-rejection) and
+  not syntactically. The header application in §3 is measured through the TLS stand-in,
+  which reads the installed config for real.
+
+### 7. Verdict
+
+**PASS**, one gap recorded (no violation collector). The policy is derived from a
+measured inventory rather than a template, it is enforced rather than report-only,
+`script-src` has no escape hatch, both layers send the identical string, and the
+header survives on the paths that have no application behind them. Enforcement is
+demonstrated in a browser against a control in which the same six payloads all
+succeeded, and the browser E2E passes 21/21 unchanged under the policy. The gate also
+turned up a delivery defect that made the edge half of the claim fiction — versioned
+config, never installed — now fixed, tested executably, and rehearsed in all three
+outcomes on the live cluster.
