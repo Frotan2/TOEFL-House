@@ -1,0 +1,334 @@
+# Production-readiness audit — gate evidence (2026-09-08)
+
+Companion to `AUDIT-2026-09-08-PRODUCTION-READINESS.md` and
+`AUDIT-2026-09-08-RECONCILIATION.md`. Those files record findings and
+decisions; **this file records execution**. Each gate is a claim about
+operational behaviour that was previously only asserted by documentation or
+reviewed by reading, and each was discharged by running the real thing and
+keeping the output.
+
+Method, applied to every gate:
+
+1. Reproduce the behaviour on a provisioned runtime, not a mock: real
+   PostgreSQL 18.4, real PHP-FPM, real `git` clone of the repository, real
+   `composer`/`npm ci`, real Chromium driving the deployed front end.
+2. When a defect appears, fix the root cause in the repository, add a test that
+   would have failed before the fix, and re-run the step.
+3. Record substitutions explicitly. A sandbox cannot execute every host
+   facility; where a component was reproduced rather than installed, that is
+   labelled rather than described as a pass.
+
+Runtime: PHP 8.4.14 (CLI+FPM), Composer 2.9.2, PostgreSQL 18.4 (server and
+client tools at the same minor, so `pg_dump`/`pg_restore` version skew is not in
+play), Node 22.22.3 / npm 10.9.8. Deployment scripts were rehearsed against a
+local clone (`REPO_URL`), because the GitHub credential available in this
+session expired mid-work; the clone path is otherwise identical.
+
+**Artifacts.** Raw transcripts (`logs/deploy*.log`, `logs/browser-edge-e2e.log`,
+`logs/drill/*`), the rehearsal drivers (`rehearse-deploy.sh`, `dr-drill.sh`,
+`edge/edge.mjs`) and the fingerprint helper live in the audit sandbox outside this
+repository, so they are cited by path rather than committed: they are host
+evidence, not application inputs. Quoted output below is verbatim from those
+files. Commands that are *part of the product contract* (`deploy/*.sh`,
+`scripts/runtime/*`) are in the repository and are named as such.
+
+## Gate status
+
+| Gate | Subject | Verdict |
+| --- | --- | --- |
+| A | Deployment rehearsal in the documented production topology | **PASS**, one labelled substitution (nginx reproduced by a TLS→FastCGI edge; its config is static-reviewed only) |
+| B | Backup and disaster recovery | **PASS**, four limits recorded (off-host durability, cron schedule, `age` encryption, dataset size) |
+| C | Migration and rollback forward-safety | in progress |
+| D | Error surface and observability | not yet executed |
+| E | Content Security Policy | not yet executed (basis recorded: `SecurityHeaders.php` and `deploy/nginx/toefl-house.conf` emit the same five headers, with no CSP anywhere; only `ServeFile` sets a per-file policy) |
+| F | Performance and capacity | not yet executed |
+
+
+---
+
+## Gate A — Deployment rehearsal in the documented production topology
+
+Executed 2026-09-08, 18:24–19:25 UTC, on the provisioned runtime (`.runtime/`:
+PHP 8.4.14 CLI+FPM, Composer 2.9.2, PostgreSQL 18.4, Node 22.22.3 / npm 10.9.8).
+Everything below was **run**, not reasoned about. The exact commands are in
+`/home/user/evidence/gates/rehearse-deploy.sh` and the raw transcripts in
+`/home/user/evidence/gates/logs/`.
+
+### 1. What was executed
+
+`deploy/deploy.sh <ref>` end to end, twice, plus `--rollback` three times:
+
+| Run | Ref | Result |
+|---|---|---|
+| rehearsal 1 | `ce7a837` (pre-fix) | **died, exit 126** — `backup.sh: Permission denied` (defect A-3) |
+| rehearsal 2 | `ce7a837` (pre-fix) | **died, exit 2** — retention pipeline (defect A-4) |
+| `deploy5` | `b4b5915`-dev | **died, exit 1** — `--count` on a virgin DB (defect A-5) |
+| `deploy6` | `b4b5915`-dev | **died, exit 1** — unquoted `APP_NAME` in *my* env file (operator error, not a repo defect) |
+| **`deploy7`** | `b4b5915` | **exit 0 — release live and healthy** |
+| **`deploy8`** | `b4b5915` | **exit 0 — re-deploy; retention kept 4 releases** |
+
+Successful run, verbatim milestones from `logs/deploy7.log`:
+
+```
+[deploy] deploying ref 'arena/01a081d4-toefl-house' to .../releases/20260908191433
+[deploy] php-fpm pool configuration verified            <- step 0 (added in 69baa0b)
+[deploy] source: commit b4b59152204d91de46f6dce57de55e1af46b787d
+  Installing laravel/framework (v12.67.0) … (73 packages, --no-dev)
+ENVIRONMENT LOCK: 8/8 satisfied                         <- step 2b, delegated (ce7a837)
+npm ci --engine-strict: added 171 packages; vite build: 12 chunks, built in 1.61s
+[backup] dump verified (pg_restore --list OK)           <- real pg_dump 18.4, step 5
+[backup] applying retention (keep last 14)
+[backup] backup complete
+  Creating migration table ......... 4.97ms DONE
+  2026_08_25_000001_create_organizations_table … 185 migrations on an EMPTY database
+[deploy] verifying release at https://127.0.0.1:8443/health
+[deploy] deployment OK: release 20260908191449 (commit b4b5915) is live and healthy
+```
+
+Real 185-migration replay against a never-migrated `toefl_house_prod` database,
+then activation behind a TLS edge that serves `public/` only.
+
+### 2. Journeys through the deployed release (not the working tree)
+
+`current -> releases/20260908191650`; PHP-FPM pool `[toefl-house]` on a unix
+socket; TLS edge on :8443; HTTP :8080 redirects.
+
+* `GET /health` → `200 {"status":"ok","service":"The TOEFL House","environment":"production","checks":{"database":"ok","application_key":"ok","frontend_build":"ok"}}`
+* `GET /login` → 200 (7 428 bytes of Blade-rendered HTML)
+* `GET /build/assets/access-BYV4IkXp.js` → 200, `Content-Type: text/javascript`
+  (static asset served from the release docroot, never through PHP)
+* `GET /.env` → **403**, `GET /index.php` → **403**, `GET http://…/login` → **301**
+* All five security headers present on every response including 403/502 (`always`)
+* `FirstRunBootstrapSeeder` executed **inside the release**: organization, Owner
+  role with 133 capabilities, account `runtime.owner`
+* **`npm run verify:browser` against `https://127.0.0.1:8443` → 21/21 passed**
+  (`logs/browser-edge-e2e.log`): real Chromium, login through the real form,
+  all 14 authenticated consoles rendered by the built React bundle,
+  25 `/api/v1` calls observed and 25 succeeded, zero console errors, zero
+  failed network requests, sign-out ends the session.
+
+### 3. Rollback semantics, exercised
+
+* **Compatible target** → `[deploy] target release verified against the live
+  schema: 20260908191449` then `rolled back application -> … (schema
+  compatibility verified)`, exit 0, 0.08 s; health after rollback: 200 for
+  `/health` and `/login` (the edge follows the symlink, so this is the rolled-
+  back release answering).
+* **Target missing an applied migration** (file deleted from the older release)
+  → exit 1, `current` **unchanged**, and the operator reads:
+  `refusing application-only rollback: live database contains migration(s)
+  absent from target release 20260908191449:
+  2026_08_25_000005_create_departments_table .`
+* **Database unreachable** (`DB_PORT` pointed at a closed port) → exit 1,
+  `current` unchanged, `cannot verify schema compatibility … (probe exit 2,
+  probe said: … connection refused)` — an unreadable state is never treated as
+  "compatible" (the earlier version of the probe *did* have that hole; it is now
+  locked by `test_it_reports_unverifiable_instead_of_compatible_when_the_database_cannot_be_reached`).
+
+### 4. Defects found by this rehearsal (each reproduced → fixed → tested → suite-green)
+
+| # | Commit | Defect |
+|---|---|---|
+| A-1 | `ce7a837` | Step 5/6 read schema state via `php artisan tinker`, which is not a dependency → *every* deployment died at "unable to read current migration state before deployment". Replaced by `deploy/schema-compatibility.sh` (psql, dependency-free, 0/1/2 exit contract). |
+| A-2 | `ce7a837` | Second copy of the runtime contract: exact pins (PHP 8.2.27 / Node 22.23.1 / npm 10.9.2 / PG 18.4) that rejected the certified runtime (8.4.14 / 22.22.3 / 10.9.8). deploy.sh now delegates to `verify-environment.mjs`; `npm ci --engine-strict` makes `package.json` engines binding; engines became the lock's ranges. |
+| A-2b | `62ff83d` | `deploy/schema-compatibility.sh` shipped without the exec bit while documenting path-style invocation. |
+| A-3 | `3c3179d` | `deploy/deploy.sh`, `backup.sh`, `restore.sh` committed 100644 → the documented `./deploy/deploy.sh` could not run, and the internal backup call aborted mid-deploy (exit 126, reproduced in rehearsal 1). |
+| A-4 | `c2742e8` | Retention pipelines under `set -o pipefail`: `ls` on a non-matching glob exits 2 and `grep -v` with nothing to remove exits 1 → a *verified* dump was reported as a failed backup, and a *healthy live* release would have been reported as a failed deploy. Now one tested helper, `deploy/lib/retention.sh`. |
+| A-4b | `73392eb` | My own fix sourced `deploy/deploy/lib/retention.sh`; added a test that resolves every `source` line in `deploy/*.sh`, and normalised `scripts/runtime/env.sh` (sourced-only) to non-executable. |
+| A-5 | `82c99c3` | `--count` referenced `public.migrations` inside a `to_regclass` guard → parse-time failure on a never-migrated database, i.e. on the *first* deploy to any new host. |
+| A-6 | `b4b5915` | Step 7 hardcoded `/etc/php/*/fpm/pool.d/toefl-house.conf` to learn the web user; when absent it silently used `www-data` and `chown` aborted the deploy *after* migrations ran. Pool location now configured once (`PHP_FPM_POOL`), `WEB_USER` overridable, and a failed chown is fatal only when ownership is genuinely wrong, with the remedy in the message. |
+| A-7 | (this commit) | The refusal message interleaved the probe's stderr (and any loader noise) into the operator-facing error; stdout is now the machine-readable list, stderr is quoted only in the "unverifiable" branch. |
+| A-8 | `69baa0b` | `deploy/php-fpm.conf` carried `opcache.*` as pool directives → `php-fpm -t` exit 78, "unknown entry 'opcache.enable'": the documented FPM install could not start. Moved to `deploy/opcache.ini` (conf.d), and deploy.sh step 0 now tests the installed pool. |
+
+### 5. Substitutions (host facts, labelled — not repo behaviour)
+
+* **No nginx binary** is installable here (no root; no PCRE/zlib/OpenSSL headers;
+  no package source). The edge is a purpose-built TLS terminator + FastCGI
+  relay (`/home/user/evidence/gates/edge/edge.mjs`) that mirrors
+  `deploy/nginx/toefl-house.conf` location-for-location: docroot `public/`,
+  `try_files $uri $uri/ @php`, `= /health`, `~ /\.` deny, `~ \.php$` 403, the
+  five `add_header … always`, 301 with `$host` (port excluded), TLS 1.2/1.3,
+  `fastcgi_param SCRIPT_FILENAME $document_root/index.php`, `fastcgi_read_timeout
+  60s`, and an access log. **The repo's nginx config file itself was therefore
+  not executed** — it remains static-reviewed; every *semantic* it declares was
+  reproduced and measured.
+* **FPM pool**: derived from `deploy/php-fpm.conf` with only host-bound values
+  rewritten (socket → evidence path, `user`/`group` → the unprivileged sandbox
+  account, log paths). All directives, pm sizing, `security.limit_extensions`,
+  slowlog and opcache policy (via `deploy/opcache.ini`) unchanged; `php-fpm -t`
+  accepts it. `deploy.sh` step 0 verified it.
+* **TLS leaf**: self-signed via `openssl req -x509` with SAN
+  `toeflhouse.example.com`, `localhost`, `127.0.0.1`. The health check verifies
+  it through `CURL_CA_BUNDLE` — the check was **not** weakened with `-k`. The
+  browser run needed `--ignore-certificate-errors` and
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` for the same reason.
+* **Composer** ran with `COMPOSER_DISABLE_NETWORK=1` (packagist is unreachable
+  from this sandbox): a real `install --no-dev` against `composer.lock` from the
+  warm cache, verified to produce a production-only vendor tree (no phpunit).
+* **pg client tools**: PostgreSQL 18.4 `pg_dump`/`pg_restore`/`psql` were not
+  present in the sandbox and are a documented prerequisite of these scripts
+  (`postgresql-client` ≥ server). They were supplied out-of-band, matching the
+  server's exact version, so `backup.sh`/`restore.sh` ran their real code path.
+* **Release source**: `REPO_URL=/home/user/TOEFL-House` (a local clone) because
+  the GitHub credential Arena injects expired mid-session, so pushes after
+  `3c3179d` are local-only and the private repo is not anonymously fetchable.
+  The clone/checkout logic is identical; re-running against `origin` is the same
+  command without `REPO_URL`.
+* `systemctl`/`service` and `nginx -t` in the activation step are absent here
+  and self-guarded (`|| true`); the FPM reload they perform was issued
+  manually where it mattered (opcache `validate_timestamps=0`).
+
+### 6. Verdict
+
+**Gate A: PASS with the substitution in §5** — the deployment procedure, the
+release layout, the backup precondition, the migration replay, the activation
+gate, the health verification, the retention and all three rollback outcomes
+were executed for real against PostgreSQL 18.4 with a real PHP-FPM and a real
+browser, after five deployment defects were reproduced and fixed. The only
+element not executed is the nginx binary; its configuration is unchanged and
+its behaviour was reproduced and measured rather than assumed.
+
+---
+
+## Gate B — Backup and disaster recovery, exercised
+
+Audited component: `deploy/backup.sh`, `deploy/restore.sh`, `deploy/lib/retention.sh`,
+and the recovery instructions in `docs/operations/production-deployment.md` §13–§14.
+Date: 2026-09-08/09 (UTC). Environment: the same live rehearsal cluster built for
+Gate A — PostgreSQL 18.4, PHP 8.4.14 FPM behind a TLS edge, database
+`toefl_house_prod` with 168 tables, 185 migrations and first-run bootstrap data
+(organization "The TOEFL House", Owner role with 133 capabilities, account
+`runtime.owner`).
+
+This gate answers one question: **if the database is destroyed, does the documented
+procedure bring it back, and does the application work afterwards?** Not "does the
+script look right". Everything below was executed against the real cluster.
+
+### 1. Preflight guards, executed
+
+| Case | Command | Result |
+| --- | --- | --- |
+| Restore without `--confirm`, existing dump | `deploy/restore.sh <newest dump>` | exit 1 — `refusing to restore without an explicit second argument '--confirm' (this overwrites the live database toefl_house_prod)` |
+| Restore of a missing file | `deploy/restore.sh /nonexistent.dump` | exit 1 — `backup file not found: /nonexistent.dump` (the file is resolved before the confirmation gate, so a typo is reported as such rather than as a confirmation refusal) |
+| `--latest` with an empty backup directory | `BACKUP_DIR=<empty> deploy/restore.sh --latest --confirm` | exit 1 — `no backup file given and no backup found in …`; never an empty filename passed to `pg_restore` |
+| Backup without client tools | `PATH=/usr/bin:/bin deploy/backup.sh` | exit 1 — `pg_dump not found on PATH. Install postgresql-client (>= server version).` |
+| Restore without client tools | `PATH=/usr/bin:/bin deploy/restore.sh --latest --confirm` | exit 1 — `pg_restore not found on PATH.` — the tools are checked before anything is read or written |
+
+The `pg_*` client used is PostgreSQL 18.4, matching the server (18.4), so
+`pg_dump`/`pg_restore` version skew — the classic silent-failure mode of a
+"backup that restores nothing" — is not in play.
+
+### 2. The drill: backup → total loss → restore
+
+Driver: `/home/user/evidence/gates/dr-drill.sh` (transcripts in
+`logs/drill/`, summary in `logs/drill/summary.txt`).
+
+1. **Fingerprint** the live database: exact per-table `count(*)` plus, for every
+   non-empty table up to 20 000 rows, `md5(string_agg(row_text ORDER BY row_text))`,
+   aggregated into one content digest. Row counts alone would accept a restore that
+   kept the count but lost the data.
+2. **Drill meaningfulness preconditions** (added after run 4 exposed the need):
+   total rows > 0, at least 5 non-empty tables to digest, `organizations ≥ 1`,
+   exactly 1 `runtime.owner` account, `roles ≥ 1`. Without these, a schema-only
+   restore of an empty dump "passes" trivially.
+3. **Back up** with `deploy/backup.sh`: `pg_dump --format=custom --compress=6
+   --no-owner --no-privileges`, then `pg_restore --list` integrity check, then
+   retention pruning (keep 14).
+4. **Write a row after the backup** (table `post_backup_write`) — this must be
+   *lost*, and is the honest measurement of the RPO boundary.
+5. **Destroy**: `DROP DATABASE toefl_house_prod WITH (FORCE); CREATE DATABASE
+   toefl_house_prod;` — total loss, connections still attached.
+6. **Restore** with `deploy/restore.sh --latest --confirm`.
+7. **Verify**: fingerprint again (digest must be identical, total rows equal,
+   seeded rows present, owner `password_hash` intact), the post-backup table must be
+   gone, then the real browser journey against the recovered database.
+
+#### Measured result
+
+| Step | Duration |
+| --- | --- |
+| `backup.sh` (dump + verify + retention) | 246 ms |
+| destroy (drop + create database) | 166 ms |
+| `restore.sh --latest --confirm` | 876 ms |
+| fingerprint + comparison | 99 ms |
+| **RTO (restore + verify, time to serviceable)** | 975 ms |
+| Browser journey on the recovered database | 21/21 passed in 16.8 s (real Chromium through the TLS edge, against the recovered database) |
+
+Facts recorded by the run: tables 169, exact rows 346, migrations
+185, content digest `7055417d9a2f8cd4b9a1996e34861b40` identical before and after, `organizations`
+and the `runtime.owner` account (including its password hash prefix) restored, and
+`post_backup_write` correctly absent.
+
+Against the documented objectives: **RPO** = the last nightly backup (a manual
+`backup.sh` run was the boundary measured here — the 24 h figure is a schedule
+claim, not something the drill can prove; the drill proves only that *a* dump
+taken at T restores the state at T). **RTO** — the docs said "minutes for the
+expected dataset size"; measured at 168 tables / ~1.3 MB dump it is under a
+second on a warm cluster. `deploy/restore.sh` now records the measured number
+next to the estimate instead of only the estimate.
+
+### 3. Defects found by this gate (reproduced → fixed → tested)
+
+| # | Defect | How it was found | Fix |
+| --- | --- | --- | --- |
+| B-1 | `restore.sh` interpolated `$HEALTH_URL` in its closing message but never defined it; under `set -u` **every** restore — including a fully successful one — ended with `HEALTH_URL: unbound variable` and exit 1 | The drill's exit code was asserted, and it came back 1 while the data was demonstrably back | `HEALTH_URL` is now an overridable host input with a default, next to the other host facts |
+| B-2 | `pg_restore --clean --create` on a target database that still exists emits `DROP DATABASE` → "cannot drop the currently open database", then `CREATE DATABASE` → "already exists"; pg_restore ignores both, restores everything, and **exits 1** | The first drill run: correct data, exit 1 | `--create` removed. The script checks `pg_database` and creates the target itself (aborting with a named remedy if that fails), then restores `--clean --if-exists`. Pinned by `RestoreProcedureContractTest::test_pg_restore_is_not_asked_to_create_the_database` |
+| B-3 | `phpunit.xml`'s `<env>` entries were not `force`d, so a shell-exported `DB_DATABASE` wins over the declared test database — and `Tests\TestCase` uses `RefreshDatabase`, whose first step is `migrate:fresh` (drops every table). **The suite can delete a production database.** | The drill's seed data vanished between two runs; only the exported `DB_DATABASE=toefl_house_prod` in the invoking shell explains it, and a canary table confirmed the suite had run `migrate:fresh` against `toefl_house_prod` | `force="true"` added to the isolation-critical entries (`APP_ENV`, `DB_CONNECTION`, `DB_DATABASE`, `CACHE_STORE`, `SESSION_DRIVER`, `QUEUE_CONNECTION`) |
+| B-4 | …but `force="true"` is **not sufficient** in this stack: PHPUnit writes forced values to `getenv()`/`$_ENV`, while PHP also copies the process environment into `$_SERVER` (`variables_order=EGPCS`) and Laravel's `env()` reads `$_SERVER` first. Measured: with `force="true"` present, `config('database.connections.pgsql.database')` was still `toefl_house_prod` and the canary was still dropped | The canary experiment run *after* applying B-3's fix — the fix looked right and was not | `tests/bootstrap.php` (already the configured bootstrap) re-asserts every `force="true"` entry into `$_SERVER`, `$_ENV` and `getenv()`, making `phpunit.xml` authoritative. Proven executably: a child process with a hostile `$_SERVER['DB_DATABASE']` ends up pinned to `toefl_house_test` in all three channels |
+| B-5 | Defense in depth for the same hazard from the other direction: a stale `bootstrap/cache/config.php` (or any future precedence change) can make the *resolved* connection differ from the declared one, with no warning anywhere | Identified while designing B-4; a cached config makes Laravel ignore `.env` and the test environment entries entirely | `Tests\Support\TestDatabaseGuard` runs in `TestCase::refreshApplication()`, i.e. after the container exists and **before** `setUpTheTestEnvironment()` reaches `setUpTraits()` where `RefreshDatabase` migrates. Any divergence aborts the run with the remedy in the message |
+| B-6 | `restore.sh`'s header documented usage without the mandatory `--confirm`, so the documented command always hit the refusal | Reading the script's own usage block against its behaviour | Usage block corrected, and `TestDatabaseIsolationTest`-style text pin added: `test_usage_documents_the_required_confirm_argument` asserts every documented invocation carries `--confirm` |
+
+Two notes on *why B-5's guard sits where it sits*: the obvious placement,
+`setUp()` before `parent::setUp()`, fails with `Target class [config] does not
+exist` because the application is only created inside `parent::setUp()`; and a
+guard that reads the declaration from `phpunit.xml` must read the **`value`
+attribute**, not the element text — `(string) $env` is `''`, and an empty
+declaration silently disables the guard. Both were hit while building this and are
+now covered by assertions (`test_the_guard_aborts_when_the_resolved_database_diverges_from_the_declaration`
+asserts the parsed declaration equals `toefl_house_test`, so a broken parse cannot
+quietly disarm it; the same trap in `tests/bootstrap.php` blanked `CACHE_STORE` and
+surfaced as `Cache store [] is not defined` during application boot).
+
+### 4. What was *not* proven here (substitutions and limits)
+
+* **No off-host durability.** The scripts write dumps into `BACKUP_DIR` on the same
+  filesystem as the data. `docs/operations/production-deployment.md` already tells
+  operators to ship dumps to object storage; that step cannot be executed or measured
+  in this sandbox, so "the backup survives the loss of the host" is **not** verified
+  by this gate — only "the backup survives loss of the database".
+* **No cron.** The "nightly" schedule (and therefore the RPO figure of 24 h) is a
+  deployment-time configuration claim. The drill proves the mechanism at an arbitrary
+  time; `backup.sh` is invoked exactly as the documented cron line invokes it.
+* **Optional `age` encryption** is unverified: `age` is not installed and not
+  installable here (no package network). The script's behaviour in that case is
+  deliberate — it logs `age not installed; leaving unencrypted` rather than failing
+  silently or dropping the backup — but "encryption at rest for dumps" is not proven.
+* **Single-instance, same-cluster restore.** `--clean --if-exists` restores into the
+  cluster's own database. A cross-version or cross-provider restore (e.g. RDS) is
+  not exercised.
+* **Timings are from a small database.** 168 tables / ~1.3 MB is the *current*
+  production-shaped dataset size, not an expected peak; the RTO claim is therefore
+  "measured at this size, budget minutes at larger sizes", as recorded in the script
+  header.
+* The drill destroys and recreates `toefl_house_prod` in the rehearsal cluster only.
+  It is destructive by design and must not be pointed at a live host without editing
+  `DB`/`BACKUP_DIR` at the top of `dr-drill.sh`.
+
+### 5. Verdict
+
+**PASS**, conditional on the caveat that off-host durability and the nightly schedule
+are configuration claims this environment cannot execute. Everything the repository
+itself controls for recovery — dump creation and integrity verification, retention,
+the refusal semantics of the restore, restore-then-verify fidelity down to row
+content, the RPO boundary, and the application's behaviour on recovered data — was
+executed, and five defects were found in the process, two of which (B-1, B-2) made
+the documented recovery procedure report failure on success and one of which (B-3/B-4)
+let the test suite delete a production database.
+
+Test coverage added for this gate: `tests/Feature/Deployment/RestoreProcedureContractTest.php`
+(6 tests, including `test_a_successful_restore_exits_zero`, which runs the script
+end-to-end against stubbed `pg_restore`/`psql` so the exit code is verified with no
+server present) and `tests/Feature/Deployment/TestDatabaseIsolationTest.php`
+(6 tests: forced entries, dedicated database name, deliberately overridable
+connection coordinates, executable bootstrap-precedence proof, guard fires on
+divergence, guard quiet on match).
