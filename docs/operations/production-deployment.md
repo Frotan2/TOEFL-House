@@ -507,14 +507,24 @@ databases, with `--task=reset` to zero the counters before a run; without the re
 numbers describe the whole life of the cluster rather than the thing you just changed.
 
 **What the read paths cost.** A single authenticated API request over the identity
-surface issues ~30 queries, and that number is flat in row count (measured at 1 and at
-1,001 visible rows: `tests/Feature/Performance/ReadPathEnvelopeTest.php`). Most of
-those 30 are the authenticated-request backdrop — session start, the employee-session
-check, and resolving `identity.admin` across organization, role, position, assignment
-and grant rows — not the list query, which is two of them. That is affordable at the
-traffic this application is built for, and it is the first place to look (cache the
-resolved authority set per request, then per session) if the JSON API gains subscribers
-or a dashboard starts polling.
+surface issues 24 queries with one active branch, and that number is flat in row count
+(measured at 1 and at 1,001 visible rows:
+`tests/Feature/Performance/ReadPathEnvelopeTest.php`). Two of the 24 are the list; the
+rest is the authenticated-request backdrop — session start, the employee-session check,
+and resolving `identity.admin` across organization, campus, position, assignment, grant
+and delegation rows. The backdrop is where the growth risk is, and it grows with the
+*tenant's shape*, not its volume: **13 queries per additional active branch**, because
+`authorizedBranches()` resolves the canonical decision once per branch (measured 24 /
+37 / 76 / 167 queries at 1 / 2 / 5 / 12 active branches,
+`tests/Feature/Access/AuthorityResolutionBranchSlopeTest.php`). A single-branch
+installation never sees this; a district with 20 branches pays ~260 queries of authority
+resolution per API request while its tables stay the same size. Gate F reduced the fixed
+part (HR eligibility was consulted four times per decision and is now memoized once —
+30 → 24 queries, ~15% off p50) and deliberately left the per-branch loop alone, because
+that loop is a fail-closed design choice; collapsing it is an authorization decision to
+record in `docs/05-SECURITY-RBAC-GOVERNANCE.md`, not an optimization to slip in. If a
+dashboard starts polling the API, the first lever is that loop, and the second is the
+number of active branches an actor's grants reach.
 
 **The tail is set by the pool, not by SQL.** Measured on a 2-core box with the same
 request (~15 ms of work): one `php -S` worker produced mean latencies of 12 / 46 / 74 /

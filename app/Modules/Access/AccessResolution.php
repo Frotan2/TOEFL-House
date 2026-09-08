@@ -31,6 +31,27 @@ use Carbon\CarbonImmutable;
  */
 final class AccessResolution implements AccessDecision
 {
+    /**
+     * HR eligibility is a fact about one person, and a single decision consults
+     * it four times per pass — once before merging the scope-key sources, then
+     * once inside each of the three sources — and again per delegator. Each
+     * consult is two queries against `employments`, so an actor with no
+     * delegations was paying eight queries to answer one question, and
+     * `Controller::authorizedBranches()` repeats the whole pass once per active
+     * branch (measured in Gate F: `employments` ×8 of 30 queries per identity
+     * API request).
+     *
+     * The memo is cleared at the start of every decision instead of living for
+     * the request, because the container binding is a singleton: under FPM the
+     * two are the same lifetime, but a long-running worker would otherwise carry
+     * an employment answer from one request into the next, and an authorization
+     * fact that is stale by one request is not a performance problem, it is a
+     * defect.
+     *
+     * @var array<string, bool>
+     */
+    private array $eligibilityMemo = [];
+
     public function __construct(private readonly ?CarbonImmutable $effectiveTime = null) {}
 
     public function decide(Actor $actor, string $capability, ?StructureScope $scope): Decision
@@ -38,6 +59,8 @@ final class AccessResolution implements AccessDecision
         if ($actor->actorId === '') {
             return Decision::deny('actor identity missing');
         }
+
+        $this->eligibilityMemo = [];
         if ($scope?->isUnknown()) {
             return Decision::deny('target provenance is unknown');
         }
@@ -79,9 +102,14 @@ final class AccessResolution implements AccessDecision
      */
     private function employmentEligible(string $personId): bool
     {
+        $key = trim($personId);
+        if (array_key_exists($key, $this->eligibilityMemo)) {
+            return $this->eligibilityMemo[$key];
+        }
+
         $hasEmployment = Employment::query()->where('person_id', $personId)->exists();
         if (! $hasEmployment) {
-            return true;
+            return $this->eligibilityMemo[$key] = true;
         }
 
         /** @var Employment|null $current */
@@ -91,7 +119,8 @@ final class AccessResolution implements AccessDecision
             ->orderByDesc('id')
             ->first();
 
-        return $current !== null && $current->lifecycle_state === EmploymentLifecycle::STATE_ACTIVE;
+        return $this->eligibilityMemo[$key] = $current !== null
+            && $current->lifecycle_state === EmploymentLifecycle::STATE_ACTIVE;
     }
 
     /** @return list<string> */

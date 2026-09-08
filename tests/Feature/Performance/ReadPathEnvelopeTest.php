@@ -54,6 +54,9 @@ final class ReadPathEnvelopeTest extends TestCase
     /** `IdentityApiController` limits both lists to 300 rows; the rule is that it does. */
     private const LIST_BOUND = 300;
 
+    /** Queries each additional active branch adds to the authority resolution. */
+    private const AUTHORITY_QUERIES_PER_ACTIVE_BRANCH = 14;
+
     /** Wall-clock ceiling, loose on purpose: this catches queueing, not jitter. */
     private const P95_CEILING_MS = 1500.0;
 
@@ -110,11 +113,29 @@ final class ReadPathEnvelopeTest extends TestCase
                 ' visible rows: query count is tracking the data, which is the join-per-row signature'
             );
 
+            // The ceiling grows with the number of active branches, not with rows:
+            // `Controller::authorizedBranches()` resolves the canonical decision once
+            // per branch (measured at 13 queries each — see
+            // tests/Feature/Access/AuthorityResolutionBranchSlopeTest.php). Padding the
+            // budget by that term keeps this assertion about the thing it is testing —
+            // that the *data* adds no queries — instead of turning it into a fixture
+            // census that fails the day someone adds a branch.
+            $budget = self::QUERY_CEILING
+                + self::AUTHORITY_QUERIES_PER_ACTIVE_BRANCH * max(0, $this->activeBranchCount() - 1);
+
             $this->assertLessThanOrEqual(
-                self::QUERY_CEILING,
+                $budget,
                 $after[$endpoint]['queries'],
-                "{$endpoint} issued {$after[$endpoint]['queries']} queries per request — over the ceiling of "
-                .self::QUERY_CEILING.' even before any growth is considered'
+                sprintf(
+                    '%s issued %d queries per request against a budget of %d: %d, plus %d for each of the %d active '
+                    .'branches whose authority has to be resolved before the list is read',
+                    $endpoint,
+                    $after[$endpoint]['queries'],
+                    $budget,
+                    self::QUERY_CEILING,
+                    self::AUTHORITY_QUERIES_PER_ACTIVE_BRANCH,
+                    $this->activeBranchCount()
+                )
             );
 
             $this->assertLessThanOrEqual(
@@ -128,14 +149,20 @@ final class ReadPathEnvelopeTest extends TestCase
                 )
             );
 
+            $tables = [];
+            foreach ($after[$endpoint]['groups'] as $table => $count) {
+                $tables[] = $table.'×'.$count;
+            }
+
             $report[] = sprintf(
-                '  %-28s rows=%-6s queries=%-3d p50=%7.2fms p95=%7.2fms json=%d B',
+                "  %-28s rows=%-6s queries=%-3d p50=%7.2fms p95=%7.2fms json=%d B\n      tables: %s",
                 $endpoint,
                 number_format($after[$endpoint]['rows']),
                 $after[$endpoint]['queries'],
                 $after[$endpoint]['p50_ms'],
                 $after[$endpoint]['p95_ms'],
-                $after[$endpoint]['bytes']
+                $after[$endpoint]['bytes'],
+                implode(', ', $tables)
             );
         }
 
@@ -232,12 +259,41 @@ final class ReadPathEnvelopeTest extends TestCase
             SQL);
     }
 
+    private function activeBranchCount(): int
+    {
+        return (int) DB::table('branches')->where('lifecycle_state', 'active')->count();
+    }
+
     private function quote(string $value): string
     {
         return DB::connection()->getPdo()->quote($value);
     }
 
-    /** @return array<string, array{queries: int, rows: int, p50_ms: float, p95_ms: float, bytes: int}> */
+    /**
+     * A per-request cost breakdown, not an assertion: which tables a request touches
+     * and how often decides whether a future optimization is about the read or about
+     * the authenticated-request backdrop, and a number without that split is a number
+     * an operator cannot act on.
+     *
+     * @param  list<array{query: string, bindings: list<mixed>, time: float}>  $log
+     * @return array<string, int>
+     */
+    private function groupQueryLog(array $log): array
+    {
+        $groups = [];
+
+        foreach ($log as $entry) {
+            preg_match('/\bfrom\s+(?:"?([a-z_]+)"?)|\binto\s+(?:"?([a-z_]+)"?)|\bupdate\s+(?:"?([a-z_]+)"?)/i', $entry['query'], $m);
+            $table = $m[1] ?? ($m[2] ?? ($m[3] ?? 'other'));
+            $groups[$table] = ($groups[$table] ?? 0) + 1;
+        }
+
+        arsort($groups);
+
+        return $groups;
+    }
+
+    /** @return array<string, array{queries: int, rows: int, p50_ms: float, p95_ms: float, bytes: int, groups: array<string, int>}> */
     private function profile(): array
     {
         $measured = [];
@@ -256,7 +312,8 @@ final class ReadPathEnvelopeTest extends TestCase
                 $started = microtime(true);
                 $response = $this->getJson($endpoint);
                 $timings[] = (microtime(true) - $started) * 1000;
-                $queries = count(DB::getQueryLog());
+                $log = DB::getQueryLog();
+                $queries = count($log);
                 DB::disableQueryLog();
 
                 $response->assertOk();
@@ -267,6 +324,7 @@ final class ReadPathEnvelopeTest extends TestCase
 
             sort($timings);
             $measured[$endpoint] = [
+                'groups' => $this->groupQueryLog($log),
                 'queries' => $queries,
                 'rows' => $rows,
                 'p50_ms' => round(($timings[1] + $timings[2]) / 2, 2),
@@ -285,7 +343,8 @@ final class ReadPathEnvelopeTest extends TestCase
             return;
         }
 
-        fwrite(STDOUT, "\nGate F read-path envelope, ".self::VOLUME." amplified identity rows (timings on 2 shared cores, indicative only)\n"
+        fwrite(STDOUT, "\nGate F read-path envelope, ".self::VOLUME.' amplified identity rows, '
+            .$this->activeBranchCount()." active branches (timings on 2 shared cores, indicative only)\n"
             .implode("\n", $lines)."\n");
     }
 }

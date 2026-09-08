@@ -872,8 +872,8 @@ owns, so the amplification rolls back and cannot leak into a sibling test.
 
 | Endpoint | visible rows in scope | rows returned | queries before growth | queries after growth | p50 | p95 | JSON |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/api/v1/identity/people` | 1,001 | 300 (at `limit(300)`) | 30 | 30 | 17.4 ms | 17.9 ms | 50,103 B |
-| `/api/v1/identity/accounts` | 1,001 | 300 (at `limit(300)`) | 30 | 30 | 19.5 ms | 22.2 ms | 43,482 B |
+| `/api/v1/identity/people` | 1,001 | 300 (at `limit(300)`) | 30 | 30 → 24 §3.1 | 17.4 → 14.7 ms | 17.9 → 16.1 ms | 50,103 B |
+| `/api/v1/identity/accounts` | 1,001 | 300 (at `limit(300)`) | 30 | 30 → 24 §3.1 | 19.5 → 15.9 ms | 22.2 → 16.1 ms | 43,482 B |
 
 Read the middle columns as the finding: across a ~100× increase in rows the request
 issued **the same 30 queries**. `IdentityApiController::accounts()` filters with
@@ -907,6 +907,78 @@ Failed asserting that 300 is less than 30.
 and a companion test refuses to measure anything if the amplified rows are not
 actually visible to the actor — because branch scoping is exactly how a "fast at
 volume" test can end up reading an empty table, and an empty list satisfies any bound.
+
+### 3.1 The 30 queries were not one finding but two, and the gate fixed one of them
+
+A query count of 30 for a request that reads one bounded list is a number worth opening
+up, so the report (`GATE_F_REPORT=1`) attributes it per table:
+
+```
+/api/v1/identity/people   queries=30   employments×8, access_policies×4, people×2,
+                                        position_assignments×2, positions×2,
+                                        scope_grants×2, delegations×2, organizations×2,
+                                        branches×2, campus_assignments×2, campuses×2
+```
+
+Two of those 30 are the list. Eight are the same question asked four times:
+`AccessResolution::authorityScopeKeys()` checks HR employment eligibility before
+merging its scope sources, and then each of the three sources — `roleDerivedScopeKeys`,
+`grantedScopeKeys`, `delegatedScopeKeys` — checks it again for the same person, each
+check being two queries against `employments`. Nothing about the shape of the data makes
+that happen; it is a fixed per-decision tax, and it was paid on every authenticated API
+request in the product.
+
+Fixed in this gate: the resolver memoizes eligibility for the duration of one decision
+(`app/Modules/Access/AccessResolution.php`), which is the only lifetime that is correct
+in both topologies — the container binding is a singleton, so a request-lifetime cache
+would be fine under PHP-FPM and wrong in any long-running worker. The result is the
+`→ 24` column above and a ~15% cut in p50 on both endpoints for one line of logic, with
+every authorization decision unchanged. What made the change safe to make at all is that
+`tests/Feature/Access/` — the most heavily tested module in the repository — **contained
+no mention of employment eligibility**, so there was no behaviour test to break and now
+there is one to keep: `EmploymentEligibilityResolutionTest` pins that a person with no
+HR row keeps granted authority, that a terminated employment revokes it, that
+re-employment restores it, that eligibility is *re-resolved* for the next decision
+rather than carried over, and that one decision answers it with at most two queries.
+Writing the fixtures surfaced three more domain rules the same way:
+`employments_lifecycle_guard()` refuses an employment that was not admitted as
+`candidate`, and `employments_one_open_per_person` means "the newest employment is
+terminated" can only be reached by terminating one — the fixture tried to insert its way
+past both and was told no, which is the guards working and the test being written against
+the real schema rather than a convenient one.
+
+The second finding is the one the volume experiment could not see. `employments×8`
+became `×2`, but the count of passes stays, because `Controller::authorizedBranches()`
+resolves the canonical decision **once per active branch**:
+
+| Active branches | queries for one bounded identity list |
+| --- | --- |
+| 1 | 24 |
+| 2 | 37 |
+| 5 | 76 |
+| 12 | 167 |
+
+That is 11 + 13 × branches: a flat line in data and a straight ramp in tenant *shape*. A
+12-branch network pays 155 queries to learn what its officer may see and one to fetch
+it. This is exactly the class of scaling the register's review-only claim was about, and
+it is invisible to a test that grows rows — the four measurements above read the same
+single row. It is now a committed rule with a slope rather than a ceiling
+(`AuthorityResolutionBranchSlopeTest`): the per-branch term may not grow, and because a
+ceiling must not forbid an improvement, a future change that collapses the loop into one
+memoized pass would pass the same test at a slope near zero. The `ReadPathEnvelopeTest`
+ceiling was made branch-aware (40 + 14 per extra active branch) for the same reason: an
+absolute query count that silently depends on how many branches the fixture happens to
+create is a number that fails for the wrong reason the day someone adds a branch.
+
+Recorded rather than fixed, because it is a design decision and not a bug: the per-branch
+loop could be replaced by resolving organization-root authority once and matching each
+branch's `coveringScopeKeys()` against it. That is a real change to how fail-closed
+authority is established (the code comment on `authorizedBranches` explains why the hint
+set is not trusted), it would want the decision recorded in
+`docs/05-SECURITY-RBAC-GOVERNANCE.md`, and it is not something to slip into a performance
+gate. The doctrine doc now states the rule that the memo must not outlive a decision and
+that collapsing the loop is a decision change, so the next person finds the constraint
+where they will read it.
 
 ### 4. DDL at 1,000,000 rows — Gate C's deferred question
 
@@ -1009,12 +1081,16 @@ so the operations doc now states what to set it to.
 | Artifact | What it guarantees | How it was shown to be capable of failing |
 | --- | --- | --- |
 | `tests/Feature/Performance/ReadPathEnvelopeTest.php` (3 tests, 48 assertions) | query count identical between 1-row and 1,001-row scope, ≤ 40 queries per request, p95 under a loose ceiling, lists ≤ `limit(300)` while provably containing amplified rows | tightening `LIST_BOUND` to 30 made the bound test fail with "returned 300 rows"; the fixture asserts it reached its own volume before any timing claim is trusted |
+| `app/Modules/Access/AccessResolution.php` + `tests/Feature/Access/EmploymentEligibilityResolutionTest.php` (5 tests) | HR eligibility is consulted once per decision instead of four times, and the memo dies with the decision; the access suite now covers the eligibility gate it previously never mentioned | the pinned count is `assertSame(1)` and `assertSame(2)` rather than a ceiling, so the fix cannot be "improved" into a request-lifetime cache; the drift test re-resolves between two decisions and would fail on such a cache; the fixture itself was constrained by `employments_lifecycle_guard()` and `employments_one_open_per_person` |
+| `tests/Feature/Access/AuthorityResolutionBranchSlopeTest.php` (2 tests) | per-request authority cost is bounded at 14 queries per additional active branch and does not move with the number of visible rows | its first assertion *requires* the count to change when branches are added, so the slope test cannot pass by measuring nothing; measured slope on the box is 13.0 |
 | `scripts/runtime/perf-envelope.php` | the instrument for §4/§6: `--task=status\|endpoints\|amplify\|stats\|reset\|ddl` against a real database, with the system tables (migrations, cache, sessions, jobs…) excluded from amplification targets | it took four rounds to work: `char(36)` truncation made a perturbed key equal to the original, a unique index existed only in `pg_index` and was invisible to `pg_constraint`, a re-derived value was silently truncated by its own `varchar(n)` cast, and `ALTER TABLE … DISABLE TRIGGER` is refused once the transaction has queued trigger events |
 | `config/cors.php` + `tests/Feature/Security/ApiCorsPostureTest.php` (6 tests) | the cross-origin posture is declared rather than inherited: `api/*` only, no origin named, `supports_credentials => false`, and a wildcard in `CORS_ALLOWED_ORIGINS` filtered out rather than honoured | a listed origin does receive `Access-Control-Allow-Origin` (and, with credentials switched on, `Access-Control-Allow-Credentials: true`) — so the "no header for everyone else" assertions are measuring a config that is read, not a no-op |
 | `scripts/runtime/provision.sh` (client tools) | installs `psql`/`pg_dump`/`pg_restore` from the same 18.4 build as the server, which is what makes the documented backup/restore and schema-compatibility mechanisms executable instead of aspirational | `SchemaCompatibilityProbeTest` exited 2 (unverifiable) before this, and now runs; the provisioner fails loudly if `psql --version` disagrees with the pinned server version |
 
 ### 8. Recorded, not fixed
 
+* **The per-branch authority loop is left as designed** (§3.1): the fix removes duplicated work inside each decision, not the decision per branch. Collapsing it is an authorization-semantics change that belongs in a decision entry, and `docs/05-SECURITY-RBAC-GOVERNANCE.md` now says so where a reviewer of that code will read it.
+* **`ActorBranches::employmentEligible()` still re-answers per call** (it is consulted once per pass, not four times, so it was left alone); if the branch loop is ever collapsed, this is the second place to look.
 * **There is no performance SLO in the repository to certify against**, so no absolute
   latency claim is made anywhere above and the committed tests assert shape, not speed.
   A future gate needs a number from the product owner, not from this audit.
@@ -1041,7 +1117,11 @@ unbounded queries" is now a measured property with a committed test that fails i
 regresses, and the register's unexplained ~500 ms has been attributed by
 experiment — it is a queue in front of a single-worker dev server, not an expensive
 endpoint, with the caveat that the first instrument for that question was itself wrong
-(§2) and the conclusion only survived when the burst generator was fixed. Gate C's deferred question is answered in the
+(§2) and the conclusion only survived when the burst generator was fixed. The gate also found, fixed and covered a defect
+that no functional test could have reported: eight queries per request spent re-asking
+one HR eligibility question, reduced to two with every authorization decision unchanged,
+and the *shape* law it exposed — authority resolution costs 13 queries per active
+branch — is now a committed slope rule. Gate C's deferred question is answered in the
 direction the policy assumed — the permitted migration forms are millisecond-cheap at
 1M rows and the forbidden ones stall writers for seconds — with the caveat that both
 `ALTER TABLE` and index builds were measured on a synthetic table in a sandbox. What
