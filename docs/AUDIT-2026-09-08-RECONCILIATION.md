@@ -147,7 +147,7 @@ Re-run on this branch in the repository's own provisioned runtime
 | Readiness on a running instance | `GET /up`, `GET /health` | 200 / `{"status":"ok","checks":{"database":"ok","application_key":"ok","frontend_build":"ok"}}` |
 | Security headers on a live response | `curl -I /login` | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `Cache-Control: no-store, private` |
 | Deployment bootstrap path | `db:seed --class=FirstRunBootstrapSeeder` | PASS — `organization "The TOEFL House", Owner role (133 capabilities) and account "runtime.owner" created`, i.e. the privileged-bootstrapping route a fresh install actually uses |
-| CI on this branch | `Verification` workflow, run `34252336159` | *(see §9.1 — recorded when the run on the pushed branch completes)* |
+| CI on this branch | `Verification` workflow, run `34252336159` | Frontend **PASS** · Static analysis **PASS** · Backend *running* (this is the gate that was red at `f0e1424` and at `9225b33`) |
 
 **A correction of this correction (kept for the record).** While reviewing §7's
 schema row, a static reading of `database/migrations` produced 165 `Schema::create`
@@ -252,6 +252,26 @@ path. None of the two input branches evidenced these; a "no changes required bef
 production deployment" claim that skips the protocol's own checklist is exactly the
 failure mode this reconciliation exists to prevent.
 
+### 9.1 This verdict agrees with the repository's own registers
+
+The gaps above are not an outside reviewer's importation — they are what the
+project's normative documents already say, which is precisely why the imported
+certification's "no changes required before production deployment" is the odd one
+out:
+
+| Source | Its own words |
+|---|---|
+| `docs/reference/current-state-compliance-evidence.md` C-28 | backup/restore is **PARTIALLY ACHIEVED** — *"Current official-environment drills still required"* |
+| `docs/12-OPERATIONS-DEPLOYMENT-DR.md` | *"A documented recovery plan is not equivalent to a successful recovery drill."* |
+| `docs/ai/07-RELEASE-CERTIFICATION-PROTOCOL.md` | a release claim additionally requires deployment rehearsal, readiness verification, and *"Schema compatibility must be demonstrated; a symlink rollback alone is not evidence of database rollback"* |
+| `docs/RUNTIME_VERIFICATION_HANDOFF.md` Part I.5 | *"Release certification still additionally depends on the items that remain genuinely runtime/host-gated here"* |
+| `config/logging.php` | file-based `stack`/`single` channels and a `null` deprecations channel — no metrics or alert sink is configured in-repo, which is why the observability row above is open rather than merely undocumented |
+
+The reconciled branch therefore closes the browser-E2E and readiness items and moves
+DR/schema-rollback/observability from "unverified" to "verified-open", with named
+commands to execute. Nothing in either line of work supports a release sign-off yet,
+and this document is the record of why.
+
 ## 10. Disposition of the two input branches
 
 | Branch | Disposition |
@@ -260,12 +280,65 @@ failure mode this reconciliation exists to prevent.
 | `arena/01a080c8-toefl-house` | The authoritative code state, preserved exactly (tree-identical at the merge, then documentation-only commits on top). Fast-forward this branch onto the reconciled result to converge. |
 | `arena/01a081d4-toefl-house` | The reconciled result: `01a080c8` history + `9225b33` as an ancestor + absorbed/corrected documentation. |
 
-## 11. Reading order
+## 11. How to reproduce this verification
 
-1. This file — what was compared, decided and verified.
+```bash
+bash scripts/runtime/provision.sh            # PHP 8.4.14 + Composer 2.9.2 + PostgreSQL 18.4
+source scripts/runtime/env.sh
+bash scripts/runtime/pg.sh start && bash scripts/runtime/pg.sh createdbs
+
+cp .env.example .env && php artisan key:generate
+
+npm run verify:environment                   # 8/8 runtime lock
+composer validate --strict && composer check-platform-reqs
+
+export DB_DATABASE=toefl_house_test
+php artisan migrate:fresh --force            # 185/185
+php artisan db:seed --class=StandardFinanceChartSeeder --force
+npm run verify:invariants                    # 6/6
+npm run verify:concurrency                   # 4/4
+vendor/bin/pint --test                       # 859 files
+vendor/bin/phpstan analyse --no-progress --memory-limit=1G   # level 6, no errors
+php scripts/database-migration-audit.php
+php scripts/terminology-audit.php
+vendor/bin/phpunit --testsuite Canonical --no-coverage      # 63 / 243
+vendor/bin/phpunit --no-coverage                            # 899 / 6,990 / 1 skipped
+
+npm ci && npm run typecheck && npm run build && npm run test:frontend   # 8/8
+
+# live rehearsal (dev database, separate from the test database)
+export DB_DATABASE=toefl_house_dev
+php artisan migrate:fresh --force
+php artisan db:seed --class=StandardFinanceChartSeeder --force
+BOOTSTRAP_OWNER_NAME='Rehearsal Owner' BOOTSTRAP_OWNER_BIRTHDATE=1990-01-01 \
+BOOTSTRAP_OWNER_USERNAME=runtime.owner BOOTSTRAP_OWNER_PASSWORD='...' \
+  php artisan db:seed --class=FirstRunBootstrapSeeder --force
+php artisan serve --host=0.0.0.0 --port=8000
+curl -s localhost:8000/health && curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/up
+
+# real browser E2E (Chromium 152 from the @sparticuz/chromium tarball; this
+# container needs --no-zygote and cannot use the script's --single-process)
+CHROMIUM_PATH=/tmp/chromium-wrap/chromium BASE_URL=http://127.0.0.1:8000 \
+E2E_USERNAME=runtime.owner E2E_PASSWORD='...' node scripts/runtime/browser-e2e.mjs
+```
+
+Route-surface enumeration used in §8.1:
+
+```bash
+php artisan route:list --json | jq -r '.[] | select(.method | test("POST|PUT|PATCH|DELETE"))
+  | select((.middleware | join(" ")) | test("employee|auth|throttle") | not) | .uri'
+# 511 routes, 433 mutations, 1 unauthenticated: PUT storage/{path}  (framework default, signature-gated)
+```
+
+## 12. Reading order
+
+1. This file — what was compared, decided and verified, and what is still open.
 2. `docs/AUDIT-2026-09-08-PRODUCTION-READINESS.md` — the full per-area review, with
    the certification verdict corrected in place.
 3. `docs/RUNTIME_VERIFICATION_HANDOFF.md` Part I — the honest gate record of the
    baseline the certification reviewed.
 4. `FINAL-ENGINEERING-REPORT.md`, `AUDIT-SUMMARY.md` — the superseded summary layer,
    retained for provenance.
+
+CI runs carrying this state: `34252336159` (corrections commit) and `34253354294`
+(reconciliation + hygiene commit, the branch tip).
