@@ -227,10 +227,16 @@ final class OpeningStateFeatureTest extends TestCase
         }
 
         // no raw SQL path: update/delete of state or entries rejected by triggers
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE opening_states SET status = ? WHERE id = ?', ['draft', $state->id]);
             $this->fail('raw SQL unfreeze must fail');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
         try {

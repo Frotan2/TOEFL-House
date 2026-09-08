@@ -151,10 +151,16 @@ final class SecurityHardeningFeatureTest extends TestCase
         $row = DB::table('audit_events')->where('operation', 'finance.period.open')->first();
         $this->assertNotNull($row);
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE audit_events SET after_state = ? WHERE id = ?', ['{"forged":true}', $row->id]);
             $this->fail('the audit trail must be append-only');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 

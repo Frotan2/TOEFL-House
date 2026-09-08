@@ -279,10 +279,16 @@ final class PlacementEvidenceAuthorityDirectSqlTest extends TestCase
 
     private function assertSqlRejected(callable $write, string $expectedMessage): void
     {
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::transaction(static fn (): mixed => $write());
             $this->fail('the direct SQL evidence rewrite unexpectedly succeeded');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString($expectedMessage, $exception->getMessage());
         }
     }

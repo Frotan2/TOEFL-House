@@ -123,10 +123,16 @@ final class ScaleContractVersionFeatureTest extends TestCase
         }
 
         $command->retire($registrar, Scale::query()->where('key', 'S4')->firstOrFail(), 'p16-scale-ret-1');
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE scales SET rank_order = 9 WHERE key = ?', ['S3']);
             $this->fail('scale rank is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
         try {

@@ -349,6 +349,10 @@ final class SchemaInvariantFeatureTest extends TestCase
         // Legacy labels remain representable for immutable old rows, but a
         // new metric cannot claim the superseded Funding authority for a
         // Finance-owned utilization calculation.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('metric_definitions')->insert([
                 'id' => '00000000-0000-4000-8000-00000000030g',
@@ -366,7 +370,9 @@ final class SchemaInvariantFeatureTest extends TestCase
                 'updated_at' => $now,
             ]);
             $this->fail('a new fund-utilization definition must name Finance as its canonical owner');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('new metric definition lineage must match its canonical owner', $exception->getMessage());
         }
 

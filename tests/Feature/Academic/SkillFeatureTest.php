@@ -88,10 +88,16 @@ final class SkillFeatureTest extends TestCase
             $this->assertSame('academic.skill_not_active', $rejection->errorCode());
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE skills SET name = ? WHERE id = ?', ['renamed', $ids['reading_vocabulary']]);
             $this->fail('a retired skill is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 

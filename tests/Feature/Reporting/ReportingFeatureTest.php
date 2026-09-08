@@ -107,6 +107,10 @@ final class ReportingFeatureTest extends TestCase
 
         // Reconciliation is evidence about a particular complete projection,
         // not a free-form direct-SQL variance record.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('metric_reconciliations')->insert([
                 'id' => '00000000-0000-4000-8000-00000000r001',
@@ -122,7 +126,9 @@ final class ReportingFeatureTest extends TestCase
                 'reconciled_by' => $analyst->actorId,
             ]);
             $this->fail('a reconciliation without its compared projection must be rejected');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('metric reconciliation requires the compared current projection', $exception->getMessage());
         }
 

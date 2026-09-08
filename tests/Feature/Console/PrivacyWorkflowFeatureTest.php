@@ -368,12 +368,18 @@ final class PrivacyWorkflowFeatureTest extends TestCase
         ]);
 
         // The same person in both slots is refused at the boundary.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update([
                 'approver_two_id' => 'prv-approver-a', 'lifecycle_state' => 'approved', 'updated_at' => now(),
             ]);
             $this->fail('expected the boundary to refuse a non-distinct approver');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('two distinct approvers', $exception->getMessage());
         }
 

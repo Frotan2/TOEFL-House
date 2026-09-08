@@ -108,11 +108,17 @@ final class ProgramVersionLevelFoundationTest extends TestCase
 
         // Assigning a version-1 level to a class of version 2 is rejected.
         $this->insertClass($version2, $periodId);
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('classes')->where('program_version_id', $version2)
                 ->update(['program_version_level_id' => $level['level_id']]);
             $this->fail('A class level from a different program version must be rejected.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('does not belong to the class program version', $e->getMessage());
         }
     }

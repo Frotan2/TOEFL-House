@@ -243,10 +243,16 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertSame('Call back with fee info', $followup->title);
 
         // Interactions are evidence: an UPDATE is impossible at the DB boundary.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('visitor_interactions')->where('id', $interaction['interaction_id'])->update(['summary' => 'rewritten']);
             $this->fail('interactions must be append-only');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('immutable', $exception->getMessage());
         }
     }

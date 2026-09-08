@@ -112,6 +112,10 @@ final class PlacementDecisionFeatureTest extends TestCase
             ->where('program_version_id', $this->programVersionId)
             ->where('level_key', 'C1')
             ->value('id');
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::transaction(function () use ($profile, $attempt, $c1LevelId, $rawRecommender): void {
                 DB::table('placement_recommendations')->insert([
@@ -138,7 +142,9 @@ final class PlacementDecisionFeatureTest extends TestCase
                 ]);
             });
             $this->fail('raw SQL must not choose a placement level inconsistent with immutable scores');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('must select the deterministic active academic level', $exception->getMessage());
         }
 

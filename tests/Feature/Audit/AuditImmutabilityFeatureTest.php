@@ -36,10 +36,16 @@ final class AuditImmutabilityFeatureTest extends TestCase
     {
         $event = app(AuditRecorder::class)->record('actor-3', 'probe.operation', 'person', '00000000-0000-4000-8000-000000000002', null, ['state' => 'recorded']);
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('audit_events')->where('id', $event->id)->update(['operation' => 'rewritten.operation']);
             $this->fail('the database must reject rewriting audit evidence');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('audit_events is append-only', $exception->getMessage());
         }
 

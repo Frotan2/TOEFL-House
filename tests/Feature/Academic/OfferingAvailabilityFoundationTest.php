@@ -65,6 +65,10 @@ final class OfferingAvailabilityFoundationTest extends TestCase
         }
 
         // The schema backstops the rule even against a direct insert.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('offerings')->insert([
                 'id' => RandomIdentifier::new(),
@@ -77,7 +81,9 @@ final class OfferingAvailabilityFoundationTest extends TestCase
                 'updated_at' => now()->toDateTimeString(),
             ]);
             $this->fail('The schema must reject an offering with no active availability.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('requires an active branch availability', $e->getMessage());
         }
     }
