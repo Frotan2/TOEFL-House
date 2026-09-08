@@ -176,6 +176,47 @@ PHP-FPM pool: `deploy/php-fpm.conf` (dynamic `pm`, slowlog, security
 a pool section (`php-fpm -t` refuses the whole file with `unknown entry
 'opcache.enable'`).
 
+### Content Security Policy
+
+Both the application (`App\Http\Middleware\SecurityHeaders::CSP_PRODUCTION`) and
+the web server (`deploy/nginx/toefl-house.conf`) send the same policy; a test
+asserts the two strings are identical, because two sources of truth drift and the
+weaker one silently wins on whichever path serves the response.
+
+```
+default-src 'self'; base-uri 'self'; script-src 'self';
+style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self';
+connect-src 'self'; form-action 'self'; frame-ancestors 'none';
+frame-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'self'
+```
+
+It is **enforced, not report-only**, and it carries **no nonce or hash**, because
+the deployed release needs neither: a browser inventory of the login page and all
+14 authenticated consoles found no inline `<script>` element, no inline event
+handler, no `blob:`/`data:` script, no cross-origin script and no iframe, object
+or embed, and the shipped bundles contain no `eval`, no `new Function`, no
+`document.write` and no `innerHTML` assignment. `style-src` keeps
+`'unsafe-inline'` and nothing else does: Vite injects a `<style>` element at
+runtime and Blade uses a handful of `style=""` attributes, and inline CSS cannot
+execute script while inline JavaScript can.
+
+Two consequences to know before editing the policy or a page:
+
+* **Adding inline JavaScript will fail silently.** There is no `report-to`/
+  `report-uri`, because the repository has no violation collector; a blocked inline
+  script shows up only as a browser console error, and the page otherwise looks
+  alive. Either move the script into the bundle (the pattern every console already
+  uses) or add a collector and wire `report-to` in both places.
+* **`php artisan serve` + `npm run dev` still works.** Outside production, when
+  `public/hot` exists, the middleware adds the Vite dev-server origin to
+  `script-src` and `connect-src` (plus its `ws:` form for HMR). Production never
+  carves out, even if a stale `public/hot` is left behind by a build.
+
+`upgrade-insecure-requests` is deliberately not set: it rewrites same-origin `http:`
+URLs, which would break development over plain HTTP, and there is no cross-protocol
+subresource in the app to protect.
+
+
 ## 12. Health checks
 
 Two public probes:
