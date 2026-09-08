@@ -268,6 +268,22 @@ The deployment script records the migration-table count before and after migrati
 If a health check fails after the schema advanced, it does not pretend that symlink
 rollback is a complete release rollback.
 
+Two measured properties of the migration chain decide this design, and both are
+worth knowing before an incident:
+
+* A migration that fails part-way leaves **nothing** behind. PostgreSQL's DDL is
+  transactional and Laravel wraps each migration in a transaction, so the injected
+  failure test (DDL issued, then a throw) produced no table and no `migrations`
+  row. Re-running `deploy.sh` after fixing the cause is therefore safe, which is
+  precisely why the release is not allowed to auto-revert the database.
+* `php artisan migrate:rollback --step=N` is **not** atomic. Rolling back two
+  migrations when the older of the two refuses (17 migrations declare themselves
+  one-way because the change is irreversible in the domain — accounting and
+  provenance history) reverted the first and then aborted, leaving the database one
+  migration behind the application. `migrate --force` re-applied it cleanly. Never
+  use `migrate:rollback` as a production recovery step; use a forward-fix or
+  `deploy/restore.sh` with the pre-deploy backup.
+
 ## 16. Deploying a new release
 
 ```

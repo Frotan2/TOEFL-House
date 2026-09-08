@@ -38,7 +38,7 @@ files. Commands that are *part of the product contract* (`deploy/*.sh`,
 | --- | --- | --- |
 | A | Deployment rehearsal in the documented production topology | **PASS**, one labelled substitution (nginx reproduced by a TLS→FastCGI edge; its config is static-reviewed only) |
 | B | Backup and disaster recovery | **PASS**, four limits recorded (off-host durability, cron schedule, `age` encryption, dataset size) |
-| C | Migration and rollback forward-safety | in progress |
+| C | Migration forward-safety and rollback discipline | **PASS**, limits recorded (the `down()` chain is exercised as far as the one-way policy allows; no production-volume `ALTER TABLE` measurement — that is Gate F) |
 | D | Error surface and observability | not yet executed |
 | E | Content Security Policy | not yet executed (basis recorded: `SecurityHeaders.php` and `deploy/nginx/toefl-house.conf` emit the same five headers, with no CSP anywhere; only `ServeFile` sets a per-file policy) |
 | F | Performance and capacity | not yet executed |
@@ -332,3 +332,107 @@ server present) and `tests/Feature/Deployment/TestDatabaseIsolationTest.php`
 (6 tests: forced entries, dedicated database name, deliberately overridable
 connection coordinates, executable bootstrap-precedence proof, guard fires on
 divergence, guard quiet on match).
+
+---
+
+## Gate C — Migration forward-safety and rollback discipline
+
+Executed 2026-09-08 on a scratch database (`toefl_house_c_scratch`) created,
+migrated, rolled back and re-applied from the working tree, plus the three
+`deploy.sh --rollback` outcomes already measured in Gate A §3. The question this
+gate answers is the one `docs/operations/production-deployment.md` §15 asserts
+without proof: *is the forward-only migration policy actually safe, and what
+exactly happens when a migration or a rollback is interrupted?*
+
+### 1. What was executed
+
+| Step | Command | Result |
+| --- | --- | --- |
+| Full chain, empty database | `php artisan migrate --force` | **185 migrations, 1.74 s** → 168 tables, 392 indexes, 285 triggers |
+| Interrupted deploy | injected migration that creates a table, inserts a row, then `throw new RuntimeException('GATE_C_INJECTED_FAILURE')` | artisan exits **1** with the message; **no residue**: `to_regclass('public.gate_c_probe')` is NULL and `migrations` gained no row |
+| Recovery from it | remove the file, `migrate --force` | exit 0, `Nothing to migrate.` — the release is resumable without repair |
+| Rollback at the head | `migrate:rollback --step=2` | reverts `…000190`, then **stops** at `…000189`, whose `down()` throws: `Employment-settlement ledger authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.` Leaves **184** applied — batch rollback is **not atomic** |
+| Re-apply | `migrate --force` | back to 185 applied / 168 tables / 392 indexes / 285 triggers |
+| Data fidelity across that cycle | content fingerprint before vs after | every business table identical in row count and content digest; the only delta is the `migrations` ledger (`184 → 185`) |
+| Post-restore migration (Gate B handoff) | `migrate --force` in the active release, against the database recovered by `restore.sh` | `Nothing to migrate.` — a verified restore needs no schema repair step, so §14's "re-run migrations" line is a safety net, not a requirement |
+| `CREATE INDEX CONCURRENTLY` audit | scan of all 185 migrations | **0 occurrences** → no migration needs to run outside the per-migration transaction today |
+
+### 2. `down()` coverage, measured
+
+`scripts/database-migration-audit.php` reports it, and CI now enforces it:
+
+```
+DOWN() COVERAGE: 167 reversible, 17 explicit one-way, 1 explained no-op, 0 undocumented empty, 0 missing
+```
+
+The three categories are the whole point. A migration either reverts, or **refuses
+with a message that names the alternative action** (all 17 do, 86–140 characters,
+e.g. *"Funding source organization convergence is one-way; do not erase Finance
+tenant provenance or reopen cross-organization allocation."*), or states in `down()`
+why nothing may be undone (the standard chart-of-accounts seed: rows are referenced
+by journal lines and the seed is ignored on re-run). What is not acceptable is an
+empty `down()` with no explanation: `migrate:rollback` reports success for it while
+leaving the schema advanced, which is how an operator comes to believe a rollback
+happened that did not.
+
+### 3. Rules added, and the two false positives that produced them
+
+No behavioural defect was found in the migration chain itself — the design held
+under every attempt to break it. What was added is enforcement (each rule executed
+against fixture migrations, `tests/Feature/Deployment/MigrationDisciplineAuditTest.php`,
+8 tests):
+
+| Rule | Why it is worth a CI gate |
+| --- | --- |
+| every migration declares `down()` | an undocumented rollout with no undo path |
+| no unexplained empty `down()` | silent success during a rollback (see §2) |
+| a refusing `down()` must name an alternative (≥ 40 chars, not a bare "irreversible") | an operator with no next step in an incident |
+| no `CREATE INDEX CONCURRENTLY` in a migration | it cannot run inside the transaction Laravel opens per migration |
+
+Two of these first flagged **correct code**, which is recorded because the failure
+mode is instructive: the refusal-message rule delimited the `throw` statement by
+scanning for `;`, and these messages are two clauses ("X is one-way; restore from
+…"), so a 140-character message read as empty; and the index rule matched the
+English word `concurrently`, catching prose such as *"a repeated (or concurrently
+referencing) request"* in migration comments. Both are now regression-tested in
+both directions (`test_a_refusal_with_a_semicolon_in_the_message_is_accepted`,
+`test_prose_that_merely_mentions_concurrency_is_not_flagged`,
+`test_the_audit_accepts_a_documented_no_op_down`).
+
+### 4. Documentation corrected as a result
+
+* `docs/operations/production-deployment.md` §15 now states the two measured
+  properties above — resumability after a failed migration, and the non-atomicity
+  of `migrate:rollback` — and says in as many words never to use `migrate:rollback`
+  as a production recovery step.
+* `docs/AUDIT-2026-09-08-RECONCILIATION.md`'s open-item row that asked for exactly
+  this ("`migrate` to N, `migrate:rollback --step=…`, re-apply, record") is closed
+  with the numbers.
+
+### 5. Limits of this gate (labelled, not glossed)
+
+* **The `down()` chain cannot be exercised "end-to-end" by design.** `…000189` sits
+  one step below the head and refuses, so a full 185-step reverse walk is impossible
+  while the policy that created it stands. The register's claim is therefore closed
+  as *far as the policy allows*: the head reverts and re-applies cleanly, and every
+  refusal is deliberate, specific and now enforced — not "all 185 `down()` methods
+  were run".
+* Fidelity was measured on a seeded but small database (342 rows). Rollback of the
+  **first** migrations in the chain (table creation) was not attempted: they are only
+  revertible in reverse-dependency order and the scratch database is cheap to rebuild,
+  so the interesting case for production was the head of the chain.
+* Lock and index-build cost on populated tables is Gate F, not this one; nothing here
+  measures `ALTER TABLE` behaviour at production volume.
+* The one-way refusals are the reason the **backup** in Gate B is load-bearing: with
+  17 migrations that cannot be reverted, `restore.sh` is the only schema-recovery path
+  that exists. That is why its exit code had to be made truthful before this gate could
+  be called a pass.
+
+### 6. Verdict
+
+**PASS.** The forward-only policy is executable as documented: the chain applies in
+1.74 s, an interruption leaves no half-applied schema, a verified restore needs no
+further migration step, and the rollback refusals are deliberate rather than absent.
+One hazard was documented (non-atomic batch rollback) and four static rules added to
+CI with bidirectional fixtures, after two of my own first drafts of those rules
+produced false positives that the fixtures now prevent.
