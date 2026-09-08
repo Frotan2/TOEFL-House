@@ -920,3 +920,80 @@ match the current domain.
 `RELEASE CERTIFIABLE` is **not** issued: legacy fixture convergence and
 database baseline consolidation remain open. No production-readiness claim is
 made.
+
+---
+
+# Part G — Continued Convergence (2026-09-08)
+
+## G.1 Gate Status (all executed this session)
+
+| Gate | Result |
+|---|---|
+| Runtime environment lock | **VERIFIED** 8/8 |
+| Migration replay | **VERIFIED** 185/185 |
+| Canonical suite | **VERIFIED** 60 tests, 228 assertions, 0 failures |
+| Database invariants | **VERIFIED** 6/6 enforced by PostgreSQL |
+| Concurrency | **VERIFIED** 4/4 real concurrent transactions |
+| Frontend typecheck / build | **VERIFIED** |
+| Console mount | **VERIFIED** 8/8 |
+| Page render | **VERIFIED** 16 tests |
+| **Browser E2E (Chromium 149)** | **VERIFIED 21/21**, 25 API calls, 0 console errors |
+| Security (unauthenticated probes) | **VERIFIED** 401 reads / 419 mutations, fail-closed |
+| Migration discipline audit | **VERIFIED** PASS |
+| Terminology audit | **VERIFIED** exit 0, all findings classified |
+| Legacy suite | **EXECUTED** 900 tests, 654 passing, 246 failing |
+
+## G.2 First Completed Legacy Retirement
+
+Four tests in `tests/Unit/Architecture` were retired under the §11 policy —
+intent migrated, replacement mutation-proven, originals removed in the same
+commit. They were obsolete, not inconvenient:
+
+- Two asserted prose in
+  `docs/architecture/review/2026-09-05-fourth-architecture-convergence.md`, a
+  file that has never existed on this branch (`git log --all` finds nothing
+  under `docs/architecture`). One required string was "Runtime
+  migration/query/concurrency/browser/build verification remains unexecuted",
+  which is now demonstrably false.
+- Two asserted exact source substrings that broke on **formatting alone** — a
+  reflowed ternary and a chained `->name()`. The behaviour was verified intact
+  before removal.
+
+Replacement: `tests/Canonical/Architecture/WorkspaceMountConvergenceTest.php`
+asserts the same contract against registered routes and real mount wiring:
+every console route is served by the shared shell with its own view, each view
+selects exactly one React app, only the canonical `/api/v1` transport is used,
+and the academic workspace endpoint exists.
+
+## G.3 Terminology: Classified, Not Renamed
+
+All 70 findings were reviewed individually. Bulk renaming would have merged
+distinct facts under one term and broken one-fact-one-owner.
+
+Two genuine gaps were closed in `docs/CANONICAL_TERMINOLOGY.md`:
+
+1. **Admissions had no canonical entries at all.** Added `Applicant`,
+   `Applicant registration` and `Admission decision`, stating that an applicant
+   is not yet a student and that registering one is not Enrollment.
+2. **`Registration` and `Faculty` were written as unconditional synonyms.**
+   Both are legitimate in other scopes, now documented: registration of an
+   applicant / skill / integration endpoint are separate facts with separate
+   owners; `Faculty` is valid as a collective UI label but never as a
+   replacement for the `Teacher` profile.
+
+No production identifier was renamed.
+
+## G.4 Honest Position
+
+**Not release certifiable.** 246 legacy tests still fail. They are classified
+by root cause and none is a known unrepaired production defect — the clusters
+are fixture chains (offering/branch/teacher provenance, student branch
+transfer) and stale expectations. But "classified" is not "verified", and the
+gap is too large to certify against.
+
+Production defects found and fixed across this work — the enrollment and
+offering capacity double-count, the nondeterministic employment-status
+ordering, the teacher authority guard column references, branch-scoped event
+provenance, the unregistered payroll route — were all surfaced *by* running
+these tests. That is the argument for finishing the remaining clusters rather
+than discarding them.
