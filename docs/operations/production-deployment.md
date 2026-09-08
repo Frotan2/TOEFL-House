@@ -170,7 +170,11 @@ TLS is terminated at nginx (`deploy/nginx/toefl-house.conf`):
   same headers (`app/Http/Middleware/SecurityHeaders.php`).
 - `SESSION_SECURE_COOKIE=true` makes the session cookie HTTPS-only.
 
-PHP-FPM pool: `deploy/php-fpm.conf` (dynamic `pm`, opcache, slowlog).
+PHP-FPM pool: `deploy/php-fpm.conf` (dynamic `pm`, slowlog, security
+`limit_extensions`). Opcache policy is a separate conf.d fragment,
+`deploy/opcache.ini`: opcache entries are `PHP_INI_SYSTEM` and cannot be set in
+a pool section (`php-fpm -t` refuses the whole file with `unknown entry
+'opcache.enable'`).
 
 ## 12. Health checks
 

@@ -19,7 +19,9 @@
 #     deliberately holds no version numbers of its own
 #   * PostgreSQL client tools pg_dump + pg_restore (postgresql-client, version >=
 #     the server) — required by deploy/backup.sh and deploy/restore.sh
-#   * nginx (deploy/nginx) and php-fpm (deploy/php-fpm.conf) installed
+#   * nginx (deploy/nginx) and php-fpm (deploy/php-fpm.conf pool + the
+#     deploy/opcache.ini conf.d fragment) installed; deploy.sh step 0 parses the
+#     installed pool with php-fpm -t when the binary is available
 #   * PostgreSQL reachable and the app database created
 #   * a persistent .env at $DEPLOY_ROOT/.env (never committed to the repo)
 # =============================================================================
@@ -114,6 +116,30 @@ mkdir -p "$RELEASES_DIR"
 [ -e "$RELEASE_DIR" ] && die "release dir already exists: $RELEASE_DIR"
 
 log "deploying ref '$REF' to $RELEASE_DIR"
+
+# 0. The PHP-FPM pool is installed by the operator, not by this script, and a
+#    pool file FPM cannot parse means no PHP execution at all: a config test here
+#    costs one process and saves a rollback. It is skipped (loudly, in the log)
+#    when no fpm binary is on PATH, e.g. on a build host. Override with
+#    PHP_FPM_BIN / PHP_FPM_POOL when the service uses non-standard paths.
+PHP_FPM_BIN="${PHP_FPM_BIN:-}"
+if [ -z "$PHP_FPM_BIN" ] && command -v php-fpm >/dev/null 2>&1; then
+    PHP_FPM_BIN="$(command -v php-fpm)"
+fi
+if [ -n "$PHP_FPM_BIN" ]; then
+    fpm_pool_checked=0
+    for pool in ${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf}; do
+        [ -f "$pool" ] || continue
+        "$PHP_FPM_BIN" -t -y "$pool" >/dev/null 2>&1 \
+            || die "php-fpm cannot parse the installed pool (${pool}); deploy/php-fpm.conf is the reference"
+        fpm_pool_checked=1
+    done
+    [ "$fpm_pool_checked" = 1 ] \
+        && log "php-fpm pool configuration verified" \
+        || log "WARNING: no toefl-house fpm pool found to test (${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf})"
+else
+    log "WARNING: php-fpm binary not available: pool configuration not tested on this host"
+fi
 
 # 1. Source checkout (shallow for speed; the ref must be reachable).
 git clone --quiet --depth 1 --branch "$REF" "$REPO_URL" "$RELEASE_DIR" \
