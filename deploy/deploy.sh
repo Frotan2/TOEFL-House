@@ -41,6 +41,8 @@ PSQL_BIN="${PSQL_BIN:-psql}"
 # The schema probe ships next to this script, so it stays available even when
 # the release being inspected has no vendor tree (or is an older release).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/retention.sh
+source "$SCRIPT_DIR/lib/retention.sh"
 SCHEMA_PROBE="${SCHEMA_PROBE:-$SCRIPT_DIR/schema-compatibility.sh}"
 
 log()  { printf '[deploy] %s\n' "$*"; }
@@ -249,8 +251,13 @@ log "verifying release at $HEALTH_URL"
 for i in 1 2 3 4 5; do
     if curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null 2>&1; then
         log "deployment OK: release $RELEASE_ID (commit $COMMIT) is live and healthy"
-        # Keep only the last 3 releases; older ones are disposable.
-        ls -1 "$RELEASES_DIR" | grep -v "^$(basename "$RELEASE_DIR")$" | sort | head -n -3 | xargs -r -I{} rm -rf "$RELEASES_DIR/{}"
+        # Keep the 4 newest release directories (this one plus the 3 previous);
+        # older ones are disposable. Pruning must not be able to fail a healthy
+        # deployment, so it goes through the shared retention helper instead of an
+        # `ls | grep -v | sort | head` pipeline: `grep -v` exits 1 when no other
+        # release exists yet, and `set -o pipefail` would surface that as a
+        # deployment failure after the release had already gone live.
+        prune_old_entries "$RELEASES_DIR" '*' 4 rm\ -rf
         exit 0
     fi
     sleep 2
