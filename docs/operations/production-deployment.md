@@ -209,10 +209,31 @@ objective (RPO): the last nightly backup.** Ship the dumps off-host
 
 `deploy/restore.sh <backup-file> --confirm` (or `--latest --confirm`) restores
 the database from a backup. It refuses to run without the explicit `--confirm`,
-verifies the dump's integrity **before** touching the live database, restores
-with `pg_restore --clean --if-exists --create`, and reports post-restore
-verification. **A backup is only considered verified once this procedure has
-been exercised successfully in a recovery drill.**
+verifies the dump's integrity **before** touching the live database, creates
+the target database if it is missing, restores with
+`pg_restore --clean --if-exists`, and reports post-restore verification.
+
+`--create` is deliberately not passed to `pg_restore`: with `--clean` it emits
+`DROP DATABASE`/`CREATE DATABASE` for the target, which error whenever the
+database still exists ("cannot drop the currently open database", "already
+exists"). `pg_restore` ignores those errors, restores everything correctly, and
+still **exits 1** — a recovery that reports failure on success cannot be
+scripted or trusted, so the script handles database existence itself.
+
+**A backup is only considered verified once this procedure has been exercised
+successfully in a recovery drill.** The final drill run (2026-09-08, UTC
+19:51:11) backed up the production-shaped database, dropped it entirely with
+`DROP DATABASE ... WITH (FORCE)` — 169 tables (168 application tables plus one
+drill marker table), 346 rows, 185 migrations — and restored it with
+`deploy/restore.sh --latest --confirm`: exit 0, restore 0.88 s, verification
+0.10 s, content digest identical to the pre-loss fingerprint
+(`7055417d9a2f…`, md5 over the ordered row text of every non-empty table), the
+owner account restored with its bcrypt hash intact, and the table written *after*
+the dump correctly absent — that gap is the RPO. The application was then driven
+in a real browser against the recovered database (login plus 14 consoles,
+25 `/api/v1` calls) and passed 21/21 through the TLS edge. Measured recovery
+time to serviceable: **0.98 s**. Full transcript:
+`docs/AUDIT-2026-09-08-GATE-EVIDENCE.md` §Gate B.
 
 ## 15. Rollback
 
