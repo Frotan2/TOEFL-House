@@ -85,7 +85,6 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
         $commands->addRule($fm, $version, 'session_rate', '600.00', $this->skillIds['writing_grammar'], null, null, 'p16atk-r-wr');
         $commands->submit($fm, $version, 'p16atk-con-2');
         $commands->approve($this->generalManager(), $version, 'p16atk-con-3');
-        app(MaintainEmployment::class)->hire($hrManager, Employment::query()->findOrFail($this->employmentId), '2026-08-01', 'p16atk-emp-3');
 
         $officer = $this->academicOfficer();
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'TOEFL Intensive', 'p16atk-prog-1');

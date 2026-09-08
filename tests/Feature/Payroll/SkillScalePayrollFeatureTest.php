@@ -97,7 +97,6 @@ final class SkillScalePayrollFeatureTest extends TestCase
         $commands->addRule($fm, $version, 'allowance', '1500.00', null, null, 'transport', 'p16-pay-r-al');
         $commands->submit($fm, $version, 'p16-pay-con-2');
         app(MaintainContractVersion::class)->approve($this->generalManager(), $version, 'p16-pay-con-3');
-        app(MaintainEmployment::class)->hire($hrManager, Employment::query()->findOrFail($this->employmentId), '2026-08-01', 'p16-pay-emp-3');
 
         $officer = $this->academicOfficer();
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'TOEFL Intensive', 'p16-pay-prog-1');

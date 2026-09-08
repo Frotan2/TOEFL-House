@@ -368,7 +368,6 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         $commands->submit($fm, $version, $this->k('con-sub'));
         $commands->approve($this->grantedActor('bd-gm', ['hr.contract.approve']), $version, $this->k('con-apr'));
 
-        app(MaintainEmployment::class)->hire($manager, Employment::query()->findOrFail($employmentId), '2026-09-01', $this->k('hire'));
         $period = app(MaintainPayrollPeriod::class)->open($this->grantedActor('bd-pay-open', ['payroll.period']), '2026-09', '2026-09-01', '2026-09-30', $this->k('pay-per'));
         $this->payrollPeriodId = $period['period_id'];
 
