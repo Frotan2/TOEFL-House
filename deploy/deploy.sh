@@ -80,15 +80,25 @@ schema_compatibility_check() {
     target_release="$1"
     [ -f "$SCHEMA_PROBE" ] || die "cannot verify schema compatibility: missing probe at $SCHEMA_PROBE"
 
-    local output status
+    local out_file err_file names note status
+    out_file="$(mktemp)"
+    err_file="$(mktemp)"
     set +e
-    output="$(schema_probe --check "$target_release" 2>&1)"
+    schema_probe --check "$target_release" >"$out_file" 2>"$err_file"
     status=$?
     set -e
+    # stdout is the machine-readable contract (one migration name per line);
+    # stderr is the human log. Mixing them produced an operator error message
+    # containing loader warnings and "[schema-compat]" chatter, which is exactly
+    # what an on-call engineer has to read at 3am.
+    names="$(sed '/^[[:space:]]*$/d' "$out_file" | tr '\n' ' ')"
+    note="$(sed '/^[[:space:]]*$/d' "$err_file" | tail -3 | tr '\n' '|')"
+    rm -f "$out_file" "$err_file"
+
     case "$status" in
         0) log "target release verified against the live schema: $(basename "$target_release")" ;;
-        1) die "refusing application-only rollback: live database contains migration(s) absent from target release $(basename "$target_release"): $(printf '%s' "$output" | tr '\n' ' '). Use a compatible release or perform an explicit database restore/forward-fix." ;;
-        *) die "cannot verify schema compatibility for target release $target_release (probe exit $status); refusing application-only rollback" ;;
+        1) die "refusing application-only rollback: live database contains migration(s) absent from target release $(basename "$target_release"): ${names}. Use a compatible release or perform an explicit database restore/forward-fix." ;;
+        *) die "cannot verify schema compatibility for target release $target_release (probe exit $status, probe said: ${note}); refusing application-only rollback" ;;
     esac
 }
 

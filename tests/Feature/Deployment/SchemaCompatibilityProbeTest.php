@@ -70,6 +70,11 @@ final class SchemaCompatibilityProbeTest extends TestCase
 
             $this->assertSame(1, $result['exit'], "expected refusal, got: {$result['stdout']} {$result['stderr']}");
             $this->assertStringContainsString($removed, $result['stdout']);
+
+            // deploy.sh interpolates stdout verbatim into its operator-facing
+            // error, so stdout must contain migration names and nothing else.
+            $lines = array_values(array_filter(array_map('trim', explode("\n", $result['stdout'])), static fn (string $l): bool => $l !== ''));
+            $this->assertSame([$removed], $lines);
         } finally {
             File::deleteDirectory($target);
         }
