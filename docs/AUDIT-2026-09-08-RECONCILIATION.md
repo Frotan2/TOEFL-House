@@ -198,6 +198,20 @@ check that was not inherited from it.
    Note for operators: the `GET` half of that pair would serve an unauthenticated
    read of *any* disk with `visibility => 'public'`, so publishing a custom
    `config/filesystems.php` must keep `serve` off public disks deliberately.
+2bis. **Live header and cookie inspection on a running instance** — `curl -I /login`
+   against the booted app returns `X-Content-Type-Options: nosniff`,
+   `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` and
+   `Strict-Transport-Security: max-age=31536000; includeSubDomains`; the session
+   cookie is `secure; httponly; samesite=lax` and the XSRF cookie is
+   `secure; samesite=lax` (readable by design). **One gap that neither line
+   recorded: there is no `Content-Security-Policy` anywhere in the delivery path.**
+   `SecurityHeaders` emits five headers, not six, and `deploy/nginx/toefl-house.conf`
+   mirrors the same five (`grep -i content-security` over `app/`,
+   `resources/views/`, `deploy/` returns nothing but the framework's per-file
+   header in `ServeFile`). The certification's `Security: EXCELLENT ✅ … 10/10`
+   did not mention it; for an app that renders 14 authenticated React consoles this
+   is a real, if low-severity, defense-in-depth omission — recorded as
+   verified-open in §9 rather than asserted-away.
 2. **Middleware/exception-path check** — `bootstrap/app.php` confirms CSRF on the
    `api` group, `SecurityHeaders` appended globally, and a `DomainError` renderer
    mapping authorization failures to 403, validation to 422, business and
@@ -239,6 +253,7 @@ build and 8/8 console mounts; CI green across all three jobs.
 | Observability | Health probes exist (`/health`, `/up`); no metrics/alerting/pager path is defined in-repo | define SLO + alert routing in `docs/12-OPERATIONS-DEPLOYMENT-DR.md` |
 | Dependency currency policy | 73 + 33 locked packages, `npm ci` clean; no update/vulnerability-triage cadence is documented | add a cadence + `composer audit`/`npm audit` gate to CI |
 | Data volume / performance envelope | "no N+1 / no unbounded queries" is asserted from review, not measured against realistic volumes | run the reporting journeys with seeded realistic data and record query counts |
+| Content-Security-Policy | absent from both `SecurityHeaders` and `deploy/nginx/toefl-house.conf` (§8.2bis), while 14 authenticated consoles execute JS — the certification scored security 10/10 without recording it | add a tested CSP (nonce- or hash-based for the Vite bundles, `default-src 'self'`) at the edge *and* in the middleware so both paths agree |
 
 **Verdict: `arena/01a081d4-toefl-house` is the authoritative engineering baseline —
 CI-green, and re-verified end to end on a provisioned runtime in this session, now
