@@ -997,3 +997,79 @@ ordering, the teacher authority guard column references, branch-scoped event
 provenance, the unregistered payroll route — were all surfaced *by* running
 these tests. That is the argument for finishing the remaining clusters rather
 than discarding them.
+
+---
+
+# Part H — Legacy Convergence Progress (2026-09-08)
+
+## H.1 Movement This Session
+
+| Measure | Start | Now |
+|---|---|---|
+| Legacy errors + failures | 246 | **204** |
+| Assertions executed | 4,892 | **5,088** |
+| Canonical suite | 60 / 228, green | **60 / 228, green** |
+
+Assertions rose ~4% while failures fell 17%: tests are reaching the behaviour
+they were written to verify instead of dying in setup.
+
+## H.2 Clusters Fully Converged
+
+| Class | Was | Now | Root cause |
+|---|---|---|---|
+| `EnrollmentFinancialGateFeatureTest` | 13 | **0** | array-indexed string id; missing `DB` import; aborted-transaction reads; char(36) overflow |
+| `SkillScalePayrollFeatureTest` | 13 | **0** | missing teacher subject authority; per-skill availability overlap; aborted transactions; shadowed variable |
+| `LevelProgressionFeatureTest` | 8 | **0** | class/teacher on a different branch than their offering |
+| `AcademicScheduleApiTest` | 6 | **0** | missing skill authority; stale `academic.session_*` error codes; two obsolete premises migrated |
+
+Repo-wide: **15 direct-SQL rejection blocks** across 13 files now run in
+savepoints. PostgreSQL aborts the whole transaction on a failed statement, so
+the assertion *after* a deliberate rejection — usually the point of the test —
+never ran.
+
+## H.3 Obsolete Premises Migrated, Not Deleted
+
+Three tests asserted behaviour the system no longer permits. Each was rewritten
+to keep its guarantee rather than removed:
+
+- **Unattributed delivered session** (Payroll). Scheduling now requires a skill
+  and the session identity guard forbids changing it, so the state is
+  unreachable through commands. But `class_sessions.skill_id` is nullable, such
+  rows can exist historically, and `CalculatePayroll`'s hold exists precisely to
+  refuse to pay against them. The test now inserts that shape directly.
+- **API schedules a session without a skill.** The blocker it pinned was the API
+  passing the skill into the idempotency-key slot, producing a 500. It now
+  asserts a governed 409 from the same command path — never a 500, never a
+  silently skill-less session.
+- **"Level-agnostic classes"** (Appeals). `MaintainClass` derives the level from
+  the offering, so every class is level-aware; the progressions now state their
+  basis and the misleading comment was corrected.
+
+## H.4 Remaining 204 — Classified
+
+| Count | Signature | Assessment |
+|---|---|---|
+| 67 | assertion mismatches | Mixed: stale expectations and genuine behaviour questions. Needs per-test reading. |
+| 12 | placement eligibility snapshot unverified | Signed-payload chain; fixture must produce a correctly signed snapshot. |
+| 10 | aborted transaction | Remaining rejection blocks not matched by the savepoint pass. |
+| 10 | payments require active originating branch | Fixture provenance. |
+| 9 | advance past last level | Fixture builds too few levels. |
+| 9 | person-linked operations need active home branch | Fixture provenance. |
+| 9 | domain event branch context | Fixture provenance. |
+| 7 | target provenance unknown | Fixture provenance. |
+
+Distribution is now a long tail: 21 classes hold 108 failures, 59 classes hold
+the other 102 (27 of them a single failure each). No cluster is a known
+unrepaired production defect.
+
+## H.5 All Other Gates Re-verified
+
+Environment lock 8/8 · migrations 185/185 · invariants 6/6 · concurrency 4/4 ·
+typecheck · build · 8/8 console mounts · browser E2E 21/21 · security probes
+fail-closed · terminology exit 0 · migration audit PASS.
+
+## H.6 Status
+
+**Not release certifiable.** 204 legacy failures remain. Every gate that can be
+green is green, and the canonical suite is the trustworthy authority, but the
+legacy set is too large to certify against.
