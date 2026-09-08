@@ -8,6 +8,7 @@ use App\Modules\Academic\Commands\MaintainClass;
 use App\Modules\Academic\Commands\MaintainSkill;
 use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Academic\Models\TeacherAvailability;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\TeacherSkillAuthority;
 use App\Support\Authorization\Actor;
@@ -78,8 +79,17 @@ trait BuildsSessions
             );
         }
 
+        // Availability is per teacher/branch/weekday, NOT per skill: declaring
+        // it again for a second skill would overlap an existing window and be
+        // rejected. Skip weekdays that are already covered.
+        $covered = TeacherAvailability::query()
+            ->where('teacher_profile_id', $teacherProfileId)
+            ->where('branch_id', $branchId)
+            ->where('lifecycle_state', 'active')
+            ->pluck('weekday')->map(static fn ($w) => (int) $w)->all();
+
         // Weekdays are 1-7 and the only valid kind is 'available'.
-        foreach (range(1, 7) as $weekday) {
+        foreach (array_diff(range(1, 7), $covered) as $weekday) {
             $profiles->declareAvailability(
                 $manager,
                 TeacherProfile::query()->findOrFail($teacherProfileId),

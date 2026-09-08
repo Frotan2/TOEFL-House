@@ -51,6 +51,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
 {
     use BuildsActors;
     use \Tests\Concerns\BuildsTeachers;
+    use \Tests\Concerns\BuildsSessions;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'p16-pay-teacher-1';
@@ -111,6 +112,15 @@ final class SkillScalePayrollFeatureTest extends TestCase
         $class = app(MaintainClass::class)->defineClass($officer, $versionPub['version_id'], $period['period_id'], 4, 'p16-pay-class-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $assignment = app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-08-01'), null, 'p16-pay-class-2');
+        // Attributing a skill to an assignment is not authority to teach it:
+        // the teacher must hold an effective subject authority and be
+        // available in that branch. Establish that through the real commands.
+        $payProfileId = (string) \App\Modules\Academic\Models\TeacherProfile::query()
+            ->where('person_id', $this->teacherPersonId)->value('id');
+        foreach (array_values($this->skillIds) as $n => $skillId) {
+            $this->makeTeacherDeliveryReady($payProfileId, $skillId, $this->bootstrapBranchId(), 'p16sk'.$n);
+        }
+
         foreach ($this->skillIds as $skillId) {
             app(MaintainClass::class)->assignSkill($officer, TeacherAssignment::query()->findOrFail($assignment['assignment_id']), $skillId, 'p16-pay-skill-'.$skillId);
         }
@@ -274,7 +284,29 @@ final class SkillScalePayrollFeatureTest extends TestCase
     public function test_unattributed_delivered_session_holds_the_calculation(): void
     {
         $officer = $this->academicOfficer();
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($this->classId), new CarbonImmutable('2026-08-05'), '09:00', '11:00', 'p16-t5-s1');
+        // Scheduling now REQUIRES an explicit skill (scheduling.skill_required),
+        // so an unattributed session can no longer be produced through the
+        // command. class_sessions.skill_id is nullable, so such rows can still
+        // exist historically, and the payroll hold exists precisely to defend
+        // against them. Create that state directly to exercise the guard.
+        // Scheduling REQUIRES a skill (scheduling.skill_required) and the
+        // session identity guard forbids changing it afterwards, so an
+        // unattributed session cannot be produced through the command surface
+        // at all. class_sessions.skill_id is nullable, so such rows can still
+        // exist from before that rule, and the payroll hold exists precisely to
+        // refuse to pay against them. Insert that historical shape directly.
+        $sessionId = (string) \App\Support\Identifiers\RandomIdentifier::new();
+        DB::table('class_sessions')->insert([
+            'id' => $sessionId,
+            'class_id' => $this->classId,
+            'scheduled_on' => '2026-08-05',
+            'starts_at' => '09:00',
+            'ends_at' => '11:00',
+            'skill_id' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $session = ['session_id' => $sessionId];
         app(RecordAttendance::class)->record($officer, ClassSession::query()->findOrFail($session['session_id']), Enrollment::query()->findOrFail($this->enrollmentId), 'present', 'p16-t5-att');
 
         $calculation = $this->calculate('p16-t5-calc');
@@ -438,6 +470,9 @@ final class SkillScalePayrollFeatureTest extends TestCase
         $first = $this->calculate('p16-t7-calc-1');
         $this->assertSame(1, TeachingDeliveryFact::query()->count());
 
+        // A rejected statement aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('teaching_delivery_facts')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f301',
@@ -448,21 +483,33 @@ final class SkillScalePayrollFeatureTest extends TestCase
                 'hours' => 2,
             ]);
             $this->fail('the schema must reject paying the same session twice');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 
         $fact = TeachingDeliveryFact::query()->firstOrFail();
+        // A rejected statement aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE teaching_delivery_facts SET hours = 8 WHERE id = ?', [$fact->id]);
             $this->fail('delivery evidence is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM teaching_delivery_facts WHERE id = ?', [$fact->id]);
             $this->fail('delivery evidence cannot be deleted');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 
@@ -484,11 +531,12 @@ final class SkillScalePayrollFeatureTest extends TestCase
     {
         $this->deliveredSession('2026-08-05', 'speaking_listening', 'p16-t8-s1');
         $august = $this->calculate('p16-t8-calc-1');
-        /** @var PayrollCalculation $august */
-        $august = PayrollCalculation::query()->findOrFail($august['calculation_id']);
-        app(ApprovePayrollResult::class)->approve($this->grantedActor('p16-pay-appr-1', ['payroll.approve']), $august, 'p16-t8-appr');
+        $augustId = (string) $august['calculation_id'];
+        /** @var PayrollCalculation $augustModel */
+        $augustModel = PayrollCalculation::query()->findOrFail($augustId);
+        app(ApprovePayrollResult::class)->approve($this->grantedActor('p16-pay-appr-1', ['payroll.approve']), $augustModel, 'p16-t8-appr');
         /** @var PayrollCalculation $augustRow */
-        $augustRow = PayrollCalculation::query()->findOrFail($august['calculation_id']);
+        $augustRow = PayrollCalculation::query()->findOrFail($augustId);
         $augustSnapshot = $augustRow->snapshot;
 
         $scaleS4Id = app(MaintainScale::class)->register($this->grantedActor('p16-pay-scale-1', ['hr.scale']), 'S4', 'Expert', 4, 'p16-t8-scale')['scale_id'];
@@ -519,18 +567,28 @@ final class SkillScalePayrollFeatureTest extends TestCase
         $this->assertSame($augustSnapshot, $augustReloaded->snapshot);
         $this->assertSame('22000.00', $augustReloaded->base_amount);
 
+        // A rejected statement aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE payroll_calculations SET snapshot = ? WHERE id = ?', [json_encode(['forged' => true]), $august['calculation_id']]);
             $this->fail('approved payroll history is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 
         app(ApprovePayrollResult::class)->approve($this->grantedActor('p16-pay-appr-1', ['payroll.approve']), PayrollCalculation::query()->findOrFail($septCalc['calculation_id']), 'p16-t8-appr-2');
+        // A rejected statement aborts the surrounding transaction, so the
+        // attempt runs inside a savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE payroll_calculations SET base_amount = 1 WHERE id = ?', [$septCalc['calculation_id']]);
             $this->fail('approved calculated amounts cannot be rewritten');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }
