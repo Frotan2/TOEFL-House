@@ -89,13 +89,22 @@ final class AppealResolutionSemanticsTest extends TestCase
         ])->id;
         $this->attachBranchToBootstrapOrganization($this->branchId);
 
-        $period = $structure->definePeriod($org, 'Appeal Term', new CarbonImmutable('2026-10-01'), new CarbonImmutable('2026-12-30'), 'sem-period')['period_id'];
+        $period = $structure->definePeriod($org, 'Appeal Term', CarbonImmutable::today()->subMonth(), CarbonImmutable::today()->addMonths(3), 'sem-period')['period_id'];
         $structure->transitionPeriod($org, AcademicPeriod::query()->findOrFail($period), 'published', 'sem-period-pub');
 
-        // Level-agnostic classes: progression needs no assessment basis here.
-        $this->classA = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $period, 8, 'sem-class-a', null, $this->bootstrapBranchId())['class_id'];
-        $this->classB = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $period, 8, 'sem-class-b', null, $this->bootstrapBranchId())['class_id'];
-        $teacher = $this->buildActiveTeacher('sem-teacher-1', null, 'appealre2ed')['person_id'];
+        // A class requires an OPEN OFFERING for its branch, level and period.
+        // The program version already carries levels; reuse one rather than
+        // adding a duplicate ordinal, which the domain rejects.
+        $semLevel = ['level_id' => (string) \App\Modules\Academic\Models\ProgramVersionLevel::query()
+            ->where('program_version_id', $this->programVersionId)->orderBy('ordinal')->value('id')];
+        $structure->declareBranchAvailability($org, $this->branchId, $semLevel['level_id'], $period, 'sem-av');
+        $structure->openOffering($org, $this->branchId, $semLevel['level_id'], $period, 200, 'sem-of');
+
+        // Every class inherits its level from its offering, so progressions
+        // here are level-aware and must carry an explicit basis.
+        $this->classA = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $period, 8, 'sem-class-a', null, $this->branchId)['class_id'];
+        $this->classB = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $period, 8, 'sem-class-b', null, $this->branchId)['class_id'];
+        $teacher = $this->buildActiveTeacher('sem-teacher-1', $this->branchId, 'appealre2ed')['person_id'];
         foreach (['sem-cls-a', 'sem-cls-b'] as $index => $key) {
             $class = $index === 0 ? $this->classA : $this->classB;
             app(MaintainClass::class)->assignTeacher($org, ClassModel::query()->findOrFail($class), $teacher, new CarbonImmutable('2026-09-01'), null, $key.'-teacher');
@@ -126,13 +135,13 @@ final class AppealResolutionSemanticsTest extends TestCase
         $this->scoredResultId = $scored['result_id'];
 
         $progress = app(DecideProgression::class);
-        $proposed = $progress->propose($this->grantedActor('sem-prop-1', ['academic.progression_propose']), $this->studentId, $this->classA, 'advance', 'meets the boundary rules', 'sem-prog-1');
+        $proposed = $progress->propose($this->grantedActor('sem-prop-1', ['academic.progression_propose']), $this->studentId, $this->classA, 'advance', 'meets the boundary rules', 'sem-prog-1', null, 'boundary rules met');
         $decision = ProgressionDecision::query()->findOrFail($proposed['decision_id']);
         $progress->review($this->grantedActor('sem-rev-1', ['academic.progression_review']), $decision, 'sem-prog-2');
         $progress->approve($this->grantedActor('sem-app-1', ['academic.progression_approve']), $decision, 'sem-prog-3');
         $this->approvedDecisionId = $decision->id;
 
-        $proposedB = $progress->propose($this->grantedActor('sem-prop-2', ['academic.progression_propose']), $this->studentId, $this->classB, 'repeat', 'needs another round', 'sem-prog-4');
+        $proposedB = $progress->propose($this->grantedActor('sem-prop-2', ['academic.progression_propose']), $this->studentId, $this->classB, 'repeat', 'needs another round', 'sem-prog-4', null, 'another round required');
         $this->proposedDecisionId = $proposedB['decision_id'];
 
         $this->personWithAuthority('sem-plc-person-1', []);
