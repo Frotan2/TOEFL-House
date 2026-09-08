@@ -107,11 +107,12 @@ final class WorkflowProjectionConsumer implements EventConsumer
             ->orderByDesc('created_at')
             ->first();
         if ($workflow !== null) {
-            if ((string) $workflow->organization_id !== $organizationId
-                || (string) ($workflow->branch_id ?? '') !== (string) ($branchId ?? '')) {
+            // char(36) columns are blank-padded by PostgreSQL; compare trimmed.
+            if (trim((string) $workflow->organization_id) !== trim($organizationId)
+                || trim((string) ($workflow->branch_id ?? '')) !== trim((string) ($branchId ?? ''))) {
                 throw BusinessRejection::forCode('workflow.scope_conflict', 'the existing workflow source is governed in a different organization or branch scope');
             }
-            if ($workflow->source_event_id !== null && (string) $workflow->source_event_id !== (string) $event->id) {
+            if ($workflow->source_event_id !== null && trim((string) $workflow->source_event_id) !== trim((string) $event->id)) {
                 throw BusinessRejection::forCode('workflow.source_event_conflict', 'the source already has a different projected workflow event');
             }
             if ($workflow->source_event_id === null) {

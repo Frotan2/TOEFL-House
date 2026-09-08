@@ -114,8 +114,9 @@ final class StartWorkflow
                         ->lockForUpdate()
                         ->first();
                     if ($existing !== null) {
-                        if ((string) $existing->organization_id !== $resolvedOrganizationId
-                            || (string) ($existing->branch_id ?? '') !== (string) ($branchId ?? '')) {
+                        // char(36) columns are blank-padded by PostgreSQL; compare trimmed.
+                        if (trim((string) $existing->organization_id) !== trim($resolvedOrganizationId)
+                            || trim((string) ($existing->branch_id ?? '')) !== trim((string) ($branchId ?? ''))) {
                             throw BusinessRejection::forCode('workflow.scope_conflict', 'the existing workflow source is governed in a different organization or branch scope');
                         }
                         $item = $existing->workItems()->whereIn('lifecycle_state', ['open', 'claimed', 'in_progress'])->first();
