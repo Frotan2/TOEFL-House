@@ -53,8 +53,8 @@ final class PrintingAuthorizationTest extends TestCase
         $this->studentNull = $this->makeStudent()['student']->id;
         // Provenance seeding: these students belong to their branches; the
         // third stays branchless (legacy/backfill shape).
-        Student::query()->whereKey($this->studentA)->update(['current_home_branch_id' => $this->branchA]);
-        Student::query()->whereKey($this->studentB)->update(['current_home_branch_id' => $this->branchB]);
+        $this->transferStudentHome($this->studentA, $this->branchA, 'hb5');
+        $this->transferStudentHome($this->studentB, $this->branchB, 'hb6');
 
         $period = FinancialPeriod::query()->create([
             'id' => RandomIdentifier::new(),

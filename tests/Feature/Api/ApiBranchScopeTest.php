@@ -42,8 +42,8 @@ final class ApiBranchScopeTest extends TestCase
         $this->studentA = $this->makeStudent()['student']->id;
         $this->studentB = $this->makeStudent()['student']->id;
         $this->studentNull = $this->makeStudent()['student']->id;
-        Student::query()->whereKey($this->studentA)->update(['current_home_branch_id' => $this->branchA]);
-        Student::query()->whereKey($this->studentB)->update(['current_home_branch_id' => $this->branchB]);
+        $this->transferStudentHome($this->studentA, $this->branchA, 'hb1');
+        $this->transferStudentHome($this->studentB, $this->branchB, 'hb2');
 
         $this->makeLogin('api.a', 'api-officer-a', $this->branchA);
         $this->makeLogin('api.bare', 'api-officer-bare', null);

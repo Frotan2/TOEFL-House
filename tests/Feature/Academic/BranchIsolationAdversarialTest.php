@@ -147,7 +147,7 @@ final class BranchIsolationAdversarialTest extends TestCase
         $this->studentWaitB = $this->newStudent('iso-student-wait-b');
         // Provenance seeding: student B belongs to branch B. The isolation
         // boundary is exercised against this stored provenance.
-        Student::query()->whereKey($this->studentB)->update(['current_home_branch_id' => $this->branchB]);
+        $this->transferStudentHome($this->studentB, $this->branchB, 'hb3');
 
         $enroll = app(MaintainEnrollment::class);
         $this->seatA = $enroll->request($org, $this->studentA, $this->classId, 'iso-enr-a', $this->offeringA)['enrollment_id'];
@@ -325,7 +325,7 @@ final class BranchIsolationAdversarialTest extends TestCase
         // A class-only seat inherits the student's home branch — the
         // activation gate follows it there.
         $branched = $this->newStudent('iso-activate-1');
-        Student::query()->whereKey($branched)->update(['current_home_branch_id' => $this->branchB]);
+        $this->transferStudentHome($branched, $this->branchB, 'hb4');
         $requestedB = $enroll->request($this->orgOfficer(), $branched, $this->classId, 'iso-x-req-class-only')['enrollment_id'];
         $this->assertDatabaseHas('enrollments', ['id' => $requestedB, 'originating_branch_id' => $this->branchB]);
         try {

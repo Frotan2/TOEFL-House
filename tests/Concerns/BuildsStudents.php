@@ -82,4 +82,25 @@ trait BuildsStudents
 
         return ['student' => $student, 'person' => $person];
     }
+
+    /**
+     * Moves a student's home branch through the production command.
+     *
+     * students_admission_authority_guard requires the newest matching
+     * branch-transfer fact, so writing `current_home_branch_id` directly is
+     * refused — correctly, because a home branch is provenance, not a column.
+     */
+    protected function transferStudentHome(string $studentId, string $targetBranchId, string $key): void
+    {
+        $student = \App\Modules\Students\Models\Student::query()->findOrFail($studentId);
+        if (trim((string) $student->current_home_branch_id) === trim($targetBranchId)) {
+            return;
+        }
+
+        $actor = $this->grantedActor($key.'-tr', ['students.transfer']);
+
+        app(\App\Modules\Students\Commands\TransferStudentHomeBranch::class)
+            ->transfer($actor, $student, $targetBranchId, 'fixture branch transfer', $key.'-trk');
+    }
 }
+
