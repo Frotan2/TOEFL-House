@@ -57,6 +57,18 @@ Use `CANONICAL_TERMINOLOGY.md` for current domain names. New synonyms for an exi
 - Operators: use `12-OPERATIONS-DEPLOYMENT-DR.md` and `SETUP.md` for the actual deployment procedure.
 - Auditors: use `13-TESTING-QUALITY-RELEASE.md`, `15-REQUIREMENT-TRACEABILITY.md`, `16-DECISION-REGISTER.md`, `CANONICAL_TERMINOLOGY.md`, and the evidence sources they point to.
 
+## Audit and reconciliation records (non-normative)
+
+- [`AUDIT-2026-09-08-RECONCILIATION.md`](AUDIT-2026-09-08-RECONCILIATION.md) — the
+  branch reconciliation of the `01a0814a` certification line with the `01a080c8`
+  verified line, the corrections applied to it, and the fresh verification record
+  (all gates re-run, plus live browser E2E and a running-instance readiness check).
+  **Read this before treating any audit verdict as release authority.**
+- `AUDIT-2026-09-08-PRODUCTION-READINESS.md` and the root-level
+  `FINAL-ENGINEERING-REPORT.md` / `AUDIT-SUMMARY.md` — the superseded certification
+  from `arena/01a0814a-toefl-house`, retained verbatim with inline `[R.n]`
+  corrections so the original claim and its refutation stay readable together.
+
 ## Historical archive
 
 `history/` is evidence only. Historical sources have been consolidated into four volumes so that engineers do not need to reconstruct project history from dozens of overlapping files.

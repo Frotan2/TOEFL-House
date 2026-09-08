@@ -1,0 +1,271 @@
+# Branch Reconciliation Record — `01a0814a` (production-readiness) ↔ `01a080c8` (current verified)
+
+**Date:** 2026-09-08
+**Performed on:** `arena/01a081d4-toefl-house`
+**Inputs:** `arena/01a0814a-toefl-house` @ `9225b33`, `arena/01a080c8-toefl-house` @ `54d7e1a`
+**Outcome:** one branch carrying the verified union of both lines — `01a080c8`'s code and CI-green runtime as the authoritative state, `01a0814a`'s documentation absorbed and corrected.
+**Status of this document:** CURRENT — supersedes the certification verdicts in `AUDIT-SUMMARY.md`, `FINAL-ENGINEERING-REPORT.md` and `docs/AUDIT-2026-09-08-PRODUCTION-READINESS.md`.
+
+---
+
+## 1. Why neither branch's self-certification could be trusted
+
+Both lines assert authority. `arena/01a0814a-toefl-house` is titled "Final Engineering
+Report: TOEFL House Production-Readiness Certification" and declares
+`✅ PRODUCTION-READY`, `zero blocking defects`, `zero security vulnerabilities`,
+and "no changes to the codebase are required before production deployment".
+`arena/01a080c8-toefl-house` carries no such claim — only a verification workflow
+and a handoff document that describes its own gaps.
+
+Neither assertion was accepted. The adjudication below uses only artifacts a
+reviewer can re-run: git objects, the repository's own files, and GitHub Actions
+job conclusions queried from the API.
+
+| Question | Evidence | Answer |
+|---|---|---|
+| Does `01a0814a` contain work that `01a080c8` lacks? | `git diff --name-status origin/01a080c8 origin/01a0814a` | 3 files, all Markdown. No code, migration, test or config file. |
+| Does `01a080c8` contain work that `01a0814a` lacks? | `git log f0e1424..origin/01a080c8` | 3 commits, 230 files — CI/toolchain convergence. |
+| Which line is actually green? | GitHub Actions job conclusions | Only `01a080c8` @ `54d7e1a`. |
+| Is `01a0814a` green? | run `34249481368` | **No** — static analysis FAIL, backend FAIL. |
+
+## 2. Method (reproducible)
+
+```bash
+git fetch origin 'refs/heads/arena/01a080c8-toefl-house:refs/remotes/origin/01a080c8' \
+                'refs/heads/arena/01a0814a-toefl-house:refs/remotes/origin/01a0814a'
+git merge-base origin/01a0814a origin/01a080c8     # → no merge base: unrelated histories
+git rev-list --count origin/01a0814a                # → 1  (orphan snapshot, no parent)
+git rev-list --count origin/01a080c8                # → 165
+git diff --name-status origin/01a080c8 origin/01a0814a | awk '{print $1}' | sort | uniq -c
+#   → 3 A (the three audit reports), 230 M (01a080c8's later CI fixes)
+git rev-list -40 origin/01a080c8 | while read c; do echo "$(git diff --name-only $c 9225b33 | wc -l) $c"; done | sort -n | head -1
+#   → 3 f0e1424  ← the snapshot's true content parent
+gh api repos/Frotan2/TOEFL-House/actions/runs/<run>/jobs --jq '.jobs[]|"  \(.name): \(.status)/\(.conclusion)"'
+```
+
+**Content genealogy.** `9225b33` is `f0e1424` + three added Markdown files. It has no
+parent commit and shares no history with the branch whose commit it snapshots, so
+its ancestry carries no information; only its tree does. `01a080c8` = `f0e1424`
++ `293fee2` + `84eb9ce` + `54d7e1a`.
+
+The tree-diff distance sweep is decisive: of the last 40 commits on `01a080c8`,
+`f0e1424` differs from `9225b33` in 3 files and the next-closest commit differs in
+14. There is no code anywhere on `01a0814a` that `01a080c8` does not already have.
+
+## 3. What the "production-readiness" branch actually contributed
+
+| Artifact | Unique? | Verdict |
+|---|---|---|
+| `AUDIT-SUMMARY.md` | yes | Kept at its original path, annotated in place. |
+| `FINAL-ENGINEERING-REPORT.md` | yes | Kept at its original path, annotated in place. |
+| `docs/AUDIT-2026-09-08-PRODUCTION-READINESS.md` | yes | Kept at its original path, annotated in place (the substantive review record — its per-area walkthroughs were checked and mostly hold). |
+| `.github/workflows/verification.yml` | **no — regression** | `01a0814a` carries `PHP_VERSION: '8.2'` with the explanatory comment removed; `01a080c8` @ `293fee2` fixed that drift to `'8.4'` and restored the rationale. `01a080c8`'s version is authoritative. |
+| every other file | **no** | Byte-identical to `f0e1424`, which `01a080c8` then improved. |
+
+## 4. CI ground truth
+
+`Verification` workflow, three jobs, from the GitHub API — not from any README.
+
+| Run | Commit | Line | Frontend | Static | Backend |
+|---|---|---|---|---|---|
+| `34230674669` | `f0e1424` | 01a080c8 (= the cert's baseline) | PASS | **FAIL** | **FAIL** |
+| `34238114478` | `293fee2` | 01a080c8 | PASS | PASS | **FAIL** |
+| `34244517655` | `84eb9ce` | 01a080c8 | PASS | PASS | **FAIL** |
+| `34247710050` | `54d7e1a` | 01a080c8 | PASS | PASS | PASS |
+| `34249481368` | `9225b33` | **01a0814a** (the certified branch) | PASS | **FAIL** | **FAIL** |
+
+Two conclusions, both uncomfortable for `01a0814a`:
+
+1. **The certified commit was red.** The certification certifies `f0e1424`, whose
+   static-analysis job failed `vendor/bin/pint --test` and whose backend job failed.
+   Its own tip `9225b33` inherited both failures untouched.
+2. **`01a080c8` is the line that did the convergence work.** Three commits after
+   the snapshot, all three jobs pass. The certification's "already converged"
+   framing inverts the actual order of events.
+
+The local claims inside the certification were nonetheless honest — the full
+suite really did pass on a provisioned runtime (see §7); what was wrong is the
+inference from "green locally" to "production-ready, no changes required".
+
+## 5. Integration decisions
+
+1. **Base = `54d7e1a`, the CI-green tip.** Adopted wholesale, not merged file-by-file.
+   A three-way merge across unrelated histories with 230 modified files would have
+   had to resolve every style difference by hand and would have re-introduced a
+   red CI configuration.
+2. **`git merge -s ours --allow-unrelated-histories origin/01a0814a`** — records
+   `9225b33` as a real ancestor of the reconciled branch while keeping the green
+   tree. The certification line is therefore *in the history* (blame, bisect and
+   attribution keep working) instead of being overwritten or discarded.
+3. **Verbatim import, then correction.** `f5e29a0` imported the three reports
+   byte-for-byte (`git diff 9225b33 f5e29a0 -- <paths>` is empty); `d0edd60` added
+   the corrections. Both the original claim and the refutation are readable in the
+   same file, per this repository's own archive rule: *"Historical facts have not
+   been silently rewritten."*
+4. **Nothing was taken from the red snapshot's tooling** — including its
+   `PHP_VERSION: '8.2'`, which is the drift `01a080c8` fixed.
+5. **Result is fast-forwardable onto `arena/01a080c8-toefl-house`.** `54d7e1a` is
+   this branch's first parent, so the authoritative branch can be promoted without
+   any further merge: `git push origin arena/01a081d4-toefl-house:arena/01a080c8-toefl-house`
+   is a pure fast-forward.
+
+## 6. Corrections applied to the imported certification
+
+| ID | Claim as issued | What the repository shows | Disposition |
+|---|---|---|---|
+| R.1 | "CERTIFIED PRODUCTION-READY … zero blocking defects" | CI at the certified commit: static FAIL, backend FAIL (`34230674669`); `docs/ai/07-RELEASE-CERTIFICATION-PROTOCOL.md` additionally requires deployment rehearsal, readiness verification and demonstrated schema compatibility, none of which the audit evidences | Certification **withdrawn** |
+| R.2 | "No changes to the codebase are required before production deployment" | 230 files across `293fee2` / `84eb9ce` / `54d7e1a` were required before CI went green | **Refuted** |
+| R.3 | ADV-002 "no rate limiting middleware"; ADV-003 "no HTTPS enforcement" | `RateLimiter::for('login', …)` → `Limit::perMinute(5)` keyed on IP+username (`app/Support/Providers/AppServiceProvider.php`), applied via `throttle:login` (`routes/web.php:38`); `deploy/nginx/toefl-house.conf` does `listen 80` + `return 301 https://` with `ssl_protocols TLSv1.2 TLSv1.3`, `SecurityHeaders` emits HSTS `max-age=31536000; includeSubDomains`, `.env.example` sets `SESSION_SECURE_COOKIE=true` | Both **withdrawn** — the recommendations were already implemented |
+| R.4 | Commits `e696678` and `bf08353` authored the audit | Neither object exists (`git cat-file -t` fails on both); the branch has exactly one commit | **Unverifiable citation** — flagged in place |
+| R.5 | "Idempotency-Key header on all mutations" | Header honoured with an `idempotency_key` field fallback by `Controller::idempotencyKey()`, used by 28 controllers; 433 mutation routes exist overall | **Overstated** — restated as measured |
+| R.6 | "168 tables, 1,765 columns, 230 PK, 380 FK, 101 unique, 336 CHECK, 2 exclusion, 392 indexes (65 partial), 525 functions, 285 triggers" | Re-measured against a live PostgreSQL 18.4 after replaying all 185 migrations: **every number matched exactly** | **Confirmed** — see §7, including a retraction of a mistaken objection raised while this reconciliation was in progress |
+
+## 7. What survived independent re-verification
+
+Re-run on this branch in the repository's own provisioned runtime
+(`bash scripts/runtime/provision.sh`), not quoted from the reports:
+
+| Gate | Command | Result |
+|---|---|---|
+| Runtime lock | `npm run verify:environment` | **8/8 PASS** — PHP 8.4.14, Composer 2.9.2, Laravel 12.67.0, PostgreSQL 18.4, Node 22.22.3, 21 extensions |
+| Composer integrity | `composer validate --strict` | PASS (`./composer.json is valid`) |
+| Migration replay | `php artisan migrate:fresh --force` | **185/185 applied, 0 pending**, exit 0 |
+| Live schema shape | direct `pg_*`/`information_schema` queries | 168 tables · 1,765 columns · 230 PK · 380 FK · 101 unique · 336 CHECK · 2 exclusion · 392 indexes (65 partial) · 525 functions · 285 triggers — **identical to the audited figures** |
+| Database invariants | `npm run verify:invariants` | **6/6 enforced by PostgreSQL** |
+| Concurrency | `npm run verify:concurrency` | **4/4** — incl. 8 writers vs capacity 2 → 2 committed; 10 duplicate payments → 1 row; 6× 40.00 refunds vs 100.00 → 80.00 |
+| Canonical suite | `phpunit --testsuite Canonical` | **OK (63 tests, 243 assertions)** |
+| Style gate | `vendor/bin/pint --test` | **PASS**, 859 files |
+| Static analysis | `phpstan analyse` (level 6, larastan) | **[OK] No errors** |
+| Migration discipline | `php scripts/database-migration-audit.php` | **PASS** (3 advisories: data-writing migrations `000140`, `000149`, `000168` need explicit review) |
+| Terminology | `php scripts/terminology-audit.php` | exit 0, advisory (87 findings, none fatal) |
+| Frontend types | `npm run typecheck` | PASS |
+| Frontend build | `npm run build` | PASS (Vite, clean) |
+| Console mounts | `npm run test:frontend` | **8/8 consoles mount** |
+| JS dependency audit | `npm ci` | "found 0 vulnerabilities" |
+| Full backend suite | `phpunit --no-coverage` | **OK — 899 tests, 6,990 assertions, 1 skipped, 0 failures** (exit 0, 5m54s) |
+| **Live browser E2E** | `php artisan serve` + `node scripts/runtime/browser-e2e.mjs` on real Chromium 152.0.7977.0 | **21/21 PASS** — all 14 consoles render live React trees, 25 `/api/v1` calls observed / 25 succeeded / 0 failed, no uncaught console errors, no failed network requests, sign-out ends the session |
+| Readiness on a running instance | `GET /up`, `GET /health` | 200 / `{"status":"ok","checks":{"database":"ok","application_key":"ok","frontend_build":"ok"}}` |
+| Security headers on a live response | `curl -I /login` | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `Cache-Control: no-store, private` |
+| Deployment bootstrap path | `db:seed --class=FirstRunBootstrapSeeder` | PASS — `organization "The TOEFL House", Owner role (133 capabilities) and account "runtime.owner" created`, i.e. the privileged-bootstrapping route a fresh install actually uses |
+| CI on this branch | `Verification` workflow, run `34252336159` | *(see §9.1 — recorded when the run on the pushed branch completes)* |
+
+**A correction of this correction (kept for the record).** While reviewing §7's
+schema row, a static reading of `database/migrations` produced 165 `Schema::create`
+names minus 1 later drop = **164** tables, and an interim version of this document
+called the audited "168 tables" irreproducible. That judgement was **wrong** and is
+retracted. The migration tree also creates tables through raw SQL —
+`settlement_proposals`, `result_corrections`, `privacy_export_requests`,
+`asset_disposal_requests`, `org_wide_grant_requests` — plus the framework's
+`migrations` table, and consolidates away `compensation_components`, `work_bases`
+and `final_settlements`. 165 + 5 + 1 − 3 = **168**. Grep of the migration files is
+not an acceptable way to dispute a live-database figure; only a replay is. The
+certification's database evidence was sound, and the audit's insistence that these
+numbers came from `php artisan db:show` and live queries was the right method.
+
+**The 900 → 899 test-count change is also explained, and it is not a regression.**
+The certification (and Part I.4 of the baseline handoff) measured **900 tests /
+6,991 assertions / 2 skipped** at `f0e1424`; this branch measures **899 / 6,990 /
+1 skipped, 0 failures**. The whole delta is one test: at `f0e1424`,
+`WindowsLauncherContractTest::test_php_urls_resolve_over_http()` was parameterised by
+`#[DataProvider('phpUrlProvider')]` with two rows — `'releases (current)'` and
+`'archives (permanent fallback)'` — so it executed as two cases. `84eb9ce`
+(*"Make launcher live-URL test robust to PHP mirror tier rotation"*) replaced the
+provider with a single test that probes both tiers and skips only when neither
+resolves, which is the correct behaviour when a mirror tier rotates. One test case
+and its assertion disappeared; nothing was weakened. The certification's figure was
+accurate for the commit it reviewed and is superseded, not contradicted.
+
+## 8. Verification neither branch performed
+
+Added by this reconciliation, because the certification's absolute claims
+("no bypass routes", "zero security vulnerabilities") deserved at least one
+check that was not inherited from it.
+
+1. **Route-surface enumeration** — `php artisan route:list --json`: **511 routes,
+   433 mutation routes**, of which exactly **one** is not behind
+   `employee`/`auth`/`throttle`: `PUT storage/{path}`.
+   Investigated to its source: it and its `GET` sibling come from
+   `Illuminate\Filesystem\FilesystemServiceProvider::serveFiles()` for any
+   `local` disk with `serve => true`, which is the **framework default** for the
+   `local` disk in `vendor/laravel/framework/config/filesystems.php` — the app
+   publishes no `config/filesystems.php` at all. `ReceiveFile` and `ServeFile`
+   both `abort_unless($this->hasValidSignature($request), …)`; for a non-`public`
+   visibility disk that requires a valid relative signature, and
+   `PathTraversalDetected` is caught → 404. **Not a bypass and not exploitable**;
+   recorded as the answer to "no bypass routes" rather than as a defect.
+   Note for operators: the `GET` half of that pair would serve an unauthenticated
+   read of *any* disk with `visibility => 'public'`, so publishing a custom
+   `config/filesystems.php` must keep `serve` off public disks deliberately.
+2. **Middleware/exception-path check** — `bootstrap/app.php` confirms CSRF on the
+   `api` group, `SecurityHeaders` appended globally, and a `DomainError` renderer
+   mapping authorization failures to 403, validation to 422, business and
+   concurrency rejections to 409, integration-unknown to 502, with a
+   `correlation_id` on every payload.
+3. **Secret hygiene** — no `.env`, key material or credentials are tracked
+   (`git ls-tree -r` scan); `phpunit.xml` carries a fixed `APP_KEY`, which is
+   test-scoped by design; `.env.example` defaults `SESSION_SECURE_COOKIE=true`.
+4. **Dead tooling audit** — `recovery/_apply_supplied_patch.yml` is a one-shot
+   patch applier left from the `b951c1b`/`d84097d` recovery session; it `test -f`s
+   twelve `recovery/chunk*.b64` files of which only a 25-byte stub `chunk1.b64`
+   remains, so the workflow is inoperative. Nothing in `.github/`, `tests/`,
+   `scripts/`, `composer.json` or `package.json` references it. Both lines carried
+   it; removed in this reconciliation (see the hygiene commit) as
+   non-functional recovery scaffolding that a future operator could mistake for a
+   supported path.
+
+## 9. Production-readiness assessment (truthful)
+
+The engineering baseline is **strong and genuinely verified**. The release verdict
+is **not** "production-ready", and that is a documentation-of-record problem, not a
+defect-hunt problem.
+
+**Proven (reproducible in this repository, §7 + §8):** architecture and authority
+boundaries as documented; PostgreSQL-enforced invariants; concurrency safety under
+real simultaneous transactions; financial correctness scaffolding (single balance
+authority, immutable facts, `bc*` arithmetic); a full 185-migration replay from
+zero; static analysis clean at PHPStan level 6 and Pint clean; frontend typecheck,
+build and 8/8 console mounts; CI green across all three jobs.
+
+**Not proven — and the certification should not have implied otherwise:**
+
+| Gap | Why it still matters | How to close it |
+|---|---|---|
+| ~~Live browser E2E on this branch~~ **CLOSED by this reconciliation** | It was the largest inherited-not-measured claim in both lines (handoff Part I.5 calls it host-gated; the audit just quotes Part D.2). Re-measured here on real Chromium 152.0.7977.0 against a live server: **21/21 PASS** (§7) | closed — no action; keep running it wherever `@sparticuz/chromium` is available |
+| Deployment rehearsal — **partially closed here** | The app was started for real (provisioned runtime → migrate → seed → first-run owner bootstrap → `artisan serve` → `/health` + `/up` 200 → browser journeys), which is the readiness half. Still missing: the authored **nginx + php-fpm topology** (`deploy/nginx/toefl-house.conf`, `deploy/php-fpm.conf`) has never been exercised, and the `.bat`/`deploy` Windows path is contract-tested only | run the documented topology once behind nginx with TLS, `APP_ENV=production`, and record |
+| DR drill / timed restore-verify | `deploy/backup.sh` and `deploy/restore.sh` exist and `12-OPERATIONS-DEPLOYMENT-DR.md` describes them, but no restore has been executed and timed against a real dump | `pg_dump` → drop → `deploy/restore.sh` → `/health` → row counts, recorded with timings and RPO/RTO |
+| Schema compatibility / rollback demonstration | The protocol separates app rollback from DB rollback; a 185-migration `down()` chain has never been exercised end-to-end | `migrate` to N, `migrate:rollback --step=…`, re-apply, record |
+| Observability | Health probes exist (`/health`, `/up`); no metrics/alerting/pager path is defined in-repo | define SLO + alert routing in `docs/12-OPERATIONS-DEPLOYMENT-DR.md` |
+| Dependency currency policy | 73 + 33 locked packages, `npm ci` clean; no update/vulnerability-triage cadence is documented | add a cadence + `composer audit`/`npm audit` gate to CI |
+| Data volume / performance envelope | "no N+1 / no unbounded queries" is asserted from review, not measured against realistic volumes | run the reporting journeys with seeded realistic data and record query counts |
+
+**Verdict: `arena/01a081d4-toefl-house` is the authoritative engineering baseline —
+CI-green, and re-verified end to end on a provisioned runtime in this session, now
+including the live browser journeys and a running instance that the certification
+could only cite from documents. It is ready to be promoted to
+`arena/01a080c8-toefl-house` (fast-forward).**
+
+**It is still not release-certified**, and the remaining list is short and specific:
+a rehearsal of the authored nginx/php-fpm production topology, an executed and timed
+backup→restore DR drill, a demonstrated `migrate`/`rollback`/re-apply cycle (the
+protocol separates app rollback from database rollback), and an observability/alerting
+path. None of the two input branches evidenced these; a "no changes required before
+production deployment" claim that skips the protocol's own checklist is exactly the
+failure mode this reconciliation exists to prevent.
+
+## 10. Disposition of the two input branches
+
+| Branch | Disposition |
+|---|---|
+| `arena/01a0814a-toefl-house` | Fully absorbed. Its only unique content (three reports) is imported and corrected; its `verification.yml` was a regression and was not adopted. Recommend retiring it or marking it read-only — nothing further should land there. |
+| `arena/01a080c8-toefl-house` | The authoritative code state, preserved exactly (tree-identical at the merge, then documentation-only commits on top). Fast-forward this branch onto the reconciled result to converge. |
+| `arena/01a081d4-toefl-house` | The reconciled result: `01a080c8` history + `9225b33` as an ancestor + absorbed/corrected documentation. |
+
+## 11. Reading order
+
+1. This file — what was compared, decided and verified.
+2. `docs/AUDIT-2026-09-08-PRODUCTION-READINESS.md` — the full per-area review, with
+   the certification verdict corrected in place.
+3. `docs/RUNTIME_VERIFICATION_HANDOFF.md` Part I — the honest gate record of the
+   baseline the certification reviewed.
+4. `FINAL-ENGINEERING-REPORT.md`, `AUDIT-SUMMARY.md` — the superseded summary layer,
+   retained for provenance.
