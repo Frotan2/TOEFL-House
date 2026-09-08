@@ -114,34 +114,34 @@ final class IncrementBWorkflowFeatureTest extends TestCase
     {
         $this->makeEmployee('incb-stu-mgr-1', ['students.manage'], 'student-manager');
         $this->makeEmployee('incb-stu-react-1', ['students.reactivate'], 'student-reactivator');
-        $show = 'http://localhost/students/students/'.$this->studentId;
+        $show = 'http://localhost/students/'.$this->studentId;
 
         // Suspend (students.manage), reactivate (its own capability), complete, graduate.
         $this->signIn('student-manager');
-        $this->post('/students/students/'.$this->studentId.'/status/suspend', ['reason' => 'conduct review'])
+        $this->post('/students/'.$this->studentId.'/status/suspend', ['reason' => 'conduct review'])
             ->assertRedirect($show);
         $this->assertDatabaseHas(DB::connection()->getTablePrefix().'student_statuses', [
             'student_id' => $this->studentId, 'status' => 'suspended',
         ]);
 
         // The manager cannot reactivate — that capability is separate.
-        $this->post('/students/students/'.$this->studentId.'/status/reactivate', ['reason' => 'review closed'], ['referer' => $show])
+        $this->post('/students/'.$this->studentId.'/status/reactivate', ['reason' => 'review closed'], ['referer' => $show])
             ->assertRedirect($show)
             ->assertSessionHas('error_code', 'students.status_denied');
 
         $this->signOut();
         $this->signIn('student-reactivator');
-        $this->post('/students/students/'.$this->studentId.'/status/reactivate', ['reason' => 'review closed'])
+        $this->post('/students/'.$this->studentId.'/status/reactivate', ['reason' => 'review closed'])
             ->assertRedirect($show);
         $this->signOut();
 
         $this->signIn('student-manager');
-        $this->post('/students/students/'.$this->studentId.'/status/complete', ['reason' => 'course completed'])
+        $this->post('/students/'.$this->studentId.'/status/complete', ['reason' => 'course completed'])
             ->assertRedirect($show);
 
         // Alumni requires the governed Academic chain: the bare reason is
         // refused with its code before the chain is travelled.
-        $this->post('/students/students/'.$this->studentId.'/status/graduate', ['reason' => 'graduation board'], ['referer' => $show])
+        $this->post('/students/'.$this->studentId.'/status/graduate', ['reason' => 'graduation board'], ['referer' => $show])
             ->assertRedirect($show)
             ->assertSessionHas('error_code', 'students.graduation_decision_required');
 
@@ -167,14 +167,14 @@ final class IncrementBWorkflowFeatureTest extends TestCase
         );
         app(DecideGraduation::class)->issueCertificate($this->grantedActor('incb-grad-cert', ['academic.certify', 'documents.register']), $graduation, 'incb-grad-4');
 
-        $this->post('/students/students/'.$this->studentId.'/status/graduate', ['reason' => 'graduation board'])
+        $this->post('/students/'.$this->studentId.'/status/graduate', ['reason' => 'graduation board'])
             ->assertRedirect($show);
         $this->assertDatabaseHas(DB::connection()->getTablePrefix().'student_statuses', [
             'student_id' => $this->studentId, 'status' => 'alumni',
         ]);
 
         // Alumni is terminal: no further transition is allowed.
-        $this->post('/students/students/'.$this->studentId.'/status/suspend', ['reason' => 'should fail'], ['referer' => $show])
+        $this->post('/students/'.$this->studentId.'/status/suspend', ['reason' => 'should fail'], ['referer' => $show])
             ->assertRedirect($show)
             ->assertSessionHas('error_code', 'students.transition_forbidden');
     }
@@ -238,13 +238,13 @@ final class IncrementBWorkflowFeatureTest extends TestCase
     {
         $this->makeEmployee('incb-guard-1', ['students.guardian'], 'guardian-clerk');
         $guardianPerson = $this->personWithAuthority('incb-guardian-1', []);
-        $show = 'http://localhost/students/students/'.$this->studentId;
+        $show = 'http://localhost/students/'.$this->studentId;
 
         $this->signIn('guardian-clerk');
-        $this->post('/students/students/'.$this->studentId.'/guardians', [
+        $this->post('/students/'.$this->studentId.'/guardians', [
             'guardian_person_id' => $guardianPerson->id,
             'relationship' => 'parent',
-            'permissions' => 'view_records, receive_reports',
+            'permissions' => 'view-academic, receive-communication',
         ])->assertRedirect($show);
         $this->assertDatabaseHas(DB::connection()->getTablePrefix().'guardian_relationships', [
             'student_id' => $this->studentId,
@@ -254,10 +254,10 @@ final class IncrementBWorkflowFeatureTest extends TestCase
         ]);
 
         // The same open (student, guardian, relationship) row cannot be duplicated.
-        $this->post('/students/students/'.$this->studentId.'/guardians', [
+        $this->post('/students/'.$this->studentId.'/guardians', [
             'guardian_person_id' => $guardianPerson->id,
             'relationship' => 'parent',
-            'permissions' => 'view_records',
+            'permissions' => 'view-academic',
         ], ['referer' => $show])
             ->assertRedirect($show)
             ->assertSessionHas('error_code', 'students.guardian_duplicate');

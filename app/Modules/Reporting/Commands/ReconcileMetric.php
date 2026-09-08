@@ -108,7 +108,14 @@ final class ReconcileMetric
                         throw BusinessRejection::forCode('reporting.projection_scope_conflict', 'the reported projection has stale organization provenance for its current scope');
                     }
 
-                    $variance = bcsub(MoneyAmount::decimal($reported->value), MoneyAmount::decimal($authoritative['value']), 4);
+                    // Projection values are immutable snapshots of metric-scale
+                    // numeric facts (two-decimal money or four-decimal rates)
+                    // stored in a decimal(16,4) column, so reads come back with
+                    // trailing scale-4 zeros. MoneyAmount is the two-decimal
+                    // money boundary and must not be applied to rate-shaped
+                    // projections; compare both sides at the shared metric
+                    // scale instead.
+                    $variance = bcsub(self::metricScale((string) $reported->value), self::metricScale((string) $authoritative['value']), 4);
                     $status = bccomp($variance, '0.0000', 4) === 0 ? 'matched' : 'diverged';
                     $reconciliation = MetricReconciliation::query()->create([
                         'id' => RandomIdentifier::new(),
@@ -135,6 +142,22 @@ final class ReconcileMetric
         } catch (AuthorizationDenied $denial) {
             $this->attemptedOperation->deniedByActor($denial, $actor, 'reporting.reconcile', 'metric_reconciliation', $metricKey);
         }
+    }
+
+    /**
+     * Guards a numeric-string metric fact for bcmath. Metric projections are
+     * decimal(16,4) evidence: accepted shapes are integers or decimals of up
+     * to four places, normalized to the shared scale-4 comparison form.
+     *
+     * @return numeric-string
+     */
+    private static function metricScale(string $value): string
+    {
+        if (preg_match('/^-?\d+(\.\d{1,4})?$/', $value) !== 1) {
+            throw new \InvalidArgumentException('metric value is not a valid decimal');
+        }
+
+        return bcadd($value, '0', 4);
     }
 
     private function require(Actor $actor): void

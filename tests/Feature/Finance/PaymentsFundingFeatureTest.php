@@ -767,6 +767,7 @@ final class PaymentsFundingFeatureTest extends TestCase
     {
         $teller = $this->teller();
         $payment = app(RecordPayment::class)->record($teller, FinancialPeriod::query()->findOrFail($this->periodId), $this->studentId, '7000.00', 'bank-transfer', 'RCPT-DB-6', '2026-11-05', 'pay-fin-db-6');
+        $paymentProvenance = (array) DB::table('payments')->where('id', $payment['payment_id'])->first();
 
         DB::table('refunds')->insert([
             'id' => RandomIdentifier::new(),
@@ -776,6 +777,8 @@ final class PaymentsFundingFeatureTest extends TestCase
             'reason' => 'proposed within the remainder',
             'requested_by' => 'direct-sql-attacker',
             'lifecycle_state' => 'proposed',
+            'originating_branch_id' => $paymentProvenance['originating_branch_id'],
+            'current_home_branch_id' => $paymentProvenance['current_home_branch_id'],
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -864,8 +867,8 @@ final class PaymentsFundingFeatureTest extends TestCase
         $arId = RandomIdentifier::new();
         $revenueId = RandomIdentifier::new();
         DB::table('accounts')->insert([
-            ['id' => $arId, 'code' => '1100', 'name' => 'Accounts Receivable', 'type' => 'asset', 'created_at' => now(), 'updated_at' => now()],
-            ['id' => $revenueId, 'code' => '4100', 'name' => 'Tuition Revenue', 'type' => 'revenue', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => $arId, 'code' => '1177', 'name' => 'Attack Test Receivable', 'type' => 'asset', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => $revenueId, 'code' => '4177', 'name' => 'Attack Test Revenue', 'type' => 'revenue', 'created_at' => now(), 'updated_at' => now()],
         ]);
 
         $journalId = RandomIdentifier::new();
@@ -880,8 +883,9 @@ final class PaymentsFundingFeatureTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        // One debit leg and no credit leg: the deferred balance guard must
-        // reject the journal when the statement commits.
+        // One debit leg and no credit leg: the balance guard is deferred so a
+        // command can write both legs atomically; flush it to prove that raw
+        // SQL cannot leave a one-sided journal behind.
         $this->expectException(QueryException::class);
         DB::table('journal_lines')->insert([
             'id' => RandomIdentifier::new(),
@@ -892,6 +896,7 @@ final class PaymentsFundingFeatureTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        DB::statement('SET CONSTRAINTS journal_lines_balance_guard IMMEDIATE');
     }
 
     public function test_direct_sql_cannot_post_a_non_inverse_journal_reversal(): void
@@ -1062,5 +1067,8 @@ final class PaymentsFundingFeatureTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        // The lines total guard is deferred so a command can attach its lines
+        // atomically; flush it to prove raw SQL cannot inflate an obligation.
+        DB::statement('SET CONSTRAINTS obligation_lines_total_guard IMMEDIATE');
     }
 }

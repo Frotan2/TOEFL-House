@@ -56,7 +56,10 @@ final class AcademicDecisionFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'dec-period-2');
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
+        // Two levels so an advance decision has a target; the appeal supersede
+        // below advances past the fixture level.
         $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicdecisionfeaturet', 1, 'Level', 'A1', 'canon-academicdecisionfeaturet-lvl');
+        app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicdecisionfeaturet-2', 2, 'Level 2', 'A2', 'canon-academicdecisionfeaturet-lvl2');
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicdecisionfeaturet-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicdecisionfeaturet-offering');
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1', null, $this->bootstrapBranchId());
@@ -201,7 +204,7 @@ final class AcademicDecisionFeatureTest extends TestCase
         $reviewer = $this->grantedActor('dec-reviewer-x', ['academic.progression_review', 'academic.appeal_manage', 'academic.progression_approve']);
         $management = $this->grantedActor('dec-mgmt-x', ['academic.progression_approve']);
 
-        $decision = app(DecideProgression::class)->propose($teacher, $this->studentId, $this->classId, 'repeat', 'failed threshold components', 'dec-prog-1');
+        $decision = app(DecideProgression::class)->propose($teacher, $this->studentId, $this->classId, 'repeat', 'failed threshold components', 'dec-prog-1', null, 'assessed evidence on file');
 
         try {
             app(DecideProgression::class)->review($teacher, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'dec-prog-2');
@@ -222,7 +225,7 @@ final class AcademicDecisionFeatureTest extends TestCase
         $this->assertDatabaseHas('progression_decisions', ['id' => $decision['decision_id'], 'lifecycle_state' => 'approved', 'outcome' => 'repeat']);
 
         app(DecideProgression::class)->markAppealed($reviewer, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'dec-prog-6');
-        $superseding = app(DecideProgression::class)->supersede($reviewer, $management, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'advance', 'appeal evidence: moderated component score above threshold', 'dec-prog-7');
+        $superseding = app(DecideProgression::class)->supersede($reviewer, $management, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'advance', 'appeal evidence: moderated component score above threshold', 'dec-prog-7', null, 'moderated component evidence on file');
 
         $this->assertDatabaseHas('progression_decisions', ['id' => $decision['decision_id'], 'lifecycle_state' => 'superseded', 'superseded_by_id' => $superseding['decision_id']]);
         $this->assertDatabaseHas('progression_decisions', ['id' => $superseding['decision_id'], 'lifecycle_state' => 'approved', 'outcome' => 'advance']);

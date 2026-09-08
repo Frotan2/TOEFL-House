@@ -141,7 +141,11 @@ trait BuildsPlacementCatalog
 
     protected function actorId(string $prefix): string
     {
-        return $prefix.'-'.(++$this->actorSequence).'-'.substr((string) microtime(), -4);
+        // Person ids are char(36); long descriptive prefixes must never
+        // overflow the primary key.
+        $tail = '-'.(++$this->actorSequence);
+
+        return substr($prefix, 0, 36 - strlen($tail)).$tail;
     }
 
     protected function ensurePlacementBranch(): void

@@ -33,12 +33,12 @@ final class WorkspaceConsoleFeatureTest extends TestCase
 
         $this->get('/workspace')
             ->assertOk()
-            ->assertSee('data-view="workspace"')
+            ->assertSee('data-view="workspace"', false)
             ->assertSee('react-console');
 
         $this->get('/management')
             ->assertOk()
-            ->assertSee('data-view="management"')
+            ->assertSee('data-view="management"', false)
             ->assertSee('react-console');
     }
 }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Console;
 
+use App\Modules\Finance\Commands\MaintainFinancialPeriod;
+use App\Modules\Finance\Models\EmploymentSettlement;
 use App\Modules\Hr\Commands\MaintainContractVersion;
 use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Models\ContractVersion;
@@ -11,7 +13,6 @@ use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Organization\Models\Branch;
-use App\Modules\Finance\Models\EmploymentSettlement;
 use App\Modules\Payroll\Models\SettlementProposal;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;
@@ -60,6 +61,12 @@ final class SettlementWorkflowFeatureTest extends TestCase
 
         // The settlement under test targets this terminated employment.
         app(MaintainEmployment::class)->terminate($manager, Employment::query()->findOrFail($this->employmentId), '2026-10-01', 'contract ended', 'swf-emp-3');
+
+        // Finance records the settlement fact through the ledger, which
+        // requires exactly one open financial period containing the record
+        // date — the standard chart's open period for the current term.
+        $keeper = $this->grantedActor('swf-fin-keeper-1', ['finance.period']);
+        app(MaintainFinancialPeriod::class)->open($keeper, 'SY2026-1', '2026-09-01', '2026-12-18', 'swf-period-1');
     }
 
     /**
@@ -130,14 +137,24 @@ final class SettlementWorkflowFeatureTest extends TestCase
             'amount' => '5000',
             'basis' => 'remaining balance per ledger review',
         ])->assertRedirect('/payroll');
-        $this->assertDatabaseHas(DB::connection()->getTablePrefix().'settlement_proposals', [
+        $this->assertDatabaseHas('settlement_proposals', [
             'employment_id' => $this->employmentId,
             'amount' => 5000,
             'lifecycle_state' => 'proposed',
         ]);
 
-        // The preparer cannot approve her own proposal.
-        $proposalId = DB::table(DB::connection()->getTablePrefix().'settlement_proposals')->where('employment_id', $this->employmentId)->value('id');
+        // The preparer cannot approve her own proposal: the domain's
+        // separation-of-duty denial surfaces with its typed code.
+        $proposalId = DB::table('settlement_proposals')->where('employment_id', $this->employmentId)->value('id');
+        $this->post('/finance/employment-settlements/'.$proposalId.'/approve', [], ['referer' => 'http://localhost/finance'])
+            ->assertRedirect('/finance')
+            ->assertSessionHas('error_code', 'finance.employment_settlement_not_independent');
+
+        // An employee without the Finance settlement capability cannot record
+        // the settlement either; the capability denial surfaces through the
+        // console with the domain's typed code.
+        $this->signOut();
+        $this->signIn('finance-clearer');
         $this->post('/finance/employment-settlements/'.$proposalId.'/approve', [], ['referer' => 'http://localhost/finance'])
             ->assertRedirect('/finance')
             ->assertSessionHas('error_code', 'finance.employment_settlement_denied');
@@ -146,7 +163,7 @@ final class SettlementWorkflowFeatureTest extends TestCase
         $this->signOut();
         $this->signIn('settlement-approver');
         $this->post('/finance/employment-settlements/'.$proposalId.'/approve')->assertRedirect('/finance');
-        $this->assertDatabaseHas(DB::connection()->getTablePrefix().'settlement_proposals', [
+        $this->assertDatabaseHas('settlement_proposals', [
             'id' => $proposalId, 'lifecycle_state' => 'approved',
         ]);
         $this->assertSame(1, EmploymentSettlement::query()->where('employment_id', $this->employmentId)->count());

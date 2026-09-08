@@ -139,7 +139,7 @@ final class StudentStatusFeatureTest extends TestCase
         app(MaintainGuardianRelationship::class)->record($manager, $this->student, 'stu-guardian-2', 'mother', ['view-academic'], 'guard-key-5');
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('already has an open row');
-        app(MaintainGuardianRelationship::class)->record($manager, $this->student, 'stu-guardian-2', 'mother', ['view-financial'], 'guard-key-6');
+        app(MaintainGuardianRelationship::class)->record($manager, $this->student, 'stu-guardian-2', 'mother', ['view-finance'], 'guard-key-6');
     }
 
     public function test_unprivileged_actor_cannot_transition_status(): void

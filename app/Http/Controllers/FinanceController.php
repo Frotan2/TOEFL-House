@@ -204,11 +204,15 @@ final class FinanceController extends Controller
 
     public function approveEmploymentSettlement(Request $request, string $proposalId): RedirectResponse
     {
-        $employmentIds = Employment::query()
-            ->whereIn('person_id', Person::query()->whereIn('home_branch_id', $this->authorizedBranches('finance.employment_settlement'))->select('id'))
-            ->select('id');
-        $proposal = SettlementProposal::query()->whereKey($proposalId)->whereIn('employment_id', $employmentIds)->firstOrFail();
-        $employment = Employment::query()->whereIn('id', $employmentIds)->findOrFail($proposal->employment_id);
+        // The domain command is the authority boundary: it resolves the
+        // employment's structure scope, denies an actor without the
+        // capability (or the beneficiary/proposer) with its typed error
+        // code, and records the attempted operation. Pre-filtering the
+        // target by the actor's authorized branches here would turn every
+        // governed denial into a silent 404, which hides the decision from
+        // the operator and the audit trail.
+        $proposal = SettlementProposal::query()->findOrFail($proposalId);
+        $employment = Employment::query()->findOrFail($proposal->employment_id);
         app(MaintainEmploymentSettlement::class)->record(
             $this->actor(),
             $employment,

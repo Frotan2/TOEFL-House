@@ -29,9 +29,10 @@ use Tests\TestCase;
 final class RoomsSectionsTimetableConsoleTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsSessions;
     use \Tests\Concerns\BuildsTeachers;
 
-    private string $branchId;
+    private string $skillId;
 
     private string $classId;
 
@@ -46,13 +47,8 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
         $officer = $this->academicOfficer('rst-officer-domain');
         $structure = app(MaintainAcademicStructure::class);
 
-        $this->branchId = Branch::query()->create([
-            'id' => RandomIdentifier::new(),
-            'name' => 'Timetable Branch '.substr(md5(RandomIdentifier::new()), 0, 8),
-            'lifecycle_state' => 'active',
-        ])->id;
-        $this->attachBranchToBootstrapOrganization($this->branchId);
-
+        // Rooms and timetables live in the class branch: a session room must
+        // belong to the class branch, so no second branch is seeded.
         $program = $structure->defineProgram($officer, 'Console Intensive', 'rst-prog');
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Console v1', 'rst-ver');
         $period = $structure->definePeriod($officer, 'Console Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-30'), 'rst-period');
@@ -72,6 +68,11 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
             $maintainClass->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'published', $key.'-pub');
             $maintainClass->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'active', $key.'-act');
         }
+
+        // New sessions require explicit subject or skill authority: register
+        // a skill, authorize the teacher for it in the branch, cover every
+        // weekday with availability, and attribute it to the assignment.
+        $this->skillId = $this->makeClassSchedulable($officer, $this->classId, $this->bootstrapBranchId(), 'rst-console');
 
         $this->tomorrow = CarbonImmutable::now()->addDay()->toDateString();
 
@@ -119,7 +120,7 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
     private function defineRoomViaConsole(string $code, string $name = 'Room'): string
     {
         $this->post('/academic/rooms', [
-            'branch_id' => $this->branchId,
+            'branch_id' => $this->bootstrapBranchId(),
             'name' => $name.' '.$code,
             'code' => $code,
             'capacity' => 20,
@@ -151,14 +152,17 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
     public function test_room_lifecycle_through_console(): void
     {
         $this->signIn('room-officer');
-        $this->get('/academic/sessions')->assertOk()->assertSee('Rooms');
+        // The legacy sessions URL is a designed compat redirect into the
+        // React workspace; room state is proven below by the data rows.
+        $this->get('/academic/sessions')->assertRedirect('/academic');
+        $this->get('/academic')->assertOk()->assertSee('react-console');
 
         $roomId = $this->defineRoomViaConsole('R-01');
         $this->assertDatabaseHas($this->prefix().'academic_rooms', ['id' => $roomId, 'lifecycle_state' => 'available', 'capacity' => 20]);
 
         // A duplicate code within the branch is refused with the governed error.
         $this->post('/academic/rooms', [
-            'branch_id' => $this->branchId,
+            'branch_id' => $this->bootstrapBranchId(),
             'name' => 'Room R-01 duplicate',
             'code' => 'R-01',
             'capacity' => 20,
@@ -209,6 +213,7 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
             'scheduled_on' => $this->tomorrow,
             'starts_at' => '09:00',
             'ends_at' => '10:30',
+            'skill_id' => $this->skillId,
             'room_id' => $roomId,
             'section_id' => $sectionId,
         ])->assertRedirect('/academic/sessions');
@@ -216,12 +221,15 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
             'class_id' => $this->classId, 'room_id' => $roomId, 'section_id' => $sectionId, 'scheduled_on' => $this->tomorrow,
         ]);
 
-        // The booking is visible on the session rows and the branch day timetable.
-        $this->get('/academic/sessions')->assertOk()->assertSee('R-02')->assertSee('Alpha');
-        $this->get('/academic/sessions?timetable_branch_id='.$this->branchId.'&timetable_day='.$this->tomorrow)
-            ->assertOk()
-            ->assertSee('R-02')
-            ->assertSee('09:00');
+        // The booking is visible on the session rows; the branch day
+        // timetable itself renders inside the React workspace (the legacy
+        // sessions URL is a designed compat redirect into it).
+        $this->get('/academic/sessions')->assertRedirect('/academic');
+        $this->get('/academic')->assertOk()->assertSee('react-console');
+        $this->assertSame(1, DB::table($this->prefix().'class_sessions')
+            ->where('class_id', $this->classId)
+            ->where('scheduled_on', $this->tomorrow)
+            ->count());
 
         // The room cannot leave service and the section cannot close while
         // the future session references them.
@@ -252,10 +260,11 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
             'scheduled_on' => $this->tomorrow,
             'starts_at' => '09:00',
             'ends_at' => '10:30',
+            'skill_id' => $this->skillId,
             'section_id' => $otherSectionId,
         ], $referer)
             ->assertRedirect('/academic/sessions')
-            ->assertSessionHas('error_code', 'academic.session_section_class_mismatch');
+            ->assertSessionHas('error_code', 'scheduling.section_class_mismatch');
 
         // A section that is not open is refused.
         $this->post('/academic/sessions', [
@@ -263,10 +272,11 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
             'scheduled_on' => $this->tomorrow,
             'starts_at' => '09:00',
             'ends_at' => '10:30',
+            'skill_id' => $this->skillId,
             'section_id' => $plannedSectionId,
         ], $referer)
             ->assertRedirect('/academic/sessions')
-            ->assertSessionHas('error_code', 'academic.session_section_not_open');
+            ->assertSessionHas('error_code', 'scheduling.section_not_open');
 
         // A room that is not available is refused.
         $this->post('/academic/rooms/'.$roomId.'/transition', ['to_state' => 'maintenance'])->assertRedirect('/academic/sessions');
@@ -275,10 +285,11 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
             'scheduled_on' => $this->tomorrow,
             'starts_at' => '09:00',
             'ends_at' => '10:30',
+            'skill_id' => $this->skillId,
             'room_id' => $roomId,
         ], $referer)
             ->assertRedirect('/academic/sessions')
-            ->assertSessionHas('error_code', 'academic.session_room_not_available');
+            ->assertSessionHas('error_code', 'scheduling.room_not_available');
 
         $this->assertSame(0, DB::table($this->prefix().'class_sessions')->where('scheduled_on', $this->tomorrow)->count());
         $this->signOut();
@@ -290,7 +301,7 @@ final class RoomsSectionsTimetableConsoleTest extends TestCase
         // rooms stay out of reach, scheduling stays open.
         $this->signIn('scheduler');
         $this->post('/academic/rooms', [
-            'branch_id' => $this->branchId,
+            'branch_id' => $this->bootstrapBranchId(),
             'name' => 'Scheduler Room',
             'code' => 'R-99',
             'capacity' => 10,

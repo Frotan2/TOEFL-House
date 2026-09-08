@@ -154,6 +154,7 @@ final class HrFeatureTest extends TestCase
             'identity_evidence_ref' => 'evidence/fixture/hr-person-2',
             'verified_by' => 'fixture-verifier',
             'verified_at' => now()->toDateTimeString(),
+            'home_branch_id' => $this->bootstrapBranchId(),
         ]);
 
         $this->expectException(AuthorizationDenied::class);

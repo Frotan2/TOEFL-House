@@ -95,6 +95,23 @@ final class DomainEventContext
             $organizationId = self::organizationForBranch($branchId);
         }
 
+        // Active-topology constraint: an envelope may name a branch only when
+        // that branch is operationally active (the database guard is the hard
+        // backstop). An audited change naming a not-yet-active branch — e.g.
+        // the initial campus attribution recorded while the branch is still
+        // draft — keeps its full evidence in the payload but degrades to the
+        // declared active organization scope (or unknown when none exists);
+        // it never fabricates a branch scope the guard would reject.
+        if ($branchId !== null) {
+            $branchActive = DB::table('branches')
+                ->where('id', $branchId)
+                ->where('lifecycle_state', 'active')
+                ->exists();
+            if (! $branchActive) {
+                $branchId = null;
+            }
+        }
+
         $hasProvenance = $branchId !== null || $organizationId !== null;
 
         return [

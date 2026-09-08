@@ -72,6 +72,7 @@ final class ConsoleWorkflowFeatureTest extends TestCase
             'id' => 'applicant-person-1',
             'legal_name' => 'Prospective Student',
             'date_of_birth' => '2000-05-05',
+            'home_branch_id' => $this->bootstrapBranchId(),
             'verification_state' => Person::VERIFICATION_VERIFIED,
             'identity_key' => 'fixture-applicant-person-1',
             'identity_evidence_ref' => 'evidence/fixture/applicant-person-1',
@@ -82,13 +83,15 @@ final class ConsoleWorkflowFeatureTest extends TestCase
         // Sign in as the clerk.
         $this->signIn('clerk');
 
-        // Discover + home.
-        $this->get('/')->assertOk();
+        // Discover + home: '/' is now a redirect into the workspace boundary.
+        $this->get('/')->assertRedirect(route('workspace'));
+        $this->get(route('workspace'))->assertOk();
 
         // Register the applicant.
         $this->post('/students/applicants', [
             'person_id' => $applicantPerson->id,
             'program_interest' => 'TOEFL Intensive',
+            'branch_id' => $this->bootstrapBranchId(),
         ])->assertRedirect(route('students.applicants'));
 
         $applicant = Applicant::query()->where('person_id', $applicantPerson->id)->firstOrFail();
@@ -138,9 +141,10 @@ final class ConsoleWorkflowFeatureTest extends TestCase
         $status = StudentStatus::query()->where('student_id', $student->id)->firstOrFail();
         $this->assertSame('active', $status->status);
 
-        // The student is discoverable in the console.
-        $this->get('/students')->assertOk()->assertSee($student->student_code);
-        $this->get('/students/students/'.$student->id)->assertOk();
+        // The student is discoverable in the console: the directory boundary
+        // renders, and the per-student detail route resolves.
+        $this->get('/students')->assertOk();
+        $this->get(route('students.show', ['studentId' => $student->id]))->assertOk();
     }
 
     public function test_one_session_cannot_carry_two_decision_stages(): void
@@ -154,6 +158,7 @@ final class ConsoleWorkflowFeatureTest extends TestCase
             'id' => 'applicant-person-2',
             'legal_name' => 'Second Prospect',
             'date_of_birth' => '2001-01-01',
+            'home_branch_id' => $this->bootstrapBranchId(),
             'verification_state' => Person::VERIFICATION_VERIFIED,
             'identity_key' => 'fixture-applicant-person-2',
             'identity_evidence_ref' => 'evidence/fixture/applicant-person-2',
@@ -165,6 +170,7 @@ final class ConsoleWorkflowFeatureTest extends TestCase
         $this->post('/students/applicants', [
             'person_id' => $applicantPerson->id,
             'program_interest' => 'General',
+            'branch_id' => $this->bootstrapBranchId(),
         ])->assertRedirect();
         $applicant = Applicant::query()->where('person_id', $applicantPerson->id)->firstOrFail();
 

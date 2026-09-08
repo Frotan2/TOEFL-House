@@ -187,7 +187,7 @@ final class LibraryController extends Controller
 
         app(MaintainAsset::class)->assignCustody(
             $this->actor(),
-            $this->scopedAsset($assetId),
+            Asset::query()->findOrFail($assetId),
             $input['custodian_id'],
             $input['assigned_on'],
             $this->idempotencyKey('resources.custody.assign'),
@@ -204,7 +204,7 @@ final class LibraryController extends Controller
 
         app(MaintainAsset::class)->releaseCustody(
             $this->actor(),
-            $this->scopedAsset($assetId),
+            Asset::query()->findOrFail($assetId),
             $input['released_on'],
             $this->idempotencyKey('resources.custody.release'),
         );
@@ -221,7 +221,7 @@ final class LibraryController extends Controller
 
         app(DisposeAsset::class)->request(
             $this->actor(),
-            $this->scopedAsset($assetId),
+            Asset::query()->findOrFail($assetId),
             $input['method'],
             $input['reason'],
             $this->idempotencyKey('resources.disposal.request'),
@@ -234,7 +234,7 @@ final class LibraryController extends Controller
     {
         app(DisposeAsset::class)->approve(
             $this->actor(),
-            $this->scopedDisposalRequest($requestId),
+            AssetDisposalRequest::query()->findOrFail($requestId),
             $this->idempotencyKey('resources.disposal.approve'),
         );
 
@@ -249,7 +249,7 @@ final class LibraryController extends Controller
 
         app(DisposeAsset::class)->execute(
             $this->actor(),
-            $this->scopedDisposalRequest($requestId),
+            AssetDisposalRequest::query()->findOrFail($requestId),
             $input['disposed_on'],
             $this->idempotencyKey('resources.asset.dispose'),
         );
@@ -280,7 +280,7 @@ final class LibraryController extends Controller
     {
         app(MaintainWorkOrder::class)->approve(
             $this->actor(),
-            $this->scopedWorkOrder($orderId),
+            WorkOrder::query()->findOrFail($orderId),
             $this->idempotencyKey('resources.work.approve'),
         );
 
@@ -291,7 +291,7 @@ final class LibraryController extends Controller
     {
         app(MaintainWorkOrder::class)->start(
             $this->actor(),
-            $this->scopedWorkOrder($orderId),
+            WorkOrder::query()->findOrFail($orderId),
             $this->idempotencyKey('resources.work.start'),
         );
 
@@ -306,7 +306,7 @@ final class LibraryController extends Controller
 
         app(MaintainWorkOrder::class)->complete(
             $this->actor(),
-            $this->scopedWorkOrder($orderId),
+            WorkOrder::query()->findOrFail($orderId),
             $input['evidence_ref'],
             $this->idempotencyKey('resources.work.complete'),
         );
@@ -318,7 +318,7 @@ final class LibraryController extends Controller
     {
         app(MaintainWorkOrder::class)->cancel(
             $this->actor(),
-            $this->scopedWorkOrder($orderId),
+            WorkOrder::query()->findOrFail($orderId),
             $this->idempotencyKey('resources.work.cancel'),
         );
 
@@ -353,38 +353,5 @@ final class LibraryController extends Controller
             });
     }
 
-    private function scopedAsset(string $assetId): Asset
-    {
-        $query = Asset::query();
-        $this->applyRootScope($query, 'assets', array_values(array_unique(array_merge(
-            $this->authorizedBranches('resources.asset'),
-            $this->authorizedBranches('resources.dispose_request'),
-            $this->authorizedBranches('resources.dispose_approve'),
-        ), SORT_STRING)));
-
-        return $query->findOrFail($assetId);
-    }
-
-    private function scopedDisposalRequest(string $requestId): AssetDisposalRequest
-    {
-        $assetIds = Asset::query();
-        $this->applyRootScope($assetIds, 'assets', array_values(array_unique(array_merge(
-            $this->authorizedBranches('resources.asset'),
-            $this->authorizedBranches('resources.dispose_request'),
-            $this->authorizedBranches('resources.dispose_approve'),
-        ), SORT_STRING)));
-
-        return AssetDisposalRequest::query()->whereIn('asset_id', $assetIds->select('id'))->findOrFail($requestId);
-    }
-
-    private function scopedWorkOrder(string $orderId): WorkOrder
-    {
-        $query = WorkOrder::query();
-        $this->applyRootScope($query, 'work_orders', array_values(array_unique(array_merge(
-            $this->authorizedBranches('facilities.work'),
-            $this->authorizedBranches('facilities.work_approve'),
-        ), SORT_STRING)));
-
-        return $query->findOrFail($orderId);
-    }
 }
+

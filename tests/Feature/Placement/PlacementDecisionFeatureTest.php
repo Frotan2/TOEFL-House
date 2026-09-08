@@ -456,6 +456,10 @@ final class PlacementDecisionFeatureTest extends TestCase
             'id' => $obligationId,
             'period_id' => $period->id,
             'student_id' => $student->id,
+            // Finance provenance guards require the active originating
+            // branch of the placement line to be stamped with the fact.
+            'originating_branch_id' => $this->placementBranchId,
+            'current_home_branch_id' => $this->placementBranchId,
             'source' => 'tuition',
             'original_amount' => '500.00',
             'reason' => 'Placement program tuition',
@@ -468,6 +472,8 @@ final class PlacementDecisionFeatureTest extends TestCase
             'id' => $paymentId,
             'period_id' => $period->id,
             'student_id' => $student->id,
+            'originating_branch_id' => $this->placementBranchId,
+            'current_home_branch_id' => $this->placementBranchId,
             'amount' => '250.00',
             'method' => 'bank',
             'payer_ref' => 'PLACEMENT-FIN-1',

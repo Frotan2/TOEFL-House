@@ -44,12 +44,14 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
 final class ReportingFeatureTest extends TestCase
 {
     use BuildsActors;
+    use \Tests\Concerns\BuildsSessions;
     use \Tests\Concerns\BuildsTeachers;
     use DecidesAdmissions;
 
@@ -368,7 +370,10 @@ final class ReportingFeatureTest extends TestCase
                 'filters' => json_encode([]),
                 'result' => '0.0000',
                 'completeness' => 'complete',
-                'meta' => json_encode([]),
+                // The completeness guard demands a calculation-metadata object
+                // on every new run, so the forged row must carry one before
+                // the provenance guard can be exercised.
+                'meta' => json_encode(['calculation' => 'forged cross-tenant run']),
                 'reproducibility_hash' => hash('sha256', 'forged foreign fund run'),
                 'executed_by' => 'direct-sql-attacker',
                 'created_at' => now(),
@@ -417,8 +422,11 @@ final class ReportingFeatureTest extends TestCase
         try {
             app(MaintainDashboard::class)->pin($localAnalyst, Dashboard::query()->findOrFail($dashboard['dashboard_id']), 'fund_utilization', $this->financialPeriodKey, 'fund', $fund['fund_id'], 'rep-fund-scope-pin-command');
             $this->fail('an organization-A dashboard must not pin an organization-B fund projection');
-        } catch (BusinessRejection $rejection) {
-            $this->assertSame('reporting.pin_scope_conflict', $rejection->errorCode());
+        } catch (AuthorizationDenied $denial) {
+            // Pins resolve their target through the same scope authority as
+            // report execution, so a foreign fund is refused at authorization
+            // before any projection conflict can be considered.
+            $this->assertSame('reporting.scope_denied', $denial->errorCode());
         }
         // A rejected statement aborts the surrounding transaction, so this
         // attempt runs in its own savepoint and later reads still work.
@@ -474,7 +482,11 @@ final class ReportingFeatureTest extends TestCase
         $officer = $this->academicOfficer('rep-acad-officer');
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'Reporting Program', 'rep-prog-1');
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'v1', 'rep-prog-2');
-        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Reporting Term', new CarbonImmutable('2026-12-01'), new CarbonImmutable('2027-03-18'), 'rep-period-1');
+        // The canonical academic fixture term starts in the past (2026-09-01):
+        // teacher assignments are dated from the term start and must be
+        // current *today* for the class to activate, and sessions must fall
+        // inside the published period.
+        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Reporting Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'rep-period-1');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'rep-period-2');
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
@@ -485,7 +497,7 @@ final class ReportingFeatureTest extends TestCase
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'rep-class-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $this->buildActiveTeacher('rep-teacher-1', null, 'reportin454');
-        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'rep-teacher-1', new CarbonImmutable('2026-12-05'), null, 'rep-class-2');
+        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'rep-teacher-1', new CarbonImmutable('2026-09-01'), null, 'rep-class-2');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'rep-class-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'rep-class-4');
 
@@ -500,13 +512,19 @@ final class ReportingFeatureTest extends TestCase
             app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'rep-enr-a-'.($i + 1));
         }
 
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($this->classId), new CarbonImmutable('2026-12-10'), '09:00', '11:00', 'rep-sess-1');
+        // Sessions require explicit skill authority the assigned teacher can
+        // deliver (registration, branch authorization, availability, and
+        // assignment attribution), exactly as the canonical Academic suites
+        // schedule them.
+        $skillId = $this->makeClassSchedulable($officer, $this->classId, $this->bootstrapBranchId(), 'rep-sched');
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($this->classId), CarbonImmutable::today()->addDays(3), '09:00', '10:30', 'rep-sess-1', $skillId);
         $enrollmentIds = Enrollment::query()->where('class_id', $this->classId)->where('lifecycle_state', 'active')->pluck('id');
         $statuses = ['present', 'absent'];
+        $attendanceRecorder = $this->grantedActor('rep-att-recorder', ['academic.attendance']);
         foreach ($enrollmentIds as $i => $enrollmentId) {
             /** @var Enrollment $enrollment */
             $enrollment = Enrollment::query()->findOrFail($enrollmentId);
-            app(RecordAttendance::class)->record($officer, ClassSession::query()->findOrFail($session['session_id']), $enrollment, $statuses[$i], 'rep-att-'.$i);
+            app(RecordAttendance::class)->record($attendanceRecorder, ClassSession::query()->findOrFail($session['session_id']), $enrollment, $statuses[$i], 'rep-att-'.$i);
         }
     }
 }

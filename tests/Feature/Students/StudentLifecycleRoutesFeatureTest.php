@@ -111,7 +111,7 @@ final class StudentLifecycleRoutesFeatureTest extends TestCase
         $student = $this->makeStudent()['student'];
         $branch = $this->branch('api-transfer');
         $personId = 'route-api-transfer-1';
-        $this->personWithAuthority($personId, ['students.transfer']);
+        $this->personWithAuthority($personId, ['students.transfer', 'students.manage']);
         $this->signInAs($personId, 'route.api.transfer');
 
         $this->postJson('/api/v1/students/'.$student->id.'/transfer', [
@@ -132,7 +132,7 @@ final class StudentLifecycleRoutesFeatureTest extends TestCase
         $this->signInAs($nobodyId, 'route.api.nobody');
 
         $this->postJson('/api/v1/students/'.$student->id.'/transfer', [
-            'branch_id' => $branch->id,
+            'branch_id' => $this->bootstrapBranchId(),
             'reason' => 'denied',
         ], ['Idempotency-Key' => 'api-transfer-key-2'])
             ->assertForbidden()

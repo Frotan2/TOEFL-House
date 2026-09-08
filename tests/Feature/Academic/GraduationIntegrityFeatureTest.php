@@ -277,8 +277,8 @@ final class GraduationIntegrityFeatureTest extends TestCase
 
         $manager = $this->personWithAuthority('grad.web.manager', ['students.manage']);
         $this->signInAs($manager->id, 'grad.web.manager');
-        $this->post("/students/students/{$studentId}/status/complete", ['reason' => 'web program finished'])->assertRedirect();
-        $this->post("/students/students/{$studentId}/status/graduate", ['reason' => 'web certified'])->assertRedirect();
+        $this->post("/students/{$studentId}/status/complete", ['reason' => 'web program finished'])->assertRedirect();
+        $this->post("/students/{$studentId}/status/graduate", ['reason' => 'web certified'])->assertRedirect();
         $this->assertSame('alumni', (new StudentRecordQuery)->studentRecord($studentId)['status']);
     }
 

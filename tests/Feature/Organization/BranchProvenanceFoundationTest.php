@@ -16,9 +16,10 @@ use Tests\TestCase;
 /**
  * WP-2 F1 (WP2-DEC-01) foundation invariants.
  *
- * Provenance is immutable once assigned (a later branch transfer must never
- * rewrite history), and a NULL provenance is the first-class unassigned state —
- * never fabricated to one branch. The cross-branch affected-scope junction
+ * Provenance is assigned exactly once at record creation by the authoritative
+ * commands and is immutable afterwards (a later branch transfer must never
+ * rewrite history); legacy NULL provenance may still be assigned once but never
+ * rewritten. The cross-branch affected-scope junction
  * (branch_scope_links) cannot self-link, permits at most one OPEN link per
  * owner branch, and history is append-only via close-then-open.
  */
@@ -32,16 +33,29 @@ final class BranchProvenanceFoundationTest extends TestCase
         $branchA = $this->makeBranch('f1-branch-a');
         $branchB = $this->makeBranch('f1-branch-b');
 
-        // Unassigned provenance is the explicit initial state — never fabricated.
-        $this->assertNull($student->originating_branch_id);
-
-        // First assignment from NULL is allowed.
-        $this->updateOriginatingBranch($student, $branchA->id);
-        $this->assertSame($branchA->id, Student::query()->findOrFail($student->id)->originating_branch_id);
+        // Admissions stamps branch provenance exactly once at registration
+        // (applicant creation demands an active originating branch), so a
+        // student always carries the bootstrap-branch origin; nothing is ever
+        // fabricated later.
+        $this->assertSame($this->bootstrapBranchId(), $student->originating_branch_id);
 
         // Rewriting provenance is rejected by the schema.
         // A rejected statement aborts the surrounding transaction, so this
         // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
+        try {
+            $this->updateOriginatingBranch($student, $branchA->id);
+            $this->fail('Rewriting originating_branch_id must be rejected by the schema.');
+            DB::rollBack();
+        } catch (QueryException $e) {
+            DB::rollBack();
+            // Students carry an admissions lineage: both the admissions
+            // authority guard (origin must match the applicant home) and the
+            // schema immutability trigger protect the assigned origin.
+            $this->assertStringContainsString('originating', $e->getMessage());
+        }
+
+        // The same holds for any second rewrite attempt.
         DB::beginTransaction();
         try {
             $this->updateOriginatingBranch($student, $branchB->id);
@@ -49,10 +63,10 @@ final class BranchProvenanceFoundationTest extends TestCase
             DB::rollBack();
         } catch (QueryException $e) {
             DB::rollBack();
-            $this->assertStringContainsString('originating_branch_id is immutable', $e->getMessage());
+            $this->assertStringContainsString('originating', $e->getMessage());
         }
 
-        $this->assertSame($branchA->id, Student::query()->findOrFail($student->id)->originating_branch_id);
+        $this->assertSame($this->bootstrapBranchId(), Student::query()->findOrFail($student->id)->originating_branch_id);
     }
 
     public function test_a_scope_link_cannot_self_link(): void

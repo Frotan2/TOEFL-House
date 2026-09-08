@@ -353,7 +353,7 @@ final class OpeningStateFeatureTest extends TestCase
         $this->assertSame('0.00', $septemberView['value']);
 
         // correction after approval: approved discount of 500 adjusts WITHOUT touching opening evidence
-        $discount = app(MaintainDiscount::class)->propose($this->financeManager(), $baseObligation, FinancialPeriod::query()->findOrFail($september['period_id']), '500.00', 'policy/correction', '2026-09-10', null, 'post-approval correction', 'op-dis-1');
+        $discount = app(MaintainDiscount::class)->propose($this->financeManager(), $baseObligation, FinancialPeriod::query()->where('period_key', $this->openingPeriodKey)->firstOrFail(), '500.00', 'policy/correction', '2026-08-15', null, 'post-approval correction', 'op-dis-1');
         app(MaintainDiscount::class)->approve($this->grantedActor('op-dis-appr', ['finance.discount_approve']), Discount::query()->findOrFail($discount['discount_id']), 'op-dis-2');
         $afterCorrection = app(ComputeProjection::class)->compute($analyst, 'student_outstanding_balance', $this->openingPeriodKey, 'student', $this->studentId, 'op-proj-4');
         $this->assertSame('2000.00', $afterCorrection['value']);

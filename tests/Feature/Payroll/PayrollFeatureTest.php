@@ -13,6 +13,7 @@ use App\Modules\Payroll\Commands\ApprovePayrollResult;
 use App\Modules\Payroll\Commands\CalculatePayroll;
 use App\Modules\Payroll\Commands\MaintainPayrollPeriod;
 use App\Modules\Payroll\Commands\SettleEmployment;
+use App\Modules\Finance\Commands\MaintainFinancialPeriod;
 use App\Modules\Payroll\Models\PayrollCalculation;
 use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Modules\Payroll\Models\PayrollResult;
@@ -73,6 +74,10 @@ final class PayrollFeatureTest extends TestCase
         $periodOpener = $this->grantedActor('pay-period-1', ['payroll.period']);
         $period = app(MaintainPayrollPeriod::class)->open($periodOpener, '2026-09', '2026-09-01', '2026-09-30', 'pay-per-1');
         $this->periodId = $period['period_id'];
+
+        // Settlement recording is a Finance domain action: it requires one
+        // open Finance financial period containing the record date.
+        app(MaintainFinancialPeriod::class)->open($this->grantedActor('pay-fperiod-1', ['finance.period']), '2026-09', '2026-09-01', '2026-09-30', 'pay-fper-1');
     }
 
     private function financeManager(): Actor
@@ -294,7 +299,7 @@ final class PayrollFeatureTest extends TestCase
             );
             $this->fail('the preparer cannot approve their own proposal');
         } catch (AuthorizationDenied $denial) {
-            $this->assertSame('finance.employment_settlement_denied', $denial->errorCode());
+            $this->assertSame('finance.employment_settlement_not_independent', $denial->errorCode());
         }
 
         $settlement = app(MaintainEmploymentSettlement::class)->record(

@@ -53,8 +53,8 @@ final class ApiFeatureTest extends TestCase
 
         $this->getJson('/api/v1/me')
             ->assertOk()
-            ->assertJsonPath('username', 'api.me')
-            ->assertJsonPath('person_id', $personId);
+            ->assertJsonPath('data.username', 'api.me')
+            ->assertJsonPath('data.person_id', $personId);
     }
 
     public function test_api_registers_an_applicant(): void
@@ -76,6 +76,7 @@ final class ApiFeatureTest extends TestCase
         $this->postJson('/api/v1/students/applicants', [
             'person_id' => $prospect->id,
             'program_interest' => 'TOEFL Sprint',
+            'branch_id' => $clerk->home_branch_id,
         ])->assertCreated();
 
         $this->assertDatabaseHas('applicants', ['person_id' => $prospect->id]);

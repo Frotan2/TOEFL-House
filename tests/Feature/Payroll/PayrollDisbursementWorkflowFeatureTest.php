@@ -236,22 +236,21 @@ final class PayrollDisbursementWorkflowFeatureTest extends TestCase
             'amount' => '1100.00',
         ]);
 
-        // Payroll supplies calculation evidence only. The ledger disburses the
-        // Finance-recognized liability, with an exact immutable source amount.
-        $key = 'pdw.journal.idem.001';
-        $this->post('/finance/journals', $this->disbursementJournal($liabilityId, '1100.00'), ['Idempotency-Key' => $key])
-            ->assertRedirect('/finance');
+        // Payroll supplies calculation evidence only. Recognition posts the
+        // single balanced liability journal at once, and the Finance fact can
+        // be disbursed exactly once: no further journal may source it, under
+        // any idempotency key or amount.
         $this->assertSame(1, DB::table('journals')->where('source_type', 'payroll_liability')->where('source_id', $liabilityId)->count());
 
-        // Same-key replay returns the original outcome without a second
-        // disbursement; a changed same-key request is a conflict.
-        $this->post('/finance/journals', $this->disbursementJournal($liabilityId, '1100.00'), ['Idempotency-Key' => $key])
-            ->assertRedirect('/finance');
-        $this->postJson('/finance/journals', $this->disbursementJournal($liabilityId, '5000.00'), ['Idempotency-Key' => $key])
+        $key = 'pdw.journal.idem.001';
+        $this->postJson('/finance/journals', $this->disbursementJournal($liabilityId, '1100.00'), ['Idempotency-Key' => $key])
             ->assertStatus(409);
         $this->assertSame(1, DB::table('journals')->where('source_type', 'payroll_liability')->where('source_id', $liabilityId)->count());
 
-        // A fresh request cannot pay that same Finance fact twice either.
+        // A changed same-key request is a conflict, and a fresh request
+        // cannot pay that same Finance fact twice either.
+        $this->postJson('/finance/journals', $this->disbursementJournal($liabilityId, '5000.00'), ['Idempotency-Key' => $key])
+            ->assertStatus(409);
         $this->postJson('/finance/journals', $this->disbursementJournal($liabilityId, '1100.00'))
             ->assertStatus(409);
         $this->assertSame(1, DB::table('journals')->where('source_type', 'payroll_liability')->where('source_id', $liabilityId)->count());

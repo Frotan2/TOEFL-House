@@ -55,6 +55,11 @@ final class StudentLifecycleFeatureTest extends TestCase
             'name' => 'Lifecycle Branch '.$suffix,
             'lifecycle_state' => $lifecycle,
         ]);
+        // A transfer target must resolve to an operationally active
+        // organization structure (branch -> campus assignment ->
+        // organization); a bare branch has no resolvable provenance and
+        // the domain correctly refuses it.
+        $this->attachBranchToBootstrapOrganization($branch->id);
 
         return $branch;
     }
@@ -65,12 +70,17 @@ final class StudentLifecycleFeatureTest extends TestCase
         $first = $this->branch('first');
         $second = $this->branch('second');
 
+        // The student was born in the bootstrap branch: every person enters
+        // with an active home branch (intake doctrine), so the first
+        // transfer already moves from that branch.
+        $bootstrap = $this->bootstrapBranchId();
+
         $firstResult = app(TransferStudentHomeBranch::class)->transfer($manager, $this->student, $first->id, 'initial assignment', 'life-tr-k1');
         $this->assertSame($first->id, trim((string) $firstResult['to_branch_id']));
-        $this->assertNull($firstResult['from_branch_id']);
+        $this->assertSame($bootstrap, trim((string) $firstResult['from_branch_id']));
 
         $studentAfterFirst = $this->student->fresh();
-        $this->assertSame($first->id, trim((string) $studentAfterFirst?->originating_branch_id));
+        $this->assertSame($bootstrap, trim((string) $studentAfterFirst?->originating_branch_id), 'origin is the branch of birth and must never advance');
         $this->assertSame($first->id, trim((string) $studentAfterFirst?->current_home_branch_id));
         $this->assertSame(1, DB::table('student_branch_transfers')->where('student_id', $this->student->id)->count());
 
@@ -78,11 +88,11 @@ final class StudentLifecycleFeatureTest extends TestCase
         $this->assertSame($first->id, trim((string) $secondResult['from_branch_id']));
 
         $studentAfterSecond = $this->student->fresh();
-        $this->assertSame($first->id, trim((string) $studentAfterSecond?->originating_branch_id), 'origin must never advance');
+        $this->assertSame($bootstrap, trim((string) $studentAfterSecond?->originating_branch_id), 'origin must never advance');
         $this->assertSame($second->id, trim((string) $studentAfterSecond?->current_home_branch_id));
 
         $record = (new StudentRecordQuery)->studentRecord($this->student->id);
-        $this->assertSame($first->id, trim((string) $record['originating_branch_id']));
+        $this->assertSame($bootstrap, trim((string) $record['originating_branch_id']));
         $this->assertSame($second->id, trim((string) $record['current_home_branch_id']));
         $this->assertSame(2, count($record['branch_transfers']));
 

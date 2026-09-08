@@ -390,6 +390,9 @@ final class VisitorCrmFeatureTest extends TestCase
             'name' => 'CRM Branch '.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8),
             'lifecycle_state' => 'active',
         ]);
+        // Visitor operations resolve the target organization from the branch
+        // topology, so the fixture branch must belong to an active organization.
+        $this->attachBranchToBootstrapOrganization($branch->id);
         $branchStaff = $this->personWithAuthority('crm-branch-staff-1', []);
         $this->grantScopeAuthority($branchStaff->id, ['crm.visitor'], 'branch', $branch->id);
         $branchActor = new Actor($branchStaff->id, 'Branch CRM Staff');
@@ -415,7 +418,15 @@ final class VisitorCrmFeatureTest extends TestCase
         }
 
         // An actor with the capability only in a different branch is denied.
-        $other = $this->actorWithStructureCapabilities('crm-branch-other-1', ['crm.visitor']);
+        $otherBranch = Branch::query()->create([
+            'id' => RandomIdentifier::new(),
+            'name' => 'CRM Other Branch '.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8),
+            'lifecycle_state' => 'active',
+        ]);
+        $this->attachBranchToBootstrapOrganization($otherBranch->id);
+        $otherPerson = $this->personWithAuthority('crm-branch-other-1', []);
+        $this->grantScopeAuthority($otherPerson->id, ['crm.visitor'], 'branch', $otherBranch->id);
+        $other = new Actor($otherPerson->id, 'Other Branch CRM Staff');
         try {
             app(MaintainVisitor::class)->update($other, $visitor->fresh(), null, null, null, null, 'cold', null, null, null, 'branch-update-2');
             $this->fail('cross-branch visitor access must be denied');
@@ -444,7 +455,7 @@ final class VisitorCrmFeatureTest extends TestCase
             ->where('target_id', $student->id)
             ->firstOrFail();
         app(VisitorConversionRecorder::class)->record(
-            new Actor($studentAuthorityEvent->actor_id, 'Students authority'),
+            new Actor(trim((string) $studentAuthorityEvent->actor_id), 'Students authority'),
             Visitor::query()->findOrFail($capture['visitor_id']),
             'student',
             'student',

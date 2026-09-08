@@ -8,6 +8,8 @@ use App\Modules\Identity\Models\UserAccount;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
@@ -41,7 +43,11 @@ final class ConsoleSmokeTest extends TestCase
             ->assertRedirect('/');
         $this->assertAuthenticated();
 
-        $skipped = ['api.me', 'health', 'login'];
+        // Compat redirects: GET routes that point at the React boundary
+        // instead of owning a Blade page (home -> workspace, legacy academic
+        // sessions -> academic shell). Rendering is covered on their target
+        // pages below; a redirect is the designed behavior, not a page.
+        $skipped = ['api.me', 'health', 'login', 'home', 'academic.sessions'];
         foreach (Route::getRoutes()->getRoutes() as $route) {
             $name = (string) ($route->getName() ?? '');
             $uri = '/'.ltrim((string) $route->uri(), '/');
@@ -86,9 +92,17 @@ final class ConsoleSmokeTest extends TestCase
         }
 
         $capabilities = [];
-        $files = glob(app_path('Modules/*/Commands/*.php')) ?: [];
-        foreach ($files as $file) {
-            $source = (string) file_get_contents($file);
+        // The authoritative set spans every CAPABILITY* constant in the
+        // codebase — module commands plus the domain/authorization support
+        // classes (for example StructureDecision's
+        // organization.structure.* verbs, which console read gates require
+        // but no command declares).
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path()));
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+            $source = (string) file_get_contents($file->getPathname());
             if (preg_match_all("/\bCAPABILITY[A-Z_]*\s*=\s*'([a-z][a-z0-9_.]*)'/", $source, $matches)) {
                 $capabilities = array_merge($capabilities, $matches[1]);
             }

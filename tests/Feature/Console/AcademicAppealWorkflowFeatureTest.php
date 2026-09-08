@@ -68,7 +68,10 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'afw-period-pub');
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
+        // The version carries two levels so an A1 advance has an A2 target;
+        // advancing past the last level is a completion, not a progression.
         $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicappealworkflowfe', 1, 'Level', 'A1', 'canon-academicappealworkflowfe-lvl');
+        app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicappealworkflowfe-2', 2, 'Level 2', 'A2', 'canon-academicappealworkflowfe-lvl2');
         app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicappealworkflowfe-avail');
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicappealworkflowfe-offering');
 
@@ -103,7 +106,7 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         $progressionReviewer = $this->grantedActor('afw-prog-2', ['academic.progression_review']);
         $progressionApprover = $this->grantedActor('afw-prog-3', ['academic.progression_approve']);
         $progression = app(DecideProgression::class);
-        $decision = $progression->propose($proposer, $this->studentId, $this->classId, 'advance', 'meets the boundary rules', 'afw-prog-prop-1');
+        $decision = $progression->propose($proposer, $this->studentId, $this->classId, 'advance', 'meets the boundary rules', 'afw-prog-prop-1', null, 'assessed evidence on file');
         $progression->review($progressionReviewer, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'afw-prog-rev-1');
         $progression->approve($progressionApprover, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'afw-prog-app-1');
         $this->progressionId = $decision['decision_id'];

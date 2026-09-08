@@ -137,29 +137,32 @@ final class FinanceBackOfficeWorkflowFeatureTest extends TestCase
 
         $accounts = DB::connection()->getTablePrefix().'accounts';
         $journals = DB::connection()->getTablePrefix().'journals';
+        // The standard chart (eleven seeded accounts) is the lawful baseline
+        // every school starts from; console work extends it, never redefines it.
+        $this->assertSame(11, DB::table($accounts)->count());
 
         // An employee without the capability cannot define accounts.
         $this->signIn('plain');
         $this->post('/finance/accounts', [
-            'code' => '1000', 'name' => 'Cash', 'type' => 'asset',
+            'code' => '9000', 'name' => 'Sneaky asset', 'type' => 'asset',
         ], ['referer' => 'http://localhost/finance'])
             ->assertRedirect('/finance')
             ->assertSessionHas('error_code', 'finance.chart_denied');
-        $this->assertSame(0, DB::table($accounts)->count());
+        $this->assertSame(11, DB::table($accounts)->count());
 
-        // The accountant defines the chart; a duplicate code is refused.
+        // The accountant extends the chart; a duplicate code is refused.
         $this->signOut();
         $this->signIn('accountant');
-        $this->post('/finance/accounts', ['code' => '1000', 'name' => 'Cash', 'type' => 'asset'])->assertRedirect('/finance');
-        $cashId = DB::table($accounts)->where('code', '1000')->value('id');
+        $this->post('/finance/accounts', ['code' => '1200', 'name' => 'Petty Cash', 'type' => 'asset'])->assertRedirect('/finance');
+        $cashId = DB::table($accounts)->where('code', '1200')->value('id');
         $this->assertNotNull($cashId);
 
-        $this->post('/finance/accounts', ['code' => '1000', 'name' => 'Cash box', 'type' => 'asset'], ['referer' => 'http://localhost/finance'])
+        $this->post('/finance/accounts', ['code' => '1200', 'name' => 'Petty Cash box', 'type' => 'asset'], ['referer' => 'http://localhost/finance'])
             ->assertRedirect('/finance')
             ->assertSessionHas('error_code', 'finance.account_code_exists');
 
-        $this->post('/finance/accounts', ['code' => '4000', 'name' => 'Tuition revenue', 'type' => 'revenue'])->assertRedirect('/finance');
-        $revenueId = DB::table($accounts)->where('code', '4000')->value('id');
+        $this->post('/finance/accounts', ['code' => '4500', 'name' => 'Special Program Revenue', 'type' => 'revenue'])->assertRedirect('/finance');
+        $revenueId = DB::table($accounts)->where('code', '4500')->value('id');
 
         // A balanced journal posts; a replay with the same key adds nothing.
         $journal = [
@@ -261,19 +264,22 @@ final class FinanceBackOfficeWorkflowFeatureTest extends TestCase
         $this->post('/finance/discounts/'.$discountId.'/approve')->assertRedirect('/finance');
         $this->assertDatabaseHas($discounts, ['id' => $discountId, 'lifecycle_state' => 'approved', 'approved_by' => 'fdw-dappr-1']);
 
-        // A discount larger than the now-reduced remainder is refused at
-        // approval — the original charge is never rewritten.
+        // A discount larger than the now-reduced remainder (the approved
+        // hundred has covered part of the charge) is refused at approval —
+        // the original charge is never rewritten. Proposals beyond the
+        // obligation source amount cannot even be filed: the schema refuses
+        // them at birth.
         $this->signOut();
         $this->signIn('discount-proposer');
         $this->post('/finance/discounts', [
             'obligation_id' => $obligation['obligation_id'],
             'period_id' => $this->periodId,
-            'amount' => '10000.00',
+            'amount' => '950.00',
             'eligibility' => 'full remission',
             'effective_from' => '2026-09-01',
             'reason' => 'appeal outcome',
         ])->assertRedirect('/finance');
-        $overId = DB::table($discounts)->where('amount', '10000.00')->value('id');
+        $overId = DB::table($discounts)->where('amount', '950.00')->value('id');
         $this->assertNotNull($overId);
 
         $this->signOut();

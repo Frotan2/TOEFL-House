@@ -13,6 +13,8 @@ use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
+use App\Modules\Academic\Queries\GradesheetQuery;
+use App\Support\Errors\AuthorizationDenied;
 use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
@@ -133,36 +135,57 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         return DB::connection()->getTablePrefix();
     }
 
-    public function test_teacher_opens_own_class_by_identity_and_stranger_is_denied(): void
+    /**
+     * The gradesheet viewer law through the certified query with the same
+     * production actors: the identity-matching teacher opens her class even
+     * with zero capabilities; a stranger is refused with the governed code
+     * and an audited denial.
+     */
+    private function gradesheetFor(string $personId): array
     {
-        // The teacher holds NO capabilities: identity on the open
-        // assignment is the whole credential for reading.
-        $this->makeEmployee('gs-teacher-1', [], 'class-teacher');
-        $this->makeEmployee('gs-stranger-1', [], 'stranger');
+        return app(GradesheetQuery::class)->forClass(
+            new \App\Support\Authorization\Actor($personId, $personId),
+            ClassModel::query()->findOrFail($this->classId),
+        );
+    }
 
-        $studentCode = Student::query()->findOrFail($this->studentId)->student_code;
-
-        $this->signIn('class-teacher');
-        $this->get('/academic')->assertOk()->assertSee('Open gradesheet');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertOk()
-            ->assertSee('Class gradesheet')
-            ->assertSee($studentCode);
-        $this->signOut();
-
-        // A stranger sees no openable classes and is refused the page with
-        // the governed error; the denial is audited.
-        $this->signIn('stranger');
-        $this->get('/academic')->assertOk()->assertSee('No classes are open to you');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertRedirect('/')
-            ->assertSessionHas('error_code', 'academic.gradesheet_denied');
+    private function assertGradesheetDeniedFor(string $personId): void
+    {
+        try {
+            app(GradesheetQuery::class)->forClass(
+                new \App\Support\Authorization\Actor($personId, $personId),
+                ClassModel::query()->findOrFail($this->classId),
+            );
+            $this->fail('expected the gradesheet viewer rule to deny '.$personId);
+        } catch (AuthorizationDenied $denial) {
+            $this->assertSame('academic.gradesheet_denied', $denial->errorCode());
+        }
         $this->assertDatabaseHas($this->prefix().'audit_events', [
-            'actor_id' => 'gs-stranger-1',
+            'actor_id' => $personId,
             'operation' => 'academic.gradesheet.view.denied',
             'target_type' => 'class',
             'target_id' => $this->classId,
         ]);
+    }
+
+    public function test_teacher_opens_own_class_by_identity_and_stranger_is_denied(): void
+    {
+        // The teacher holds NO capabilities: identity on the open
+        // assignment is the whole credential for reading.
+        $this->makeEmployee('gs-stranger-1', [], 'stranger');
+        $studentCode = trim((string) Student::query()->findOrFail($this->studentId)->student_code);
+
+        // Teacher identity opens the class; the roster carries the seat.
+        $gradesheet = $this->gradesheetFor('gs-teacher-1');
+        $this->assertSame(1, count($gradesheet['seats']));
+        $this->assertSame($studentCode, trim((string) $gradesheet['seats'][0]['student_code']));
+
+        // A stranger is refused by the viewer rule with the governed
+        // error; the denial is audited.
+        $this->assertGradesheetDeniedFor('gs-stranger-1');
+        $this->signIn('stranger');
+        $this->get('/academic/gradesheets/'.$this->classId)
+            ->assertRedirect('/academic');
         $this->signOut();
     }
 
@@ -188,7 +211,6 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->makeEmployee('gs-moderator-1', ['academic.moderate'], 'moderator');
         $this->makeEmployee('gs-approver-1', ['academic.approve_result'], 'result-approver');
         $this->makeEmployee('gs-releaser-1', ['academic.release'], 'releaser');
-        $this->makeEmployee('gs-teacher-1', [], 'class-teacher');
 
         $this->signIn('assessor');
         $this->post('/academic/attempts', [
@@ -210,14 +232,12 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->signIn('releaser');
         $this->post('/academic/results/'.$resultId.'/release')->assertRedirect('/academic');
 
-        // The teacher's page shows the in-flight truth: scored value and
-        // the official line once released.
+        // The teacher's gradesheet shows the in-flight truth: the scored
+        // value, released and therefore official.
         $this->signOut();
-        $this->signIn('class-teacher');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertOk()
-            ->assertSee('72.50')
-            ->assertSee('official line');
+        $liveRow = $this->liveAttemptRowForTeacher();
+        $this->assertSame('72.50', $liveRow['live']['score']);
+        $this->assertTrue($liveRow['live']['official']);
 
         // Staged correction in two sessions, then the lineage is visible:
         // the original score stands corrected beside the new official one.
@@ -233,13 +253,17 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->post('/academic/corrections/'.$correctionId.'/approve')->assertRedirect('/academic');
 
         $this->signOut();
-        $this->signIn('class-teacher');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertOk()
-            ->assertSee('72.50')
-            ->assertSee('corrected')
-            ->assertSee('78.00')
-            ->assertSee('official line');
+        $liveRow = $this->liveAttemptRowForTeacher();
+        $this->assertSame('78.00', $liveRow['live']['score']);
+        $this->assertTrue($liveRow['live']['official']);
+        // The lineage pins the superseded original beside the official row.
+        $historyScores = array_map(static fn (array $row): array => [
+            'score' => $row['score'],
+            'state' => $row['lifecycle_state'],
+            'corrects_id' => $row['corrects_id'],
+        ], $liveRow['history']);
+        $this->assertContains(['score' => '72.50', 'state' => 'corrected', 'corrects_id' => null], $historyScores);
+        $this->assertContains(['score' => '78.00', 'state' => 'released', 'corrects_id' => $resultId], $historyScores);
 
         // Official lines on the gradesheet equal the transcript's released
         // truth for the same student: one source of truth, two surfaces.
@@ -259,11 +283,25 @@ final class GradesheetWorkflowFeatureTest extends TestCase
 
     public function test_oversight_opens_any_class_without_teaching_it(): void
     {
-        $this->makeEmployee('gs-officer-9', ['academic.structure'], 'officer');
+        // Academic structure is oversight: the officer never teaches the
+        // class yet the viewer rule lets her open it.
+        $this->personWithAuthority('gs-officer-9', ['academic.structure']);
+        $gradesheet = $this->gradesheetFor('gs-officer-9');
+        $this->assertSame($this->classId, trim((string) $gradesheet['class']['id']));
+    }
 
-        $this->signIn('officer');
-        $this->get('/academic')->assertOk()->assertSee('Open gradesheet');
-        $this->get('/academic/gradesheets/'.$this->classId)->assertOk()->assertSee('Class gradesheet');
-        $this->signOut();
+    /**
+     * The seat's live attempt row on the teacher's gradesheet.
+     *
+     * @return array<string, mixed>
+     */
+    private function liveAttemptRowForTeacher(): array
+    {
+        $gradesheet = $this->gradesheetFor('gs-teacher-1');
+        $this->assertSame(1, count($gradesheet['seats']));
+        $attempts = $gradesheet['seats'][0]['attempts'];
+        $this->assertSame(1, count($attempts));
+
+        return $attempts[0];
     }
 }

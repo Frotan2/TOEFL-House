@@ -54,8 +54,6 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
 
     private string $smallClassId;
 
-    private string $legacyClassId;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -75,7 +73,6 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
 
         $this->levelClassId = $this->defineActiveClass('comp-class', 2, $this->levelId);
         $this->smallClassId = $this->defineActiveClass('comp-small', 1, $this->levelId);
-        $this->legacyClassId = $this->defineActiveClass('comp-legacy', 5, null);
     }
 
     public function test_freeze_requires_reason_and_records_it(): void
@@ -121,24 +118,41 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
         $this->assertSame('active', Enrollment::query()->findOrFail($seatId)->lifecycle_state);
     }
 
-    public function test_frozen_seat_frees_capacity_and_unfreeze_rechecks_it(): void
+    public function test_frozen_seat_keeps_its_capacity_claim(): void
     {
         $officer = $this->academicOfficer('comp-officer-cap');
         $seatA = $this->activeSeat('cap-a', $this->smallClassId);
 
         app(MaintainEnrollment::class)->freeze($officer, Enrollment::query()->findOrFail($seatA), 'term break', 'comp-cap-freeze');
 
-        // The frozen seat holds no capacity claim: a second student activates.
-        $seatB = $this->activeSeat('cap-b', $this->smallClassId);
-        $this->assertSame('active', Enrollment::query()->findOrFail($seatB)->lifecycle_state);
-
+        // Requested, active, and frozen rows all claim the same finite seat
+        // (EnrollmentConstraints::assertCapacity): freezing never frees the
+        // capacity, so the capacity-1 class cannot admit a second student
+        // while the seat is live.
+        $studentB = (string) $this->makeStudent([
+            'initiator' => 'comp-cap-init-b',
+            'reviewer' => 'comp-cap-review-b',
+            'approver' => 'comp-cap-approve-b',
+            'applicant' => 'comp-cap-person-b',
+        ])['student']->id;
         try {
-            app(MaintainEnrollment::class)->unfreeze($officer, Enrollment::query()->findOrFail($seatA), 'comp-cap-unfreeze');
-            $this->fail('an unfreeze into a full class must be refused');
+            app(MaintainEnrollment::class)->request(
+                $this->enrollmentClerk('comp-cap-clerk-b'),
+                $studentB,
+                $this->smallClassId,
+                'comp-cap-request-b',
+            );
+            $this->fail('a frozen seat keeps its live capacity claim');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.class_full', $rejection->errorCode());
         }
         $this->assertSame('frozen', Enrollment::query()->findOrFail($seatA)->lifecycle_state);
+
+        // Unfreezing restores the same live claim; the class remains exactly
+        // at capacity with the seat active again.
+        $returned = app(MaintainEnrollment::class)->unfreeze($officer, Enrollment::query()->findOrFail($seatA), 'comp-cap-unfreeze');
+        $this->assertSame('active', $returned['lifecycle_state']);
+        $this->assertSame('active', Enrollment::query()->findOrFail($seatA)->lifecycle_state);
     }
 
     public function test_unfreeze_regates_finance(): void
@@ -334,24 +348,24 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
         $this->assertSame('active', Enrollment::query()->findOrFail($seatA)->lifecycle_state);
     }
 
-    public function test_complete_on_legacy_class_with_basis_only(): void
+    public function test_complete_with_basis_only_on_a_level_class_is_refused(): void
     {
-        $seatId = $this->activeSeat('legacy', $this->legacyClassId);
+        $seatId = $this->activeSeat('basis-only', $this->levelClassId);
 
-        $completed = app(MaintainEnrollment::class)->complete(
-            $this->academicOfficer('comp-officer-legacy'),
-            Enrollment::query()->findOrFail($seatId),
-            'finished the legacy curriculum',
-            null,
-            null,
-            'comp-complete-legacy',
-        );
-        $this->assertSame('completed', $completed['lifecycle_state']);
-
-        $enrollment = Enrollment::query()->findOrFail($seatId);
-        $this->assertSame('finished the legacy curriculum', $enrollment->completion_basis);
-        $this->assertNull($enrollment->completion_evidence_kind);
-        $this->assertNull($enrollment->completion_evidence_id);
+        try {
+            app(MaintainEnrollment::class)->complete(
+                $this->academicOfficer('comp-officer-basis'),
+                Enrollment::query()->findOrFail($seatId),
+                'finished the curriculum',
+                null,
+                null,
+                'comp-complete-basis-only',
+            );
+            $this->fail('completing a level seat without assessed evidence must be refused');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('academic.enrollment_completion_evidence_required', $rejection->errorCode());
+        }
+        $this->assertSame('active', Enrollment::query()->findOrFail($seatId)->lifecycle_state);
     }
 
     public function test_completion_lifecycle_over_http(): void
@@ -359,7 +373,7 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
         $officer = $this->personWithAuthority('comp-web-officer', ['academic.enroll', 'academic.enroll_approve']);
         $this->signInAs($officer->id, 'comp.web');
 
-        $seatId = $this->activeSeat('web', $this->legacyClassId);
+        $seatId = $this->activeSeat('web', $this->levelClassId);
 
         $this->post("/academic/enrollments/{$seatId}/freeze", ['reason' => 'web verified leave'])
             ->assertRedirect();
@@ -369,13 +383,18 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
             ->assertRedirect();
         $this->assertSame('active', Enrollment::query()->findOrFail($seatId)->lifecycle_state);
 
-        $this->post("/academic/enrollments/{$seatId}/complete", ['basis' => 'web verified completion'])
-            ->assertRedirect();
+        // Completion over the console pins basis AND assessed evidence.
+        $released = $this->releasedResult($seatId, 'comp-web-result', '84.00');
+        $this->post("/academic/enrollments/{$seatId}/complete", [
+            'basis' => 'web verified completion',
+            'evidence_kind' => 'assessment_result',
+            'evidence_id' => $released['result_id'],
+        ])->assertRedirect();
         $this->assertSame('completed', Enrollment::query()->findOrFail($seatId)->lifecycle_state);
 
         $nobody = $this->personWithAuthority('comp-web-nobody', []);
         $this->signInAs($nobody->id, 'comp.nobody');
-        $seatOther = $this->activeSeat('web-denied', $this->legacyClassId);
+        $seatOther = $this->activeSeat('web-denied', $this->levelClassId);
         $this->post("/academic/enrollments/{$seatOther}/freeze", ['reason' => 'no authority'])
             ->assertRedirect()
             ->assertSessionHas('error_code', 'academic.enrollment_denied');

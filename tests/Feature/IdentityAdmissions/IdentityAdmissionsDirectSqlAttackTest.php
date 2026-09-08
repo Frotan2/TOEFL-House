@@ -12,6 +12,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\DecidesAdmissions;
+use Tests\Concerns\RegistersPeople;
 use Tests\TestCase;
 
 /**
@@ -25,6 +26,7 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
 {
     use BuildsActors;
     use DecidesAdmissions;
+    use RegistersPeople;
 
     private string $personId = 'idatk-person-1';
 
@@ -35,14 +37,11 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
         parent::setUp();
 
         // Unverified identity: the target of the verification-forgery
-        // attacks. A raw flip to verified without decision evidence must
+        // attacks. Born through the authoritative intake command (which
+        // persists the active home branch person-linked scopes resolve
+        // from); a raw flip to verified without decision evidence must then
         // be rejected by the schema.
-        Person::query()->create([
-            'id' => $this->personId,
-            'legal_name' => 'Attack Target Person',
-            'date_of_birth' => '1995-01-01',
-            'verification_state' => Person::VERIFICATION_UNVERIFIED,
-        ]);
+        $this->personId = $this->newUnverifiedPerson('Attack Target Person', '1995-01-01', 'idatk')->id;
 
         // Verified applicant: the target of the admission-forgery attacks.
         $this->applicantPerson = $this->personWithAuthority('idatk-applicant-1', []);

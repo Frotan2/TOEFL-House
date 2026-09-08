@@ -562,16 +562,16 @@ final class MaintainAcademicStructure
         $openOfferings = Offering::query()->where('academic_period_id', $periodId)
             ->whereIn('lifecycle_state', [Offering::STATE_OPEN, Offering::STATE_CLOSED])
             ->lockForUpdate()
-            ->count();
-        if ($openOfferings > 0) {
-            throw BusinessRejection::forCode('academic.period_open_offerings', sprintf('period cannot close while %d non-terminal offering(s) reference it', $openOfferings));
+            ->pluck('id');
+        if ($openOfferings->isNotEmpty()) {
+            throw BusinessRejection::forCode('academic.period_open_offerings', sprintf('period cannot close while %d non-terminal offering(s) reference it', $openOfferings->count()));
         }
         $activeAvailabilities = BranchAvailability::query()->where('academic_period_id', $periodId)
             ->where('lifecycle_state', BranchAvailability::STATE_ACTIVE)
             ->lockForUpdate()
-            ->count();
-        if ($activeAvailabilities > 0) {
-            throw BusinessRejection::forCode('academic.period_active_availability', sprintf('period cannot close while %d active branch availability record(s) remain', $activeAvailabilities));
+            ->pluck('id');
+        if ($activeAvailabilities->isNotEmpty()) {
+            throw BusinessRejection::forCode('academic.period_active_availability', sprintf('period cannot close while %d active branch availability record(s) remain', $activeAvailabilities->count()));
         }
 
         $openSeats = Enrollment::query()

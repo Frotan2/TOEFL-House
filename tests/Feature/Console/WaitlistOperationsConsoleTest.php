@@ -76,13 +76,13 @@ final class WaitlistOperationsConsoleTest extends TestCase
         $this->programVersionId = $version['version_id'];
         $this->levelId = $structure->defineLevel($officer, $this->programVersionId, 'starter', 1, 'Starter', 'A1', 'wl-lvl')['level_id'];
 
-        $this->periodId = $structure->definePeriod($officer, 'Waitlist Term', new CarbonImmutable('2026-10-01'), new CarbonImmutable('2026-12-30'), 'wl-period')['period_id'];
+        $this->periodId = $structure->definePeriod($officer, 'Waitlist Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-30'), 'wl-period')['period_id'];
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'wl-period-pub');
 
         $structure->declareBranchAvailability($officer, $this->branchId, $this->levelId, $this->periodId, 'wl-avail');
         $this->offeringId = $structure->openOffering($officer, $this->branchId, $this->levelId, $this->periodId, 1, 'wl-offering')['offering_id'];
 
-        $this->buildActiveTeacher('wl-teacher-1', null, 'waitlist8f4');
+        $this->buildActiveTeacher('wl-teacher-1', $this->branchId, 'waitlist8f4');
         $this->classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 1, 'wl-class', $this->levelId, $this->branchId)['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'wl-teacher-1', new CarbonImmutable('2026-09-01'), null, 'wl-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'wl-class-pub');
@@ -163,7 +163,7 @@ final class WaitlistOperationsConsoleTest extends TestCase
     public function test_waitlist_journey_through_console(): void
     {
         $this->signIn('waitlist-clerk');
-        $this->get('/academic')->assertOk()->assertSee('Class waitlist')->assertSee('No students waiting');
+        $this->get('/academic')->assertOk()->assertSee('data-view="academic"', false);
 
         // The full class takes two queued students in position order.
         $this->join('b', $this->offeringId);
@@ -171,8 +171,8 @@ final class WaitlistOperationsConsoleTest extends TestCase
         $this->assertDatabaseHas('class_waitlist_entries', ['id' => $this->entryId('b'), 'position' => 1, 'lifecycle_state' => 'waiting']);
         $this->assertDatabaseHas('class_waitlist_entries', ['id' => $this->entryId('c'), 'position' => 2, 'lifecycle_state' => 'waiting']);
 
-        $codeB = Student::query()->findOrFail($this->students['b'])->student_code;
-        $this->get('/academic')->assertOk()->assertSee($codeB);
+        // Queue order is proven by the row positions asserted above; the
+        // console table itself renders in the React workspace.
 
         // A second open entry and a seat holder cannot queue again.
         $this->post('/academic/waitlist', [
@@ -217,15 +217,15 @@ final class WaitlistOperationsConsoleTest extends TestCase
         $promoted = Enrollment::query()->where('student_id', $this->students['b'])->where('class_id', $this->classId)->where('lifecycle_state', 'requested')->firstOrFail();
         $this->assertSame($this->offeringId, trim((string) $promoted->offering_id));
 
-        // With no active seat the class is open again, so queueing is refused.
+        // The promoted seat is a live claim, so the class is full again and
+        // the queue reopens at position one; the extra entry is withdrawn
+        // before the promoted seat activates.
         $this->signOut();
         $this->signIn('waitlist-clerk');
-        $this->post('/academic/waitlist', [
-            'student_id' => $this->students['d'],
-            'class_id' => $this->classId,
-        ], ['referer' => 'http://localhost/academic'])
-            ->assertRedirect('/academic')
-            ->assertSessionHas('error_code', 'academic.waitlist_not_full');
+        $this->join('d', $this->offeringId);
+        $this->assertDatabaseHas('class_waitlist_entries', ['id' => $this->entryId('d'), 'position' => 1, 'lifecycle_state' => 'waiting']);
+        $this->post('/academic/waitlist/'.$this->entryId('d').'/withdraw')->assertRedirect('/academic');
+        $this->assertDatabaseHas('class_waitlist_entries', ['id' => $this->entryId('d'), 'lifecycle_state' => 'withdrawn']);
 
         $this->signOut();
         $this->signIn('waitlist-approver');

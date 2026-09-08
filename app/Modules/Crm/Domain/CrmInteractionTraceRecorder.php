@@ -166,9 +166,11 @@ final class CrmInteractionTraceRecorder
         $expectedTargetType = $expected['target_type'];
         $expectedTargetId = (string) ($references[$referenceKind] ?? '');
         if ($authorityEvent === null
-            || $authorityEvent->actor_id !== $actor->actorId
+            // char(36) identifiers come back blank-padded from the column;
+            // the logical identifier is the trimmed value.
+            || trim((string) $authorityEvent->actor_id) !== $actor->actorId
             || $authorityEvent->target_type !== $expectedTargetType
-            || $authorityEvent->target_id !== $expectedTargetId
+            || trim((string) $authorityEvent->target_id) !== $expectedTargetId
             || ! in_array($authorityEvent->operation, $expectedOperations, true)) {
             throw BusinessRejection::forCode('crm.interaction_authority_event_invalid', 'the authoritative audit event does not match the linked record and actor');
         }

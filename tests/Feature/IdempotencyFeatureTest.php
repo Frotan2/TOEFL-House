@@ -10,23 +10,17 @@ use App\Modules\Identity\Models\Person;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\RegistersPeople;
 use Tests\TestCase;
 
 final class IdempotencyFeatureTest extends TestCase
 {
     use BuildsActors;
+    use RegistersPeople;
 
     private function newPerson(): Person
     {
-        /** @var Person $person */
-        $person = Person::query()->create([
-            'id' => RandomIdentifier::new(),
-            'legal_name' => 'Idempotent Person',
-            'date_of_birth' => '1985-06-15',
-            'verification_state' => Person::VERIFICATION_UNVERIFIED,
-        ]);
-
-        return $person;
+        return $this->newUnverifiedPerson('Idempotent Person', '1985-06-15', 'idem');
     }
 
     public function test_repeated_command_returns_the_original_outcome_without_a_second_effect(): void

@@ -9,6 +9,7 @@ use App\Modules\Academic\Commands\DecideProgression;
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
 use App\Modules\Academic\Commands\MaintainEnrollment;
+use App\Modules\Academic\Commands\ManageAcademicOffering;
 use App\Modules\Academic\Commands\ManageAssessmentResult;
 use App\Modules\Academic\Commands\RecordAttendance;
 use App\Modules\Academic\Models\AcademicPeriod;
@@ -16,8 +17,10 @@ use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSession;
+use App\Modules\Academic\Models\BranchAvailability;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\GraduationDecision;
+use App\Modules\Academic\Models\Offering;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Models\ProgressionDecision;
 use App\Modules\Audit\Models\AuditEvent as AuditEventModel;
@@ -43,13 +46,18 @@ use Tests\TestCase;
 final class ClassTerminalGuardFeatureTest extends TestCase
 {
     use BuildsStudents;
+    use \Tests\Concerns\BuildsSessions;
     use \Tests\Concerns\BuildsTeachers;
 
     /** @return array{version_id: string, period_id: string, class_id: string} */
     private function freshActiveClass(string $seed): array
     {
         $officer = $this->academicOfficer('term-officer-'.$seed);
-        $this->buildActiveTeacher('term-teacher-'.$seed, null, 'classteref6');
+        // The prefix feeds every idempotency key and actor id the teacher
+        // fixture issues, so it must be unique per class seed or two classes in
+        // one test would replay the same employ key with a different payload.
+        $teacherKey = strlen($seed) > 4 ? substr($seed, 0, 4).substr(md5($seed), 0, 8) : $seed;
+        $this->buildActiveTeacher('term-teacher-'.$seed, null, 'clst'.$teacherKey);
         $structure = app(MaintainAcademicStructure::class);
 
         $program = $structure->defineProgram($officer, 'Terminal Guard Program '.$seed, 'term-prog-'.$seed);
@@ -58,9 +66,9 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'term-per-pub-'.$seed);
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
-        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-ofclasster', 1, 'Level', 'A1', 'ofclasster-lvl');
-        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'ofclasster-av');
-        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'ofclasster-of');
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-classt', 1, 'Level', 'A1', 'classt-lvl-'.$seed);
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'classt-av-'.$seed);
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'classt-of-'.$seed);
 
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'term-class-'.$seed, null, $this->bootstrapBranchId());
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'term-teacher-'.$seed, new CarbonImmutable('2026-09-01'), null, 'term-teach-'.$seed);
@@ -181,20 +189,14 @@ final class ClassTerminalGuardFeatureTest extends TestCase
 
         $evidenced = $this->activeSeat('full-ev', $classId);
         $released = $this->releasedResult($evidenced, 'term-full', '82.00');
-        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($evidenced), 'completed all requirements', 'assessment_result', $released['result_id'], 'term-full-complete-ev');
 
-        $plain = $this->activeSeat('full-plain', $classId);
-        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($plain), 'finished the term', null, null, 'term-full-complete-plain');
-
-        $completed = app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'completed', 'term-full-complete-class');
-        $this->assertSame('completed', $completed['lifecycle_state']);
-
-        // Progression still decides on the completed class (legacy class:
-        // outcome with no level fields).
+        // Progression is decided while the seat is live: a level-aware class
+        // decides only for an active seat, and the level carries no rules, so
+        // a repeat outcome needs only its basis.
         $studentId = (string) Enrollment::query()->findOrFail($evidenced)->student_id;
         $decision = app(DecideProgression::class)->propose(
             $this->grantedActor('term-full-prop', ['academic.progression_propose']),
-            $studentId, $classId, 'repeat', 'needs one more term', 'term-full-propose',
+            $studentId, $classId, 'repeat', 'needs one more term', 'term-full-propose', null, 'assessed evidence on file',
         );
         app(DecideProgression::class)->review(
             $this->grantedActor('term-full-rev', ['academic.progression_review']),
@@ -205,6 +207,15 @@ final class ClassTerminalGuardFeatureTest extends TestCase
             ProgressionDecision::query()->findOrFail($decision['decision_id']), 'term-full-approve',
         );
         $this->assertSame('approved', $approved['lifecycle_state']);
+
+        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($evidenced), 'completed all requirements', 'assessment_result', $released['result_id'], 'term-full-complete-ev');
+
+        $plain = $this->activeSeat('full-plain', $classId);
+        $plainResult = $this->releasedResult($plain, 'term-full-plain', '79.00');
+        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($plain), 'finished the term', 'assessment_result', $plainResult['result_id'], 'term-full-complete-plain');
+
+        $completed = app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'completed', 'term-full-complete-class');
+        $this->assertSame('completed', $completed['lifecycle_state']);
 
         // Graduation still approves: the seats are terminal, the class being
         // completed does not strand the decision.
@@ -233,11 +244,14 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         ['class_id' => $classId] = $this->freshActiveClass('freeze');
         $officer = $this->academicOfficer('term-freeze');
         $seatId = $this->activeSeat('freeze-seat', $classId);
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-07'), '09:00', '10:00', 'term-freeze-session');
+        // New sessions require explicit subject or skill authority.
+        $skillId = $this->makeClassSchedulable($officer, $classId, $this->bootstrapBranchId(), 'term-freeze-sched');
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-07'), '09:00', '10:00', 'term-freeze-session', $skillId);
         /** @var ClassSession $sessionRow */
         $sessionRow = ClassSession::query()->findOrFail($session['session_id']);
 
-        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($seatId), 'finished the term', null, null, 'term-freeze-complete');
+        $frozenResult = $this->releasedResult($seatId, 'term-freeze', '81.00');
+        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($seatId), 'finished the term', 'assessment_result', $frozenResult['result_id'], 'term-freeze-complete');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'completed', 'term-freeze-class');
 
         try {
@@ -248,7 +262,7 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         }
 
         try {
-            app(ManageAssessmentResult::class)->submitAttempt($this->grantedActor('term-freeze-assessor', ['academic.assess']), Enrollment::query()->findOrFail($seatId), 'assessment', 'scan/freeze', 'term-freeze-attempt');
+            app(ManageAssessmentResult::class)->submitAttempt($this->grantedActor('term-freeze-assessor', ['academic.assess']), Enrollment::query()->findOrFail($seatId), 'assessment', 'scan/freeze', 'term-freeze-late-attempt');
             $this->fail('an attempt on a completed seat must be refused');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.attempt_enrollment_not_active', $rejection->errorCode());
@@ -282,6 +296,14 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         $seatId = $this->activeSeat('period-seat', $classId);
         app(MaintainEnrollment::class)->withdraw($this->enrollmentClerk('term-period-clerk'), Enrollment::query()->findOrFail($seatId), 'family relocation verified', 'term-period-wd');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'completed', 'term-period-complete');
+
+        // The period closes only once every class, offering, and availability
+        // record in it is terminal: an open offering is still live delivery
+        // capacity even after its class completes.
+        $offering = Offering::query()->where('academic_period_id', $periodId)->firstOrFail();
+        app(ManageAcademicOffering::class)->closeOffering($officer, $offering, 'term-period-of-close');
+        app(ManageAcademicOffering::class)->completeOffering($officer, Offering::query()->findOrFail($offering->id), 'term-period-of-complete');
+        app(ManageAcademicOffering::class)->closeAvailability($officer, BranchAvailability::query()->where('academic_period_id', $periodId)->firstOrFail(), 'term-period-av-close');
 
         $closed = app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($periodId), 'closed', 'term-period-close');
         $this->assertSame('closed', $closed['lifecycle_state']);
@@ -317,6 +339,11 @@ final class ClassTerminalGuardFeatureTest extends TestCase
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.class_transition_forbidden', $rejection->errorCode());
         }
+
+        $offering = Offering::query()->where('academic_period_id', $periodId)->firstOrFail();
+        app(ManageAcademicOffering::class)->closeOffering($officer, $offering, 'term-irr-of-close');
+        app(ManageAcademicOffering::class)->completeOffering($officer, Offering::query()->findOrFail($offering->id), 'term-irr-of-complete');
+        app(ManageAcademicOffering::class)->closeAvailability($officer, BranchAvailability::query()->where('academic_period_id', $periodId)->firstOrFail(), 'term-irr-av-close');
 
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($periodId), 'closed', 'term-irr-close');
         try {
@@ -363,7 +390,8 @@ final class ClassTerminalGuardFeatureTest extends TestCase
             $this->assertSame('academic.class_open_seats', $rejection->errorCode());
         }
 
-        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($seatId), 'finished the term', null, null, 'term-race-complete');
+        $raceResult = $this->releasedResult($seatId, 'term-race', '80.00');
+        app(MaintainEnrollment::class)->complete($officer, Enrollment::query()->findOrFail($seatId), 'finished the term', 'assessment_result', $raceResult['result_id'], 'term-race-complete');
         // The refusal recorded nothing: retrying the identical command (same
         // key, same payload) after the seat terminalized must succeed rather
         // than replay a refusal or collide on the key.

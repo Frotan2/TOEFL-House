@@ -24,6 +24,14 @@ final class FinanceWorkflowFeatureTest extends TestCase
 {
     use BuildsStudents;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The finance console is a React workspace shell; without the built
+        // asset manifest the @vite directive would 500 the shell itself.
+        $this->withoutVite();
+    }
+
     private function signInAs(string $personId, string $username): void
     {
         UserAccount::query()->create([
@@ -70,8 +78,9 @@ final class FinanceWorkflowFeatureTest extends TestCase
         $payment = Payment::query()->where('payer_ref', 'FIN-PAY-1')->firstOrFail();
         $this->assertSame('400.00', $payment->amount);
 
-        // The finance index surfaces the payment.
-        $this->get('/finance')->assertOk()->assertSee('FIN-PAY-1');
+        // The finance index shell renders for the signed-in clerk; the
+        // payment itself is served to the React workspace through the API.
+        $this->get('/finance')->assertOk()->assertSee('finance-console');
 
         // Stage 1: the clerk PROPOSES the refund — no approver field exists
         // on the form, and the command does not record money yet.
@@ -115,16 +124,18 @@ final class FinanceWorkflowFeatureTest extends TestCase
             'date_to' => '2026-09-30',
             'lifecycle_state' => 'open',
         ]);
-        $payment = Payment::query()->create([
-            'id' => RandomIdentifier::new(),
+        // The payment is born through the owning console action in the
+        // clerk's session (branch provenance and its journal are stamped
+        // with the fact); the attack then targets the refund proposal only.
+        $this->post('/finance/payments', [
             'period_id' => $period->id,
             'student_id' => $student->id,
             'amount' => '200.00',
             'method' => 'cash',
             'payer_ref' => 'FIN-PAY-2',
             'received_on' => '2026-09-05',
-            'recorded_by' => 'fin-clerk-2',
-        ]);
+        ])->assertRedirect(route('finance.index'));
+        $payment = Payment::query()->where('payer_ref', 'FIN-PAY-2')->firstOrFail();
 
         // The old attack: one session types a colleague's person id into
         // the request. The field no longer exists — the refund is only
@@ -154,16 +165,19 @@ final class FinanceWorkflowFeatureTest extends TestCase
             'date_to' => '2026-10-31',
             'lifecycle_state' => 'open',
         ]);
-        $payment = Payment::query()->create([
-            'id' => RandomIdentifier::new(),
+        // The payment is born through the owning console action in the
+        // actor's session (branch provenance and its journal are stamped
+        // with the fact); the separation-of-duties attack then targets the
+        // refund proposal only.
+        $this->post('/finance/payments', [
             'period_id' => $period->id,
             'student_id' => $student->id,
             'amount' => '200.00',
             'method' => 'cash',
             'payer_ref' => 'FIN-PAY-3',
             'received_on' => '2026-10-05',
-            'recorded_by' => 'fin-both-1',
-        ]);
+        ])->assertRedirect(route('finance.index'));
+        $payment = Payment::query()->where('payer_ref', 'FIN-PAY-3')->firstOrFail();
 
         // One person holding BOTH capabilities may still carry only one
         // stage: proposing is legal, approving their own proposal is not.

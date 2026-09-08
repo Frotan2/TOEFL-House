@@ -19,6 +19,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -33,22 +35,35 @@ use Tests\TestCase;
 final class AcademicOperationalCompletionConsoleTest extends TestCase
 {
     use BuildsActors;
+    use BuildsSessions;
+    use BuildsTeachers;
 
     private string $versionId;
 
     private string $periodId;
 
+    private string $branchId;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $officer = $this->academicOfficer();
-        $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'IELTS Preparation', 'aoc-prog');
-        $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'completion rules', 'aoc-ver');
+        $this->branchId = $this->bootstrapBranchId();
+        $officer = $this->academicOfficer('aoc-officer-setup');
+        $structure = app(MaintainAcademicStructure::class);
+        $program = $structure->defineProgram($officer, 'IELTS Preparation', 'aoc-prog');
+        $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'completion rules', 'aoc-ver');
         $this->versionId = $version['version_id'];
-        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'aoc-period');
-        app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'aoc-period-pub');
+        // Every class references an open offering for its branch, level, and
+        // period (academic.class_offering_required). Ordinal 2 keeps ordinal
+        // 1 free for the level-definition arc exercised over HTTP in the
+        // first test; the key must not collide with the keys that arc tries.
+        $level = $structure->defineLevel($officer, $this->versionId, 'aoc-foundation', 2, 'Foundation', 'A2', 'aoc-lvl-fixture');
+        $period = $structure->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'aoc-period');
+        $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'aoc-period-pub');
         $this->periodId = $period['period_id'];
+        $structure->declareBranchAvailability($officer, $this->branchId, $level['level_id'], $this->periodId, 'aoc-avail');
+        $structure->openOffering($officer, $this->branchId, $level['level_id'], $this->periodId, 4, 'aoc-offering');
     }
 
     /**
@@ -125,6 +140,7 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
             'program_version_id' => $this->versionId,
             'period_id' => $this->periodId,
             'capacity' => 2,
+            'branch_id' => $this->branchId,
         ];
         if ($levelId !== null) {
             $payload['program_version_level_id'] = $levelId;
@@ -135,7 +151,7 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
         $classId = DB::table($this->prefix().'classes')->whereNotIn('id', $knownIds)->value('id');
         $this->assertNotNull($classId);
 
-        $this->personWithAuthority('aoc-teacher-'.$suffix, []);
+        $this->buildActiveTeacher('aoc-teacher-'.$suffix, $this->branchId, 'aoc-teacher-'.$suffix);
         $this->post('/academic/teacher-assignments', [
             'class_id' => $classId,
             'teacher_person_id' => 'aoc-teacher-'.$suffix,
@@ -185,7 +201,10 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
             ->assertSessionHas('error_code', 'academic.level_ordinal_exists');
-        $this->assertSame(1, DB::table($this->prefix().'program_version_levels')->where('program_version_id', $this->versionId)->count());
+        // The refused duplicates and the unauthorized attempt wrote nothing:
+        // the fixture level and the one HTTP-defined level are all that exist.
+        $this->assertSame(2, DB::table($this->prefix().'program_version_levels')->where('program_version_id', $this->versionId)->count());
+        $this->assertSame(1, DB::table($this->prefix().'program_version_levels')->where('program_version_id', $this->versionId)->where('level_key', 'starter')->count());
         $this->signOut();
 
         // Without the structure capability, definition is refused.
@@ -200,6 +219,15 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
             ->assertSessionHas('error_code', 'academic.structure_denied');
         $this->signOut();
 
+        // The new level needs its own open offering before a class can
+        // reference it (every class carries an offering for its branch,
+        // level, and period). The structure officer declares and opens it
+        // through the certified commands; the HTTP arc under test is level
+        // definition and level-targeted class definition.
+        $structure = app(MaintainAcademicStructure::class);
+        $structure->declareBranchAvailability($this->academicOfficer('aoc-starter-officer'), $this->branchId, $levelId, $this->periodId, 'aoc-avail-starter');
+        $structure->openOffering($this->academicOfficer('aoc-starter-officer'), $this->branchId, $levelId, $this->periodId, 4, 'aoc-offering-starter');
+
         // The scheduler targets the level when defining the class.
         $this->signIn('level-scheduler');
         $classId = $this->activeClass('lvl', $levelId);
@@ -213,12 +241,19 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
         $otherProgram = app(MaintainAcademicStructure::class)->defineProgram($officer, 'Other', 'aoc-prog-x');
         $otherVersion = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($otherProgram['program_id']), 'other v1', 'aoc-ver-x');
         $otherLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $otherVersion['version_id'], 'starter', 1, 'Starter', 'A1', 'aoc-lvl-x');
+        // The foreign level gets its own open offering so the attempted class
+        // reaches the level/version guard instead of failing earlier as
+        // "no offering for this level".
+        $structure = app(MaintainAcademicStructure::class);
+        $structure->declareBranchAvailability($officer, $this->branchId, $otherLevel['level_id'], $this->periodId, 'aoc-avail-other');
+        $structure->openOffering($officer, $this->branchId, $otherLevel['level_id'], $this->periodId, 4, 'aoc-offering-other');
 
         $this->signIn('level-scheduler');
         $this->post('/academic/classes', [
             'program_version_id' => $this->versionId,
             'period_id' => $this->periodId,
             'capacity' => 2,
+            'branch_id' => $this->branchId,
             'program_version_level_id' => $otherLevel['level_id'],
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
@@ -340,8 +375,13 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
 
         $this->signIn('correction-scheduler');
         $classId = $this->activeClass('cor-a');
+        // Sessions require explicit subject or skill authority: an active
+        // skill authorized for the class's teacher in the branch and
+        // attributed to the open assignment.
+        $skillId = $this->makeClassSchedulable($this->academicOfficer('aoc-sk-officer-4'), $classId, $this->branchId, 'aoc-sess-4');
         $this->post('/academic/sessions', [
             'class_id' => $classId,
+            'skill_id' => $skillId,
             'scheduled_on' => '2026-09-15',
             'starts_at' => '09:00',
             'ends_at' => '10:30',
@@ -397,7 +437,10 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
         $this->assertSame(2, DB::table($this->prefix().'attendance_facts')->where('enrollment_id', $seatId)->count());
         $this->signOut();
 
-        // Once the seat leaves active, correction is refused by the domain.
+        // Once the seat leaves active the two laws split: correcting a fact
+        // that was recorded while the seat was active stays lawful (the
+        // append-only lineage pins history, the new fact carries the
+        // reason), while recording a NEW fact requires an active seat.
         $this->signIn('correction-officer');
         $this->post('/academic/enrollments/'.$seatId.'/freeze', ['reason' => 'fee review'])->assertRedirect('/academic');
         $this->signOut();
@@ -406,9 +449,21 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
         $this->post('/academic/sessions/facts/'.$factId.'/correct', [
             'status' => 'excused',
             'reason' => 'late evidence arrived',
+        ])->assertRedirect('/academic/sessions');
+        $correctionAfterFreezeId = DB::table($this->prefix().'attendance_facts')->where('corrects_id', $factId)->where('status', 'excused')->value('id');
+        $this->assertNotNull($correctionAfterFreezeId);
+        $this->assertSame(3, DB::table($this->prefix().'attendance_facts')->where('enrollment_id', $seatId)->count());
+        // The original fact is still untouched history.
+        $this->assertDatabaseHas($this->prefix().'attendance_facts', [
+            'id' => $factId, 'status' => 'absent', 'corrects_id' => null,
+        ]);
+
+        $this->post('/academic/sessions/'.$sessionId.'/attendance', [
+            'enrollment_id' => $seatId,
+            'status' => 'absent',
         ], ['referer' => 'http://localhost/academic/sessions'])
             ->assertRedirect('/academic/sessions')
             ->assertSessionHas('error_code', 'academic.attendance_enrollment_not_active');
-        $this->assertSame(2, DB::table($this->prefix().'attendance_facts')->where('enrollment_id', $seatId)->count());
+        $this->assertSame(3, DB::table($this->prefix().'attendance_facts')->where('enrollment_id', $seatId)->count());
     }
 }

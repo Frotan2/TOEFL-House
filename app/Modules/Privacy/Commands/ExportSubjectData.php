@@ -53,12 +53,16 @@ final class ExportSubjectData
         try {
             return $this->idempotency->execute('privacy.export', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($exporter, $subjectPersonId, $purpose, $scopeType, $scopeId): array {
+                    // Privacy owns the subject gate: like consent and
+                    // disclosure, an export of an unknown subject is refused
+                    // with the module's typed code before any scope resolves.
+                    // Provenance then applies to a known subject only.
+                    $this->requireSubjectAndPurpose($subjectPersonId, $purpose);
                     $subjectScope = PersonBranchScope::resolve($subjectPersonId);
                     $this->requireCapability($exporter, self::CAPABILITY, 'privacy.export_denied', $subjectScope);
                     if ($scopeType === 'organization') {
                         throw BusinessRejection::forCode('privacy.export_bulk_requires_request', 'organization-wide exports proceed only through the staged approval chain');
                     }
-                    $this->requireSubjectAndPurpose($subjectPersonId, $purpose);
 
                     $dataset = $this->deriveDataset($subjectPersonId);
 

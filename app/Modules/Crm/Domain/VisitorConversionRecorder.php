@@ -78,9 +78,11 @@ final class VisitorConversionRecorder
                 $expectedOperations = $conversionType === 'applicant' ? ['admissions.register'] : ['admissions.convert', 'students.register'];
                 $expectedTargetType = $conversionType === 'applicant' ? 'applicant' : 'student';
                 if ($authorityEvent === null
-                    || $authorityEvent->actor_id !== $actor->actorId
+                    // char(36) identifiers come back blank-padded from the
+                    // column; the logical identifier is the trimmed value.
+                    || trim((string) $authorityEvent->actor_id) !== $actor->actorId
                     || $authorityEvent->target_type !== $expectedTargetType
-                    || $authorityEvent->target_id !== $downstreamId
+                    || trim((string) $authorityEvent->target_id) !== $downstreamId
                     || ! in_array($authorityEvent->operation, $expectedOperations, true)) {
                     throw BusinessRejection::forCode('crm.conversion_authority_event_invalid', 'the conversion must bind to the authoritative downstream audit event');
                 }

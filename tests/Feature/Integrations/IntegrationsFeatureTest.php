@@ -150,8 +150,13 @@ final class IntegrationsFeatureTest extends TestCase
         $sweep = app(ProcessDeliveries::class)->processDue($admin, 'int-proc-9');
         $outcomes = array_column($sweep['results'], 'outcome');
         $this->assertContains('delivered', $outcomes);
+        $this->assertContains('retry_scheduled', $outcomes);
         $this->assertDatabaseHas('integration_deliveries', ['id' => $second['delivery_id'], 'status' => 'delivered']);
-        $this->assertDatabaseHas('integration_deliveries', ['id' => $first['delivery_id'], 'status' => 'queued', 'attempts' => 0]);
+        // The aborted claim is finalized as a retryable failure: the bounded
+        // attempt is recorded, the row backs off, and the next sweep retries
+        // it without ever touching the already-delivered sibling.
+        $this->assertDatabaseHas('integration_deliveries', ['id' => $first['delivery_id'], 'status' => 'failed', 'attempts' => 1, 'last_error' => 'connection reset']);
+        $this->assertNotNull(IntegrationDelivery::query()->findOrFail($first['delivery_id'])->next_run_at);
     }
 
     public function test_unconfigured_and_retired_endpoints_fail_closed(): void
@@ -252,34 +257,51 @@ final class IntegrationsFeatureTest extends TestCase
         }
         $this->assertSame(1, (int) $replayedRun->attempts);
 
-        // a throwing handler fails the run with backoff; bounded attempts dead-letter
-        // (every one of the three attempts meets the same blowup)
-        $this->transport->willThrow(new RuntimeException('sweep blowup'))->willThrow(new RuntimeException('sweep blowup'))->willThrow(new RuntimeException('sweep blowup'));
+        // A throwing adapter is a retryable delivery failure, never a
+        // fabricated success and never a poisoned job run: every sweep run
+        // completes (its summary is durable evidence), the failed delivery
+        // backs off, and bounded attempts finally dead-letter the row.
+        $this->transport->willThrow(new RuntimeException('sweep blowup'))
+            ->willThrow(new RuntimeException('sweep blowup'))
+            ->willThrow(new RuntimeException('sweep blowup'))
+            ->willThrow(new RuntimeException('sweep blowup'))
+            ->willThrow(new RuntimeException('sweep blowup'));
         $unluckyDelivery = app(DispatchDelivery::class)->dispatch($admin, 'sms-gateway', 'receipt-4', 'payment', '00000000-0000-4000-8000-0000000000a8', 'receipt.issued', ['receipt' => 'RCPT-4'], 'int-disp-9');
         $unlucky = app(EnqueueJobRun::class)->enqueue($admin, 'integrations.retry_sweep', '2026-08-26T09:05', 'int-enq-3');
 
         $attempt = app(ProcessJobRun::class)->process($admin, JobRun::query()->findOrFail($unlucky['run_id']), 'int-run-3');
-        $this->assertSame('failed', $attempt['status']);
+        $this->assertSame('succeeded', $attempt['status']);
+        $this->assertSame(1, $attempt['outcome']['retry_scheduled'] ?? null);
         /** @var JobRun $run */
-        $run = JobRun::query()->find($unlucky['run_id']);
+        $run = JobRun::query()->findOrFail($unlucky['run_id']);
         $this->assertSame(1, $run->attempts);
-        $this->assertTrue($run->next_retry_at?->isFuture() === true);
+        $delivery = IntegrationDelivery::query()->findOrFail($unluckyDelivery['delivery_id']);
+        $this->assertSame('failed', $delivery->status);
+        $this->assertSame(1, $delivery->attempts);
+        $this->assertTrue($delivery->next_run_at?->isFuture() === true);
 
-        // inside the backoff window the run waits; not executed
-        $waiting = app(ProcessJobRun::class)->process($admin, $run, 'int-run-4');
-        $this->assertSame('waiting_retry', $waiting['status']);
+        // Inside the delivery backoff window a fresh sweep skips the row and
+        // performs no transport I/O: nothing executes twice.
+        $during = app(EnqueueJobRun::class)->enqueue($admin, 'integrations.retry_sweep', '2026-08-26T09:06', 'int-enq-4');
+        $skipped = app(ProcessJobRun::class)->process($admin, JobRun::query()->findOrFail($during['run_id']), 'int-run-4');
+        $this->assertSame('succeeded', $skipped['status']);
+        $this->assertSame(0, $skipped['outcome']['considered'] ?? null);
         $this->assertSame(1, $this->transport->sendCount());
 
-        DB::table('job_runs')->where('id', $run->id)->update(['next_retry_at' => now()->subMinute()]);
-        app(ProcessJobRun::class)->process($admin, $run, 'int-run-5'); // attempt 2 fails
-        DB::table('job_runs')->where('id', $run->id)->update(['next_retry_at' => now()->subMinute()]);
-        $terminal = app(ProcessJobRun::class)->process($admin, $run, 'int-run-6'); // attempt 3 exhausted
+        // Attempts 2..5 each meet the same blowup and finally exhaust the
+        // bounded retry budget into the dead letter.
+        foreach (['09:07', '09:08', '09:09', '09:10'] as $i => $occurrence) {
+            DB::table('integration_deliveries')->where('id', $unluckyDelivery['delivery_id'])->update(['next_run_at' => now()->subMinute()]);
+            $next = app(EnqueueJobRun::class)->enqueue($admin, 'integrations.retry_sweep', '2026-08-26T'.$occurrence, 'int-enq-'.($i + 5));
+            $outcome = app(ProcessJobRun::class)->process($admin, JobRun::query()->findOrFail($next['run_id']), 'int-run-'.($i + 5));
+            $this->assertSame('succeeded', $outcome['status']);
+        }
 
-        $this->assertSame('dead_letter', $terminal['status']);
-        $this->assertDatabaseHas('job_runs', ['id' => $run->id, 'status' => 'dead_letter', 'attempts' => 3]);
-        $this->assertDatabaseHas('audit_events', ['operation' => 'integrations.job.dead_letter', 'target_id' => $run->id]);
-        // the aborted sweep attempts fabricated nothing: the delivery is untouched and still retryable
-        $this->assertDatabaseHas('integration_deliveries', ['id' => $unluckyDelivery['delivery_id'], 'status' => 'queued', 'attempts' => 0]);
+        $terminalDelivery = IntegrationDelivery::query()->findOrFail($unluckyDelivery['delivery_id']);
+        $this->assertSame('dead_letter', $terminalDelivery->status);
+        $this->assertSame(5, $terminalDelivery->attempts);
+        $this->assertDatabaseHas('audit_events', ['operation' => 'integrations.delivery.dead_letter', 'target_id' => $unluckyDelivery['delivery_id']]);
+        $this->assertSame(5, $this->transport->sendCount());
     }
 
     public function test_unprivileged_integration_operations_are_denied_and_audited(): void

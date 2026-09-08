@@ -132,7 +132,7 @@ final class AccessResolutionFeatureTest extends TestCase
     {
         $delegator = $this->actorWithStructureCapabilities('del-1', ['access.grant']);
         $organization = $this->establishActiveOrganizationFor('del-1');
-        $this->createActiveDelegation('del-1', 'del-2', null, null, null);
+        $this->createActiveDelegation('del-1', 'del-2', 'access.grant', 'organization', $organization);
         $delegate = new Actor('del-2', 'Delegate');
 
         $decision = $this->resolution->decide($delegate, 'access.grant', new StructureScope($organization));
@@ -144,7 +144,7 @@ final class AccessResolutionFeatureTest extends TestCase
     {
         $organization = $this->establishActiveOrganizationFor('del-3');
         $this->actorWithStructureCapabilities('del-3', ['access.grant']);
-        $this->createActiveDelegation('del-3', 'del-4', null, null, null);
+        $this->createActiveDelegation('del-3', 'del-4', 'access.grant', 'organization', $organization);
         $delegate = new Actor('del-4', 'Delegate Without Reach');
 
         $beyond = $this->resolution->decide($delegate, 'access.revoke', new StructureScope($organization));
@@ -156,7 +156,7 @@ final class AccessResolutionFeatureTest extends TestCase
     {
         $organization = $this->establishActiveOrganizationFor('del-5');
         $this->actorWithStructureCapabilities('del-5', ['access.grant']);
-        $this->createDelegation('del-5', 'del-6', null, null, null, '2026-01-01', '2026-02-01');
+        $this->createDelegation('del-5', 'del-6', 'access.grant', 'organization', $organization, '2026-01-01', '2026-02-01');
         $delegate = new Actor('del-6', 'Expired Delegate');
 
         $decision = $this->resolution->decide($delegate, 'access.grant', new StructureScope($organization));
@@ -168,7 +168,7 @@ final class AccessResolutionFeatureTest extends TestCase
     {
         $organization = $this->establishActiveOrganizationFor('del-7');
         $this->actorWithStructureCapabilities('del-7', ['access.grant']);
-        $this->createDelegation('del-7', 'del-8', null, null, null, '2026-01-01', '2027-01-01', 'revoked');
+        $this->createDelegation('del-7', 'del-8', 'access.grant', 'organization', $organization, '2026-01-01', '2027-01-01', 'revoked');
         $delegate = new Actor('del-8', 'Revoked Delegate');
 
         $decision = $this->resolution->decide($delegate, 'access.grant', new StructureScope($organization));
@@ -181,7 +181,7 @@ final class AccessResolutionFeatureTest extends TestCase
         $this->actorWithStructureCapabilities('del-9', ['access.grant']);
         $inScope = $this->establishActiveOrganizationFor('del-9');
         $outOfScope = $this->establishActiveOrganizationFor('del-10');
-        $this->createActiveDelegation('del-9', 'del-11', null, 'organization', $inScope);
+        $this->createActiveDelegation('del-9', 'del-11', 'access.grant', 'organization', $inScope);
         $delegate = new Actor('del-11', 'Scoped Delegate');
 
         $within = $this->resolution->decide($delegate, 'access.grant', new StructureScope($inScope));

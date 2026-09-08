@@ -50,6 +50,10 @@ final class PlacementApiFeatureTest extends TestCase
             'placement.approve',
             'placement.recommend',
             'placement.release',
+            // The finance-lineage read endpoint is finance-scoped: an officer
+            // exercising it must hold the finance read capabilities too.
+            'finance.obligation',
+            'finance.payment',
         ]);
     }
 
@@ -118,7 +122,7 @@ final class PlacementApiFeatureTest extends TestCase
         $approver = $this->grantedActor('plc-api-approver', ['placement.approve']);
         $recommender = $this->grantedActor('plc-api-recommender', ['placement.recommend']);
         $reviewer = $this->grantedActor('plc-api-reviewer', ['placement.moderate']);
-        $releaser = $this->grantedActor('plc-api-releaser', ['placement.release']);
+        $releaser = $this->grantedActor('plc-api-releaser', ['placement.release', 'placement.conduct']);
         $this->signInAs($scorer->actorId, 'placement.api.scorer');
         $this->setUpPlacementCatalog();
 
@@ -201,7 +205,7 @@ final class PlacementApiFeatureTest extends TestCase
         $this->assertNotNull(PlacementProfile::query()->findOrFail($profileId)->released_at);
         $this->assertSame('released', PlacementProfile::query()->findOrFail($profileId)->lifecycle_state);
 
-        $appealManager = $this->grantedActor('plc-api-appeal-manager', ['academic.appeal_manage']);
+        $appealManager = $this->grantedActor('plc-api-appeal-manager', ['academic.appeal_manage', 'placement.conduct']);
         $this->switchTo($appealManager->actorId, 'placement.api.appeal');
         $this->postJson('/api/v1/placement/profiles/'.$profileId.'/appeal', [
             'reason' => 'The placement recommendation does not reflect my performance.',

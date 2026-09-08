@@ -46,8 +46,8 @@ final class AccessAdversarialTest extends TestCase
     {
         $root = $this->actorWithStructureCapabilities('adv-root', ['identity.verify']);
         $organization = $this->establishActiveOrganization();
-        $this->createFixtureDelegation('adv-root', 'adv-middle', null, null, null);
-        $this->createFixtureDelegation('adv-middle', 'adv-leaf', null, null, null);
+        $this->createFixtureDelegation('adv-root', 'adv-middle', 'identity.verify', 'organization', $organization->id);
+        $this->createFixtureDelegation('adv-middle', 'adv-leaf', 'identity.verify', 'organization', $organization->id);
         $leaf = new Actor('adv-leaf', 'Leaf');
         $middle = new Actor('adv-middle', 'Middle');
 

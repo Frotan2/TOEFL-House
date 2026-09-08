@@ -7,11 +7,13 @@ namespace Tests\Feature\Academic;
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
 use App\Modules\Academic\Commands\MaintainSkill;
+use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Models\Skill;
 use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Audit\Models\AuditEvent;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
@@ -45,6 +47,50 @@ final class SkillFeatureTest extends TestCase
         }
 
         return $ids;
+    }
+
+    /**
+     * Attribution and scheduling consult the teacher subject-authority chain:
+     * an assignment may carry a skill only when the teacher holds effective
+     * `teach` authority for it in the class branch (authorizeSkill), and a
+     * session additionally requires weekday availability (declareAvailability).
+     * Both go through the production commands, never direct inserts.
+     */
+    private function authorizeTeacherSkill(array $teacher, string $skillId, string $keyPrefix): void
+    {
+        $approver = $this->grantedActor($keyPrefix.'-sk-approver', ['academic.teacher_approve']);
+        app(MaintainTeacherProfile::class)->authorizeSkill(
+            $approver,
+            TeacherProfile::query()->findOrFail($teacher['teacher_profile_id']),
+            $skillId,
+            $this->bootstrapBranchId(),
+            'teach',
+            CarbonImmutable::today()->subYear()->toDateString(),
+            null,
+            'evidence/'.$keyPrefix.'/skill-authority',
+            $keyPrefix.'-sk-auth',
+        );
+    }
+
+    private function declareTeacherAvailableEveryWeekday(array $teacher, string $keyPrefix): void
+    {
+        $manager = $this->grantedActor($keyPrefix.'-sk-manager', ['academic.teacher_manage']);
+        $profiles = app(MaintainTeacherProfile::class);
+        $from = CarbonImmutable::today()->subYear()->toDateString();
+        foreach (range(1, 7) as $weekday) {
+            $profiles->declareAvailability(
+                $manager,
+                TeacherProfile::query()->findOrFail($teacher['teacher_profile_id']),
+                $this->bootstrapBranchId(),
+                $weekday,
+                '00:00',
+                '23:59',
+                $from,
+                null,
+                'available',
+                $keyPrefix.'-avail-'.$weekday,
+            );
+        }
     }
 
     public function test_skill_catalog_registration_duplicate_rejection_and_audit(): void
@@ -130,7 +176,9 @@ final class SkillFeatureTest extends TestCase
     {
         $ids = $this->registerInitialSkills();
         $officer = $this->academicOfficer();
-        $this->buildActiveTeacher('p16-teacher-1', null, 'skillfea915');
+        $teacher = $this->buildActiveTeacher('p16-teacher-1', null, 'skillfea915');
+        $this->authorizeTeacherSkill($teacher, $ids['speaking_listening'], 'p16-skill-1');
+        $this->authorizeTeacherSkill($teacher, $ids['writing_grammar'], 'p16-skill-2');
 
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'TOEFL Course', 'p16-prog-1');
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'p16-prog-2');
@@ -196,11 +244,24 @@ final class SkillFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'p16-prog-4');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-08-01'), new CarbonImmutable('2026-12-18'), 'p16-per-3');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'p16-per-4');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-skill-sessions', 1, 'Level', 'A1', 'p16-skill-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'p16-skill-avail');
+        app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'p16-skill-offering');
         $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'p16-class-3', null, $this->bootstrapBranchId());
         $classId = $class['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($classId), 'p16-teacher-2', new CarbonImmutable('2026-08-01'), null, 'p16-class-4');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', 'p16-class-5');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'active', 'p16-class-6');
+        // Session scheduling walks the delivery chain: the teacher needs teach
+        // authority for the skill and weekday availability, and the skill must
+        // be attributed to the effective class assignment.
+        $teacher = $this->buildActiveTeacher('p16-teacher-2', null, 'skillfea11b');
+        $this->authorizeTeacherSkill($teacher, $ids['speaking_listening'], 'p16-skill-3');
+        $this->declareTeacherAvailableEveryWeekday($teacher, 'p16-skill-3');
+        $assignment = TeacherAssignment::query()->where('class_id', $classId)->whereNull('effective_to')->firstOrFail();
+        app(MaintainClass::class)->assignSkill($officer, $assignment, $ids['speaking_listening'], 'p16-skill-attrib');
 
         $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-08-05'), '09:00', '11:00', 'p16-ses-1', $ids['speaking_listening']);
         $this->assertDatabaseHas('class_sessions', ['id' => $session['session_id'], 'skill_id' => $ids['speaking_listening']]);
@@ -209,7 +270,7 @@ final class SkillFeatureTest extends TestCase
             app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-08-06'), '09:00', '11:00', 'p16-ses-2', '00000000-0000-4000-8000-00000000feed');
             $this->fail('an unknown skill cannot be scheduled');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('academic.session_skill_unknown', $rejection->errorCode());
+            $this->assertSame('scheduling.skill_unknown', $rejection->errorCode());
         }
 
         app(MaintainSkill::class)->retire($this->grantedActor($this->skillRegistrarId, ['academic.skill']), Skill::query()->findOrFail($ids['reading_vocabulary']), 'p16-skill-ret-3');
@@ -217,7 +278,7 @@ final class SkillFeatureTest extends TestCase
             app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-08-07'), '09:00', '11:00', 'p16-ses-3', $ids['reading_vocabulary']);
             $this->fail('a retired skill cannot be scheduled');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('academic.session_skill_unknown', $rejection->errorCode());
+            $this->assertSame('scheduling.skill_unknown', $rejection->errorCode());
         }
 
         // A rejected statement aborts the surrounding transaction, so this

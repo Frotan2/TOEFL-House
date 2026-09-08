@@ -12,6 +12,7 @@ use App\Modules\Payroll\Commands\ApprovePayrollResult;
 use App\Modules\Payroll\Commands\CalculatePayroll;
 use App\Modules\Payroll\Commands\MaintainPayrollPeriod;
 use App\Modules\Finance\Commands\MaintainEmploymentSettlement;
+use App\Modules\Finance\Commands\MaintainFinancialPeriod;
 use App\Modules\Payroll\Commands\SettleEmployment;
 use App\Modules\Payroll\Models\PayrollCalculation;
 use App\Modules\Payroll\Models\PayrollPeriod;
@@ -67,6 +68,10 @@ final class PayrollDirectSqlAttackTest extends TestCase
         $periodOpener = $this->grantedActor('atk-period-1', ['payroll.period']);
         $period = app(MaintainPayrollPeriod::class)->open($periodOpener, '2026-09', '2026-09-01', '2026-09-30', 'atk-per-1');
         $this->periodId = $period['period_id'];
+
+        // Settlement recording is a Finance domain action: it requires one
+        // open Finance financial period containing the record date.
+        app(MaintainFinancialPeriod::class)->open($this->grantedActor('atk-finperiod-1', ['finance.period']), '2026-09', '2026-09-01', '2026-09-30', 'atk-finper-1');
     }
 
     private function preparedCalculation(string $key): PayrollCalculation

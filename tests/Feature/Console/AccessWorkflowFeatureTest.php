@@ -203,10 +203,14 @@ final class AccessWorkflowFeatureTest extends TestCase
             ->assertRedirect('/access')
             ->assertSessionHas('error_code', 'access.lifecycle_transition_forbidden');
 
-        // Delegations are temporary, reasoned, and revocable.
+        // Delegations are temporary, reasoned, and revocable. The transport
+        // requires an explicit structure scope on every delegation; typing
+        // your own person id into a fully-formed request is refused by the
+        // domain's self-delegation gate.
         $this->post('/access/delegations', [
             'delegator_person_id' => 'acw-delegator', 'delegate_person_id' => 'acw-delegator',
-            'permission' => 'identity.verify', 'effective_from' => '2026-09-01', 'effective_to' => '2026-10-01',
+            'permission' => 'identity.verify', 'scope_type' => 'campus', 'scope_id' => $campus->id,
+            'effective_from' => '2026-09-01', 'effective_to' => '2026-10-01',
             'reason' => 'Probe self-delegation',
         ], ['referer' => 'http://localhost/access'])
             ->assertRedirect('/access')
