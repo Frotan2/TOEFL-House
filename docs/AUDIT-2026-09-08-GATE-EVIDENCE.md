@@ -43,7 +43,7 @@ files. Commands that are *part of the product contract* (`deploy/*.sh`,
 | C | Migration forward-safety and rollback discipline | **PASS**, limits recorded (the `down()` chain is exercised as far as the one-way policy allows; no production-volume `ALTER TABLE` measurement — that is Gate F) |
 | D | Error surface and observability | **PASS with recorded gaps** — no leakage on any measured path; two serious defects found and fixed (readiness probe, FPM reload); envelope normalisation, request id and metrics/alerting recorded as open |
 | E | Content Security Policy | **PASS**, one gap recorded (no violation collector) — CSP now enforced at both layers, injection blocked in a real browser with a pre-CSP control, and the gate found a second defect: nothing installed the repo's edge config, so headers declared there never reached the web server |
-| F | Performance and capacity | not yet executed |
+| F | Performance and capacity | **PASS with recorded limits** — the review-only claim is now measured where it was made: identical query counts across a ~100× data growth on the two endpoints the register named, bounded lists proven load-bearing, `ALTER TABLE` at 1,000,000 rows timed for the seven forms the migration policy cares about, and the register's unexplained ~500 ms attributed to per-request cost after the queueing hypothesis was measured and rejected |
 
 
 ---
@@ -759,3 +759,260 @@ succeeded, and the browser E2E passes 21/21 unchanged under the policy. The gate
 turned up a delivery defect that made the edge half of the claim fiction — versioned
 config, never installed — now fixed, tested executably, and rehearsed in all three
 outcomes on the live cluster.
+
+---
+
+## Gate F — Performance and capacity
+
+The register's entry for this gate was a refusal to accept the codebase's own claim:
+
+> "no N+1 / no unbounded queries" is asserted from review, not measured against
+> realistic volumes … three endpoints took ~500 ms while 14 consoles fired a
+> concurrent burst … the two candidate explanations are dev-server queueing under
+> `artisan serve`'s single worker or real per-endpoint cost — which is precisely
+> what the review-only claim cannot distinguish.
+
+Four questions had to be answered with numbers: whether the read paths scale their
+query count with rows, whether the lists scale their payload, what the ~500 ms signal
+actually was, and whether Gate C's deferred `ALTER TABLE` at volume undermines the
+expand/contract policy. All four are answered below; the limits are in §7.
+
+### 1. Conditions, stated before the numbers
+
+Everything here ran in the audit sandbox: 2 shared cores, PostgreSQL 18.4 and PHP on
+the same box, no dedicated load generator, `php -S` as the web server (there is no
+nginx binary). Two consequences follow, and both are the reason the gate commits
+*rules* rather than *thresholds*:
+
+* Absolute latencies from this box are indicative only. A `p50` of 17 ms here is not
+  a production number, and no claim below depends on it being one.
+* Relative claims — flat versus linear query count, bounded versus unbounded payload,
+  metadata-only versus row-rewriting DDL — do not depend on machine speed. Those are
+  what the committed tests assert.
+
+`pg_stat_statements` was enabled in the sandbox cluster (`shared_preload_libraries`,
+then `create extension pg_stat_statements` per database — it is per-database, which is
+the part an operator is likely to get wrong), because a measurement that disagrees
+with the server's own accounting is a measurement to throw away.
+
+### 2. The ~500 ms signal: queueing rejected, per-request cost retained
+
+The queueing hypothesis was the attractive one — `artisan serve` without
+`PHP_CLI_SERVER_WORKERS` is a single process, so eight simultaneous requests would
+serialize behind one worker and a burst of 14 consoles would look like a 500 ms
+endpoint. It was measured and it does not hold. Same command, same app, one variable
+(`PHP_CLI_SERVER_WORKERS=1` vs `=8`), `/health` on a warmed server, 2026-09-08:
+
+| Shape | 1 worker | 8 workers |
+| --- | --- | --- |
+| single request | 13–29 ms | 16–29 ms |
+| 8 concurrent, wall | 118 ms | 120 ms |
+| 8 concurrent, per-request range | 25–89 ms | 19–76 ms |
+| 8 concurrent, full page render (`/login`) | 111 ms wall | 103 ms wall |
+
+Eight requests complete in ~120 ms either way, because at ~15 ms of work per request
+on 2 cores, worker count is not the constraint — CPU is. A queue in front of one
+worker would have shown ~8× the wall time of the same requests issued serially; it
+showed 0.8×. So the register's ~500 ms was not a harness artefact: it was real work
+under contention from 14 concurrently driven browsers on a 2-core box, which is the
+same measurement environment the figure came from and not a property of the endpoints.
+The follow-up — what that real work is — is §3.
+
+One harness note worth recording because it changes what a worker-count experiment
+means: `PHP_CLI_SERVER_WORKERS` is ignored unless `--no-reload` is passed, because
+`artisan serve` restarts the `php -S` child on file changes and the reload path does
+not carry the variable. Without the flag, an "8 worker" measurement silently measures
+1. Both servers in the table above were started with `--no-reload`.
+
+### 3. Read path at volume, measured
+
+The endpoint named in the register (`/api/v1/identity/people`, and its sibling
+`/api/v1/identity/accounts`) was profiled through the application's own request stack,
+so the session, cookie, CSRF, capability and branch-scope middleware all run as they
+do in production; only the web server is absent. The fixture is one real officer — a
+person seeded through `tests/Concerns/SeedsAuthority` with `identity.admin`, plus a
+`user_accounts` row with a hashed password, signed in via `POST /login` — and then
+1,000 further `people` rows and 1,000 `user_accounts` rows created by copying that
+officer's own rows in a single CTE statement, inside the transaction the test already
+owns, so the amplification rolls back and cannot leak into a sibling test.
+
+`GATE_F_REPORT=1 php vendor/bin/phpunit tests/Feature/Performance` (2026-09-08):
+
+| Endpoint | visible rows in scope | rows returned | queries before growth | queries after growth | p50 | p95 | JSON |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/api/v1/identity/people` | 1,001 | 300 (at `limit(300)`) | 30 | 30 | 17.4 ms | 17.9 ms | 50,103 B |
+| `/api/v1/identity/accounts` | 1,001 | 300 (at `limit(300)`) | 30 | 30 | 19.5 ms | 22.2 ms | 43,482 B |
+
+Read the middle columns as the finding: across a ~100× increase in rows the request
+issued **the same 30 queries**. `IdentityApiController::accounts()` filters with
+`whereHas('person', …)`, which PostgreSQL answers with a semi-join rather than a
+query per row, and both lists end in `limit(300)`. So for the endpoints where the
+register's claim was made, the claim holds under measurement rather than under review.
+
+The 30 queries are not a scaling term — they are a *floor*, and they are mostly not
+the read: the list itself is two of them. The rest is the authenticated-request
+backdrop (session start, the employee-session check, authority resolution for
+`identity.admin` across organization, role, position, assignment and grant tables).
+That is the number to attack if the JSON API ever becomes chatty, and it is why the
+committed rule is a ceiling on queries per request rather than a budget for the query
+that fetches the rows.
+
+For scale, the server's own accounting of what an unbounded read costs: `select
+count(*) from gf_big` over 1,000,000 rows took **45.2 ms** on this box (one call,
+`pg_stat_statements`). A list endpoint that counted its table per request would spend
+half a second doing it at production volume — which is the shape of bug the ceiling
+rule is written against, not a hypothetical.
+
+The bound assertion is demonstrably load-bearing rather than tautological. Tightening
+the test's own ceiling from 300 to 30 produced:
+
+```
+with 1000 extra people rows in scope, /api/v1/identity/people returned 300 rows:
+an unbounded list turns tenant growth into a payload whose size nobody chose
+Failed asserting that 300 is less than 30.
+```
+
+and a companion test refuses to measure anything if the amplified rows are not
+actually visible to the actor — because branch scoping is exactly how a "fast at
+volume" test can end up reading an empty table, and an empty list satisfies any bound.
+
+### 4. DDL at 1,000,000 rows — Gate C's deferred question
+
+Gate C recorded that it had verified the `down()` chain but never measured a
+production-volume `ALTER TABLE`, and deferred it here. The instrument is
+`scripts/runtime/perf-envelope.php --task=ddl`, run against a synthetic 1,000,000-row,
+64 MB table (`create table … as select from generate_series(1,1000000)`, `analyze`d)
+in the scratch database `toefl_house_perf`. Each statement is timed while a competing
+session probes how long a write has to wait for the lock:
+
+| Statement | wall | longest writer wait | what it means for the migration policy |
+| --- | --- | --- | --- |
+| `add column` nullable | 0.048 s | 36 ms | metadata-only, as PG 11+ documents |
+| `add column … not null default <const>` | 0.015 s | 1 ms | the default is stored, no rewrite — the form the repo uses |
+| `add column … not null default <volatile>` | 2.259 s | **2,238 ms** | every row rewritten; writers stalled for the whole duration |
+| `create index` (locking) | 0.362 s | 2 ms | ShareLock: readers continue, writers do not queue behind the build |
+| `create index concurrently` | 0.314 s | 2 ms | no write lock; cannot run inside a transaction |
+| `alter column … type varchar(64)` (narrow) | 1.556 s | **1,532 ms** | a rewrite by another name |
+| `drop column` | 0.013 s | 1 ms | catalog-cheap, but AccessExclusiveLock queues behind readers |
+
+The policy in §15 of the operations doc says: add nullable (or non-nullable with a
+constant default), never narrow a type, never reuse a column, drop only in a contract
+release. The numbers say the policy is right for the reason it claims — the two forms
+it permits cost 15–48 ms of wall time and 1–36 ms of writer stall at 1M rows, while
+the two forms it forbids stall writers for 1.5–2.2 s at the same size. At 100M rows the
+forbidden pair is minutes of stall; the permitted pair is still milliseconds, because
+it is the row rewrite and not the statement that costs.
+
+Two honest caveats attached to that table. `create index concurrently` looked *faster*
+than the locking form here (0.314 vs 0.362 s) on an idle single-client table: at this
+size the build time is the same and the difference the directive buys is the lock
+class under load, not the duration. And the writer-wait column measures one competing
+`select … for update` probe per statement — enough to show a stall exists, not a
+distribution.
+
+### 5. Why the students and reporting journeys are not measured at volume
+
+The obvious fixture — copy a student row N times — is refused by the schema, and the
+refusal is worth recording because it is the domain working:
+
+```
+ERROR:  Student person must match the admitted applicant person
+CONTEXT:  PL/pgSQL function students_admission_authority_guard()
+```
+
+`students` carries `students_one_per_person` and
+`students_one_per_admission_decision`, so every copy needs its own person *and* its own
+admission decision; the guard requires that decision to be `final`/`admit` against an
+applicant in state `admitted`, whose `person_id` matches, on the branch provenance the
+transfer-fact chain records. Fabricating that per copy means inventing an admission,
+and inventing it either collides with a further guard or produces a row the product
+would never write — which would measure a database that does not exist.
+
+The legal route exists and was measured: `tests/Concerns/BuildsStudents::makeStudent()`
+walks register → three-signature decision → conversion, and costs **110 ms per
+student** (20 students: 2.20 s). 1,000 legally constructed students would therefore
+cost ~110 s of fixture time per volume point, twice, in the default suite — so the
+committed rule amplifies the identity surface, where a copy is genuinely equivalent to
+the original, and leaves the students/reporting read paths at single-digit volume.
+That asymmetry is a limit of this gate (§7), not a passing grade for them.
+
+A second measured cost follows from the same fact and matters for capacity planning:
+the write path that creates a student is ~110 ms of CPU with no concurrency around it.
+A branch that bulk-imports 5,000 students is looking at ~9 minutes of serialized
+command work, and there is no import path in the product to amortize it.
+
+### 6. Process and connection budget
+
+| Knob | Value | Where |
+| --- | --- | --- |
+| `pm = dynamic`, `pm.max_children` | 20 | `deploy/php-fpm.conf` |
+| `pm.start_servers` | 4 | `deploy/php-fpm.conf` |
+| Postgres `max_connections` | 100 | cluster default |
+| queue workers | none — `QUEUE_CONNECTION=sync`, and the app dispatches no jobs | §"no `queue:work` process" in the operations doc |
+| `idle_in_transaction_session_timeout` | 0 (disabled) | cluster default |
+| session driver | `database`, `SESSION_LIFETIME=120`, `lottery => [2, 100]` | `config/session.php`, `.env.example` |
+| `sessions` GC support | `sessions_last_activity_index` present | shipped sessions migration |
+
+The arithmetic that matters: the busiest the application can be, it holds 20
+connections (one per FPM child) plus a handful of CLI sessions for deploy, backup and
+restore, against 100. Five-fold headroom, no pooler in the topology, and therefore one
+rule: raising `pm.max_children` past ~80 on this cluster will produce
+`FATAL: too many connections` for the *operator*'s psql before it produces it for a
+user. Recording it is cheaper than discovering it.
+
+Session storage is self-pruning rather than unbounded: 2% of requests call
+`DatabaseSessionHandler::gc()`, which deletes expired rows through
+`sessions_last_activity_index`. Verified because the alternative is a table that grows
+for a decade and starts dominating `pg_total_relation_size` in the backup timings from
+Gate B — and because `deploy/lib/retention.sh` does not touch `sessions`, so the
+lottery is the only mechanism.
+
+`idle_in_transaction_session_timeout = 0` is a real gap and is **recorded, not
+fixed**: a transaction opened by a crashed request holds its connection and its locks
+until the process dies. It is a cluster-level setting with no application-side default,
+so the operations doc now states what to set it to.
+
+### 7. What this gate added
+
+| Artifact | What it guarantees | How it was shown to be capable of failing |
+| --- | --- | --- |
+| `tests/Feature/Performance/ReadPathEnvelopeTest.php` (3 tests, 48 assertions) | query count identical between 1-row and 1,001-row scope, ≤ 40 queries per request, p95 under a loose ceiling, lists ≤ `limit(300)` while provably containing amplified rows | tightening `LIST_BOUND` to 30 made the bound test fail with "returned 300 rows"; the fixture asserts it reached its own volume before any timing claim is trusted |
+| `scripts/runtime/perf-envelope.php` | the instrument for §4/§6: `--task=status\|endpoints\|amplify\|stats\|reset\|ddl` against a real database, with the system tables (migrations, cache, sessions, jobs…) excluded from amplification targets | it took four rounds to work: `char(36)` truncation made a perturbed key equal to the original, a unique index existed only in `pg_index` and was invisible to `pg_constraint`, a re-derived value was silently truncated by its own `varchar(n)` cast, and `ALTER TABLE … DISABLE TRIGGER` is refused once the transaction has queued trigger events |
+| `config/cors.php` + `tests/Feature/Security/ApiCorsPostureTest.php` (6 tests) | the cross-origin posture is declared rather than inherited: `api/*` only, no origin named, `supports_credentials => false`, and a wildcard in `CORS_ALLOWED_ORIGINS` filtered out rather than honoured | a listed origin does receive `Access-Control-Allow-Origin` (and, with credentials switched on, `Access-Control-Allow-Credentials: true`) — so the "no header for everyone else" assertions are measuring a config that is read, not a no-op |
+| `scripts/runtime/provision.sh` (client tools) | installs `psql`/`pg_dump`/`pg_restore` from the same 18.4 build as the server, which is what makes the documented backup/restore and schema-compatibility mechanisms executable instead of aspirational | `SchemaCompatibilityProbeTest` exited 2 (unverifiable) before this, and now runs; the provisioner fails loudly if `psql --version` disagrees with the pinned server version |
+
+### 8. Recorded, not fixed
+
+* **There is no performance SLO in the repository to certify against**, so no absolute
+  latency claim is made anywhere above and the committed tests assert shape, not speed.
+  A future gate needs a number from the product owner, not from this audit.
+* **No sustained load measurement.** The toolchain has no load generator; §2's
+  8-way curl burst is a queueing probe. Concurrency above 8, and any question about
+  connection churn under sustained load, is unmeasured.
+* **The students, reporting, finance and payroll read paths are not measured at
+  volume** (§5), for a reason the schema enforces.
+* **`pg_stat_statements` is not installed by the application's migrations.** The
+  operations doc carries the two commands; a cluster without it cannot reproduce §3's
+  cross-check.
+* **Sandbox timings are not production sizing** — the box is 2 shared cores and the
+  documented topology has nginx + FPM in front.
+* The 21,021-row `accounts` amplification and the 1M-row `gf_big` table live only in
+  the scratch databases (`toefl_house_perf`, `toefl_house_e2e`), not in the test
+  database the suite uses, and neither is committed. One experiment polluted a scratch
+  database's `migrations` table to 27,935 rows by amplifying without an exclusion list;
+  cleaned in the sandbox.
+
+### 9. Verdict
+
+**PASS with recorded limits.** For the surface the register named, "no N+1, no
+unbounded queries" is now a measured property with a committed test that fails if it
+regresses, and the register's unexplained ~500 ms has been attributed by experiment
+rather than by preference: it is per-request cost under CPU contention, not a queue in
+front of a single worker, and the queueing explanation is worth 0.8× of the wall time
+it would have needed to be true. Gate C's deferred question is answered in the
+direction the policy assumed — the permitted migration forms are millisecond-cheap at
+1M rows and the forbidden ones stall writers for seconds — with the caveat that both
+`ALTER TABLE` and index builds were measured on a synthetic table in a sandbox. What
+this gate does *not* establish is capacity at production volume for the domain journeys
+whose guards refuse a copied fixture, and the absence of an SLO means nothing here
+should be read as a performance certification.

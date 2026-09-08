@@ -342,8 +342,8 @@ The deployment script records the migration-table count before and after migrati
 If a health check fails after the schema advanced, it does not pretend that symlink
 rollback is a complete release rollback.
 
-Two measured properties of the migration chain decide this design, and both are
-worth knowing before an incident:
+Three measured properties of the migration chain decide this design, and all three
+are worth knowing before an incident:
 
 * A migration that fails part-way leaves **nothing** behind. PostgreSQL's DDL is
   transactional and Laravel wraps each migration in a transaction, so the injected
@@ -357,6 +357,18 @@ worth knowing before an incident:
   migration behind the application. `migrate --force` re-applied it cleanly. Never
   use `migrate:rollback` as a production recovery step; use a forward-fix or
   `deploy/restore.sh` with the pre-deploy backup.
+* The permitted forms of additive migration are **cheap at volume**, and the forbidden
+  ones are not. Measured at 1,000,000 rows / 64 MB (`scripts/runtime/perf-envelope.php
+  --task=ddl`, 2 shared cores, PostgreSQL 18.4 — the *ratios* are the transferable
+  part): `add column` nullable 0.048 s, `add column … not null default <constant>`
+  0.015 s, with 36 ms and 1 ms of time a competing writer had to wait. A
+  `not null default gen_random_uuid()` — a volatile default, which is what
+  `uuid_generate`/`now()` defaults become — took 2.259 s and stalled the writer for
+  2,238 ms, because PostgreSQL rewrites every row to materialise it. Narrowing a
+  column type behaved the same way (1.556 s, 1,532 ms stall). This is why the policy
+  above says "add nullable or non-nullable with a constant default" rather than
+  "add a column": at 100M rows the difference is milliseconds against minutes of write
+  stall, and the stall is what an operator experiences as an outage.
 
 ## 16. Deploying a new release
 
@@ -435,6 +447,81 @@ the log file, PostgreSQL's own statistics, and the browser-level API errors. A
 identifier, so correlated lookups across two requests are not possible today. Adding
 metrics/alert routing is an open item recorded in
 `docs/AUDIT-2026-09-08-RECONCILIATION.md`'s gap register, not a documented feature.
+
+## 19. Capacity envelope
+
+There is no performance SLO for this application, so this section records measured
+shape and arithmetic rather than a latency target. If one is ever agreed, it belongs
+in `docs/12-OPERATIONS-DEPLOYMENT-DR.md` next to the alert routing that does not exist
+yet (§18), not here.
+
+**Connection budget.** The shipped topology needs no pooler, and this is the arithmetic
+to check before raising any of it:
+
+| Contributor | Connections |
+| --- | --- |
+| PHP-FPM children (`deploy/php-fpm.conf`: `pm = dynamic`, `pm.max_children = 20`) | up to 20 |
+| queue workers | 0 — `QUEUE_CONNECTION=sync`, and the application dispatches no jobs |
+| deploy / backup / restore / `migrate` CLI | 1–3, briefly |
+| operator `psql` | 1+ |
+| Postgres `max_connections` (cluster default) | 100 |
+
+The application holds one connection per FPM child, so a fully busy box uses ~20 of
+100. `pm.max_children` past ~80 will make an *operator's* `psql` fail with `FATAL: too
+many connections` before it affects a user's request; there is no PgBouncer in the
+documented topology to absorb that, so raise `max_connections` in the same change as
+the pool.
+
+**Session rows are self-pruning.** `SESSION_DRIVER=database` writes one `sessions` row
+per browser session; `config/session.php` sets `'lottery' => [2, 100]`, so ~2% of
+requests call the handler's `gc()`, which deletes rows older than `SESSION_LIFETIME`
+through the shipped `sessions_last_activity_index`. `deploy/lib/retention.sh` does not
+touch `sessions`, so the lottery is the only mechanism — if the driver changes to
+`file`/`redis` for another reason, drop the table instead of leaving it populated.
+
+**Stalled transactions.** The cluster default is `idle_in_transaction_session_timeout =
+0`, i.e. disabled: a transaction left open by a killed request holds its connection and
+its locks until the process dies. On this topology (no worker processes, one connection
+per child) that is recoverable by reloading FPM, but it is a maintenance-window
+operation. Setting it to `60s` and `statement_timeout` to `30s` is recommended for
+production clusters; neither is enforced by this repository, and `deploy.sh` will not
+set them, because they are cluster-level settings that belong to the DBA's file, not to
+a release.
+
+**Reading `pg_stat_statements`.** The extension is not installed by the application's
+migrations and it is **per-database**, so both halves are needed:
+
+```bash
+# 1. load it (postgresql.conf, then restart — a reload is not enough)
+shared_preload_libraries = 'pg_stat_statements'
+# 2. per application database
+psql -U postgres -d toefl_house -c 'create extension if not exists pg_stat_statements'
+# 3. then the interesting question, top queries by total time
+psql -U postgres -d toefl_house -c \
+  "select calls, round(total_exec_time::numeric,1) as total_ms, rows, left(query,80)
+     from pg_stat_statements order by total_exec_time desc limit 15"
+```
+
+`scripts/runtime/perf-envelope.php --task=stats` wraps exactly that for the dev
+databases, with `--task=reset` to zero the counters before a run; without the reset the
+numbers describe the whole life of the cluster rather than the thing you just changed.
+
+**What the read paths cost.** A single authenticated API request over the identity
+surface issues ~30 queries, and that number is flat in row count (measured at 1 and at
+1,001 visible rows: `tests/Feature/Performance/ReadPathEnvelopeTest.php`). Most of
+those 30 are the authenticated-request backdrop — session start, the employee-session
+check, and resolving `identity.admin` across organization, role, position, assignment
+and grant rows — not the list query, which is two of them. That is affordable at the
+traffic this application is built for, and it is the first place to look (cache the
+resolved authority set per request, then per session) if the JSON API gains subscribers
+or a dashboard starts polling.
+
+**What is not known.** The students, reporting, finance and payroll read paths are not
+measured at volume: their tables refuse a copied fixture (`Gate F` §5 of
+`docs/AUDIT-2026-09-08-GATE-EVIDENCE.md` explains the guard chain), and building 1,000
+legally admitted students costs ~110 s of fixture time per volume point, which does not
+belong in a default suite. Sustained load above 8 concurrent clients has never been
+measured, and no load generator is part of the toolchain.
 
 ## Verification gate (run after any change)
 

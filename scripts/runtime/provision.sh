@@ -43,6 +43,7 @@ PHP_PKG="@libphp/amazon-linux-2023-v84"
 PG_PKG="@embedded-postgres/linux-x64"
 PG_VERSION="18.4.0-beta.17"
 
+die() { printf "\033[1;31m==> %s\033[0m\n" "$*" >&2; exit 1; }
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
 npm_tarball() { # $1 = url-encoded package, $2 = optional exact version
@@ -147,13 +148,55 @@ export PHPRC="\$RT/php/php.ini"
 export COMPOSER_HOME="\$RT/composer-home"
 exec "\$RT/php/php" -d memory_limit=-1 "\$RT/php/composer" "\$@"
 EOF
-for tool in postgres initdb pg_ctl psql; do
-  [ -x "$RT/pgsql/bin/$tool" ] || continue
+# --- PostgreSQL client tools --------------------------------------------------
+# The @embedded-postgres npm package ships the *server* only (postgres, initdb,
+# pg_ctl). `psql` is not optional here: deploy.sh requires it for the schema
+# probe and backup.sh uses pg_dump, and `pg.sh createdbs` / the suite's
+# SchemaCompatibilityProbeTest both shell out to a client. So when the host has
+# no client, take it from the PyPI `postgresql-binaries` wheel — the payload is
+# the same upstream 18.4 build, and pypi.org/files.pythonhosted.org are on this
+# sandbox's allow-list while apt mirrors and getcomposer.org are not.
+#
+# The old loop silently `continue`d past a missing psql, so a fresh provision
+# produced a runtime whose own docs promised a client that was not there; five
+# tests then failed with "unverifiable" instead of telling you psql was absent.
+EXTRA="$RT/pgsql-extra"
+if ! command -v psql >/dev/null 2>&1; then
+  if [ -x "$EXTRA/bin/psql" ]; then
+    log "Reusing extracted PostgreSQL client tools at .runtime/pgsql-extra"
+  else
+    log "Fetching PostgreSQL 18.4 client tools (psql, pg_dump) from PyPI postgresql-binaries"
+    WHEEL_URL="$(python3 - "$PG_VERSION" <<'PYX'
+import json, sys, urllib.request
+data = json.load(urllib.request.urlopen("https://pypi.org/pypi/postgresql-binaries/json", timeout=60))
+want = "manylinux"
+files = [f for f in data["urls"] if want in f["filename"] and "x86_64" in f["filename"]]
+if not files:
+    sys.exit("no manylinux x86_64 wheel published for postgresql-binaries")
+print(files[0]["url"])
+PYX
+)" || die "could not resolve the postgresql-binaries wheel URL; install postgresql-client (>=18) on the host instead"
+    mkdir -p "$TMP/clients"
+    curl -fsSL "$WHEEL_URL" -o "$TMP/clients/clients.whl" || die "download failed for $WHEEL_URL"
+    ( cd "$TMP/clients" && unzip -qo clients.whl )
+    TARBALL="$(find "$TMP/clients" -name 'postgresql-*-x86_64-unknown-linux-gnu.tar.gz' | head -1)"
+    [ -n "$TARBALL" ] || die "the wheel contained no postgresql linux tarball"
+    mkdir -p "$EXTRA"
+    tar -xzf "$TARBALL" -C "$EXTRA" --strip-components=1
+  fi
+fi
+
+for tool in postgres initdb pg_ctl psql pg_dump pg_restore pg_isready createdb dropdb vacuumdb; do
+  src=""
+  for dir in "$RT/pgsql/bin" "$EXTRA/bin"; do
+    if [ -x "$dir/$tool" ]; then src="$dir/$tool"; break; fi
+  done
+  [ -n "$src" ] || continue
   cat > "$RT/bin/$tool" <<EOF
 #!/usr/bin/env bash
 RT="$RT"
-export LD_LIBRARY_PATH="\$RT/pgsql/lib:\${LD_LIBRARY_PATH:-}"
-exec "\$RT/pgsql/bin/$tool" "\$@"
+export LD_LIBRARY_PATH="\$RT/pgsql/lib:\$RT/pgsql-extra/lib:\${LD_LIBRARY_PATH:-}"
+exec "$src" "\$@"
 EOF
 done
 chmod +x "$RT/bin/"*
@@ -162,6 +205,9 @@ log "Verifying binaries"
 "$RT/bin/php" --version | head -1
 "$RT/bin/composer" --version | head -1
 "$RT/bin/postgres" --version
+# Client tools are asserted, not assumed: their absence used to look like a
+# broken deploy script rather than an incomplete runtime.
+"$RT/bin/psql" --version | head -1
 
 if [ ! -f "$RT/pgdata/PG_VERSION" ]; then
   log "Initialising PostgreSQL cluster at .runtime/pgdata"
