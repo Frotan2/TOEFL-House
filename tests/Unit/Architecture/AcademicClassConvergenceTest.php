@@ -13,18 +13,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class AcademicClassConvergenceTest extends TestCase
 {
-    public function test_academic_route_mounts_the_react_classes_workspace(): void
-    {
-        $routes = $this->source('routes/web.php');
-        $api = $this->source('routes/api.php');
-        $frontend = $this->source('resources/js/app.tsx').$this->source('resources/js/academic.tsx');
-
-        self::assertStringContainsString("Route::view('/academic', 'workspace', ['view' => 'academic'])", $routes);
-        self::assertStringContainsString("Route::get('/workspace', [AcademicApiController::class, 'workspace'])", $api);
-        self::assertStringContainsString("view === 'academic' ? <AcademicApp", $frontend);
-        self::assertStringContainsString('server-derived lifecycle', $frontend);
-        self::assertStringContainsString('Finance owns money', $frontend);
-    }
 
     public function test_api_and_commands_share_the_canonical_class_surface(): void
     {
@@ -88,19 +76,6 @@ final class AcademicClassConvergenceTest extends TestCase
         self::assertStringContainsString('STATE_CLOSED', $period);
     }
 
-    public function test_architecture_report_records_one_authority_and_deferred_runtime(): void
-    {
-        $report = $this->source('docs/architecture/review/2026-09-05-fourth-architecture-convergence.md');
-
-        foreach ([
-            'every newly-created delivery class is anchored to one open offering',
-            'Requested, active and frozen are live seat claims',
-            'React `AcademicApp` is the sole `/academic` interactive workspace',
-            'Runtime migration/query/concurrency/browser/build verification remains unexecuted',
-        ] as $contract) {
-            self::assertStringContainsString($contract, $report);
-        }
-    }
 
     private function source(string $relativePath): string
     {

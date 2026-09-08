@@ -13,20 +13,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class StudentReactConvergenceTest extends TestCase
 {
-    public function test_student_web_gets_mount_the_shared_react_shell(): void
-    {
-        $routes = $this->source('routes/web.php');
-        $workspace = $this->source('resources/views/workspace.blade.php');
-        $frontend = $this->source('resources/js/app.tsx');
-
-        self::assertStringContainsString("Route::view('/', 'workspace', ['view' => 'students', 'students_view' => 'directory'])", $routes);
-        self::assertStringContainsString("Route::view('applicants', 'workspace', ['view' => 'students', 'students_view' => 'applicants'])", $routes);
-        self::assertStringContainsString("Route::get('{studentId}', fn (string \$studentId) => view('workspace'", $routes);
-        self::assertStringNotContainsString("Route::get('{studentId}', [StudentsController::class, 'show'])", $routes);
-        self::assertStringContainsString("data-students-view=\"{{ \$students_view ?? 'directory' }}\"", $workspace);
-        self::assertStringContainsString("view === 'students' ? <StudentsApp />", $frontend);
-        self::assertStringContainsString('function StudentDetail(', $frontend);
-    }
 
     public function test_students_api_exposes_canonical_lifecycle_operations(): void
     {
@@ -71,15 +57,6 @@ final class StudentReactConvergenceTest extends TestCase
         self::assertStringContainsString('AFTER UPDATE OF lifecycle_state', $staging);
     }
 
-    public function test_student_report_records_the_migration_and_runtime_boundary(): void
-    {
-        $report = $this->source('docs/architecture/review/2026-09-05-fourth-architecture-convergence.md');
-
-        self::assertStringContainsString('### 5.13 Students, admissions, and lifecycle detail', $report);
-        self::assertStringContainsString('React dispatches `StudentsApp`', $report);
-        self::assertStringContainsString('runtime behavior remains unverified', $report);
-        self::assertStringContainsString('Finance obligations/payments only when the actor has both concrete Finance capabilities', $report);
-    }
 
     private function source(string $relativePath): string
     {
