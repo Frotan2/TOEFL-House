@@ -186,6 +186,7 @@ final class NginxEdgeConfigTest extends TestCase
 
         $this->assertSame(1, $run['exit'], $run['out']);
         $this->assertStringContainsString('no nginx binary', $run['out']);
+        $this->assertFileDoesNotExist($dir.'/host/toefl-house.conf', 'a config that cannot be validated must not be installed');
     }
 
     /* --- fixtures ------------------------------------------------------------ */
@@ -194,8 +195,23 @@ final class NginxEdgeConfigTest extends TestCase
     {
         $dir = sys_get_temp_dir().'/edge-config-'.bin2hex(random_bytes(4));
         mkdir($dir.'/bin', 0777, true);
+        mkdir($dir.'/bin-bare', 0777, true);
         mkdir($dir.'/host', 0777, true);
         mkdir($dir.'/conf', 0777, true);
+
+        // Every case runs with PATH set to exactly one of these two directories and
+        // nothing else. Inheriting the ambient PATH made this test depend on the host
+        // twice over — it passed in a normal checkout and failed on a machine whose
+        // PATH happened to contain an `nginx` (measured: a rehearsal stub in a
+        // directory exported for the deploy run), and `systemctl` coming and going
+        // would silently change which reload path the helper takes.
+        foreach (['sh', 'bash', 'cp', 'mv', 'rm', 'chmod', 'cmp', 'grep', 'touch', 'date', 'dirname', 'cat', 'printf'] as $tool) {
+            $resolved = trim((string) shell_exec('command -v '.escapeshellarg($tool).' 2>/dev/null'));
+            if ($resolved !== '') {
+                @symlink($resolved, $dir.'/bin/'.$tool);
+                @symlink($resolved, $dir.'/bin-bare/'.$tool);
+            }
+        }
 
         // Stub nginx: `-t` passes unless the *installed* config contains the marker the
         // bogus fixture carries; `-s reload` records that it was asked.
@@ -233,11 +249,10 @@ final class NginxEdgeConfigTest extends TestCase
     private function execute(string $dir, array $env, string $call): array
     {
         $lines = ['set -uo pipefail'];
-        // The no-nginx case deliberately keeps the inherited PATH: this environment has no
-        // nginx binary, which is exactly the situation the refusal is for.
-        if (($env['PATH_NO_NGINX'] ?? '') !== '1') {
-            $lines[] = sprintf('PATH=%s', escapeshellarg($dir.'/bin:'.(getenv('PATH') ?: '/usr/bin:/bin')));
-        }
+        $lines[] = sprintf(
+            'PATH=%s',
+            escapeshellarg($dir.(($env['PATH_NO_NGINX'] ?? '') === '1' ? '/bin-bare' : '/bin'))
+        );
         unset($env['PATH_NO_NGINX']);
 
         foreach (['NGINX_CONF_DEST', 'RELEASE_ID', 'NGINX_RELOAD_CMD', 'SRC'] as $key) {
