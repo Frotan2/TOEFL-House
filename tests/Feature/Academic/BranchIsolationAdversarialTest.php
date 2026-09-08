@@ -128,7 +128,7 @@ final class BranchIsolationAdversarialTest extends TestCase
         $this->offeringA = $structure->openOffering($org, $this->branchA, $this->levelId, $this->periodId, 4, 'iso-off-a')['offering_id'];
         $this->offeringB = $structure->openOffering($org, $this->branchB, $this->levelId, $this->periodId, 4, 'iso-off-b')['offering_id'];
 
-        $this->classId = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $this->periodId, 8, 'iso-class', $this->levelId)['class_id'];
+        $this->classId = app(MaintainClass::class)->defineClass($org, $this->programVersionId, $this->periodId, 8, 'iso-class', $this->levelId, $this->bootstrapBranchId())['class_id'];
         $teacher = $this->buildActiveTeacher('iso-teacher-1', null, 'branchisd71')->id;
         app(MaintainClass::class)->assignTeacher($org, ClassModel::query()->findOrFail($this->classId), $teacher, new CarbonImmutable('2026-09-01'), null, 'iso-class-teacher');
         app(MaintainClass::class)->transition($org, ClassModel::query()->findOrFail($this->classId), 'published', 'iso-class-pub');

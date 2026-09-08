@@ -28,6 +28,13 @@ final class WorkspacePageRenderTest extends TestCase
     {
         parent::setUp();
 
+        // These routes render Blade templates that @vite the built bundles.
+        // Without public/build/manifest.json every route returns 500 and the
+        // failure looks like a template defect rather than a missing build.
+        if (! is_file(public_path('build/manifest.json'))) {
+            $this->markTestSkipped('Frontend assets are not built; run `npm run build` first.');
+        }
+
         $person = Person::query()->create([
             'id' => RandomIdentifier::new(),
             'legal_name' => 'Page Render Probe',

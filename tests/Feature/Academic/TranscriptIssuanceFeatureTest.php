@@ -84,7 +84,7 @@ final class TranscriptIssuanceFeatureTest extends TestCase
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'trx-period-pub');
 
         $this->buildActiveTeacher('trx-teacher-1', null, 'transcri1a0');
-        $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'trx-class', $this->levelA1Id)['class_id'];
+        $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'trx-class', $this->levelA1Id, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'trx-teacher-1', new CarbonImmutable('2026-09-01'), null, 'trx-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'trx-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'trx-class-active');

@@ -390,7 +390,7 @@ final class LevelProgressionFeatureTest extends TestCase
 
     private function defineActiveClass(MaintainAcademicStructure $structure, Actor $officer, string $key, string $levelId): string
     {
-        $classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, $key, $levelId)['class_id'];
+        $classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, $key, $levelId, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($classId), 'lp-teacher-1', new CarbonImmutable('2026-09-01'), null, $key.'-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', $key.'-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'active', $key.'-active');

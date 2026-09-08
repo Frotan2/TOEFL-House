@@ -397,7 +397,7 @@ final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
     private function defineActiveClass(string $key, int $capacity, ?string $levelId): string
     {
         $officer = $this->academicOfficer('comp-officer-define');
-        $classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, $capacity, $key, $levelId)['class_id'];
+        $classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, $capacity, $key, $levelId, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($classId), 'comp-teacher-1', new CarbonImmutable('2026-09-01'), null, $key.'-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', $key.'-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'active', $key.'-active');
