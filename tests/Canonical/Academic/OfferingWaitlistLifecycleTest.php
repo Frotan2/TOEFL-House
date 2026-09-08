@@ -63,7 +63,7 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
         $this->programVersionId = $version['version_id'];
         $this->levelId = $structure->defineLevel($officer, $this->programVersionId, 'starter', 1, 'Starter', 'A1', 'off-lvl')['level_id'];
 
-        $this->periodId = $structure->definePeriod($officer, 'Offering Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-30'), 'off-period')['period_id'];
+        $this->periodId = $structure->definePeriod($officer, 'Offering Term', CarbonImmutable::today()->subMonth(), CarbonImmutable::today()->addMonths(3), 'off-period')['period_id'];
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'off-period-pub');
 
         $availability = $structure->declareBranchAvailability($officer, $this->branchId, $this->levelId, $this->periodId, 'off-avail');

@@ -65,7 +65,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         }
 
         $this->newActiveTeacher('canon-delivery-teach', $this->sharedBranchId(), 'canon-delivery');
-        app(MaintainClass::class)->assignTeacher($officer, $classRow, 'canon-delivery-teach', new CarbonImmutable('2026-09-01'), null, 'canon-delivery-assignment');
+        app(MaintainClass::class)->assignTeacher($officer, $classRow, 'canon-delivery-teach', CarbonImmutable::today(), null, 'canon-delivery-assignment');
         app(MaintainClass::class)->transition($officer, $classRow, 'active', 'canon-delivery-active');
         $this->assertDatabaseHas('classes', ['id' => $classRow->id, 'lifecycle_state' => 'active']);
 
@@ -83,7 +83,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         }
         $this->attributeSkillToAssignment($officer, $classRow->id, $deliverySkillId, 'canon-dlv-attr');
 
-        $session = app(MaintainClass::class)->scheduleSession($officer, $classRow, new CarbonImmutable('2026-09-07'), '09:00', '11:00', 'canon-delivery-session', $deliverySkillId);
+        $session = app(MaintainClass::class)->scheduleSession($officer, $classRow, CarbonImmutable::today()->addWeek(), '09:00', '11:00', 'canon-delivery-session', $deliverySkillId);
         $this->assertDatabaseHas('class_sessions', ['id' => $session['session_id'], 'class_id' => $classRow->id]);
 
         // A class carrying future sessions may not be cancelled: cancelling it
@@ -105,7 +105,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         app(MaintainClass::class)->scheduleSession(
             $officer,
             $pastClass,
-            new CarbonImmutable('2026-09-02'),
+            CarbonImmutable::today()->subWeek(),
             '09:00',
             '11:00',
             'canon-delivery-past-session',
@@ -195,7 +195,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         $student = $this->newStudent()['student'];
         $seat = app(MaintainEnrollment::class)->request($officer, $student->id, $classId, 'canon-attendance-enroll');
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'canon-attendance-activate');
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-08'), '09:00', '11:00', 'canon-attendance-session', $delivery['skill_id']);
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), CarbonImmutable::today()->addWeek(), '09:00', '11:00', 'canon-attendance-session', $delivery['skill_id']);
         $sessionRow = ClassSession::query()->findOrFail($session['session_id']);
 
         $fact = app(RecordAttendance::class)->record($officer, $sessionRow, Enrollment::query()->findOrFail($seat['enrollment_id']), 'present', 'canon-attendance-record');
@@ -223,7 +223,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         $student = $this->newStudent()['student'];
         $seat = app(MaintainEnrollment::class)->request($officer, $student->id, $classId, 'canon-frozen-enroll');
         app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'canon-frozen-activate');
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), new CarbonImmutable('2026-09-09'), '09:00', '11:00', 'canon-frozen-session', $delivery['skill_id']);
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($classId), CarbonImmutable::today()->addWeek(), '09:00', '11:00', 'canon-frozen-session', $delivery['skill_id']);
         $sessionRow = ClassSession::query()->findOrFail($session['session_id']);
 
         app(MaintainEnrollment::class)->freeze($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'student requested a term break', 'canon-frozen-freeze');

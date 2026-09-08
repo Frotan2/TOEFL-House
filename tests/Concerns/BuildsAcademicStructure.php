@@ -67,8 +67,10 @@ trait BuildsAcademicStructure
         $period = $structure->definePeriod(
             $officer,
             'Term '.$keyPrefix,
-            new \Carbon\CarbonImmutable('2026-09-01'),
-            new \Carbon\CarbonImmutable('2026-12-18'),
+            // Anchored to today so the term always spans the current date;
+            // fixed literals silently expire and make tests time-fragile.
+            \Carbon\CarbonImmutable::today()->subMonth(),
+            \Carbon\CarbonImmutable::today()->addMonths(3),
             $keyPrefix.'-period',
         );
         $structure->transitionPeriod(
