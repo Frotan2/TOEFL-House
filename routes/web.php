@@ -18,7 +18,11 @@ use App\Http\Controllers\PrintingController;
 use App\Http\Controllers\PrivacyController;
 use App\Http\Controllers\ReportingController;
 use App\Http\Controllers\StudentsController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,7 +44,31 @@ Route::post('/login', [AuthenticationController::class, 'login'])->middleware('t
 // Production health/readiness probe — public, minimal, no secrets. Distinct
 // from /up (framework liveness): /health also verifies the database and the
 // runtime configuration, so an orchestrator can gate traffic on it.
-Route::get('/health', HealthController::class)->name('health');
+//
+// The probe is deliberately stateless. Inside the `web` group the session
+// middleware opens a database connection *before* the controller runs, so with
+// the database down a request to /health died in StartSession and returned a
+// 500 HTML error page (measured in production configuration on 2026-09-08, and
+// the only record of it was an exception log written into whichever release the
+// pool happened to be executing). The whole purpose of the endpoint is to report
+// that exact condition, so the two middlewares that require a working
+// database-backed session are excluded and the controller's own 503 answer can
+// reach the caller: an orchestrator gating traffic on /health must receive
+// {"status":"error"} with a 503, never a stack-traced 500 or an HTML page.
+//
+// CSRF is excluded too, and not for tidiness: VerifyCsrfToken::addCookieToResponse()
+// reads `$request->session()->token()` on *every* request it passes through, GET
+// included, so removing only StartSession moves the failure from one middleware to
+// the next ("Session store not set on request") and the probe still answers 500.
+// A public, read-only, side-effect-free GET has nothing for CSRF to protect.
+Route::get('/health', HealthController::class)
+    ->withoutMiddleware([
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        ValidateCsrfToken::class,
+        VerifyCsrfToken::class,
+    ])
+    ->name('health');
 
 Route::middleware('employee')->group(function (): void {
     Route::post('/logout', [AuthenticationController::class, 'logout'])->name('logout');
