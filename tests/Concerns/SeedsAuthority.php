@@ -108,7 +108,14 @@ trait SeedsAuthority
      * the bootstrap organization.
      */
     /** @param list<string> $capabilities */
-    protected function personWithAuthority(string $personId, array $capabilities): Person
+    /**
+     * @param  list<string>  $capabilities
+     * @param  string|null  $homeBranchId  Provenance must be set on INSERT: a
+     *                                     verified person is immutable, so a
+     *                                     later UPDATE is refused by
+     *                                     people_identity_guard.
+     */
+    protected function personWithAuthority(string $personId, array $capabilities, ?string $homeBranchId = null): Person
     {
         $this->ensureBootstrapAuthority();
         if (! isset($this->authorityPeople[$personId])) {

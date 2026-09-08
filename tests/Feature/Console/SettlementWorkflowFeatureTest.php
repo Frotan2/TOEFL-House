@@ -38,10 +38,11 @@ final class SettlementWorkflowFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority($this->personId, []);
+        // Create the branch first: a verified person is immutable, so the
+        // home branch must be set on INSERT rather than by a later UPDATE.
         $branch = Branch::query()->create(['id' => RandomIdentifier::new(), 'name' => 'Settlement Workflow Branch', 'lifecycle_state' => 'active']);
         $this->attachBranchToBootstrapOrganization($branch->id);
-        Person::query()->whereKey($this->personId)->update(['home_branch_id' => $branch->id]);
+        $this->personWithAuthority($this->personId, [], $branch->id);
 
         $manager = $this->grantedActor('swf-manager-1', ['hr.employ', 'hr.terminate', 'access.assign_position']);
         $employment = app(MaintainEmployment::class)->employ($manager, $this->personId, 'swf-emp-1');
