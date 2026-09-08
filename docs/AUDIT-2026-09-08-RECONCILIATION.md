@@ -149,7 +149,7 @@ Re-run on this branch in the repository's own provisioned runtime
 | Readiness on a running instance | `GET /up`, `GET /health` | 200 / `{"status":"ok","checks":{"database":"ok","application_key":"ok","frontend_build":"ok"}}` |
 | Security headers on a live response | `curl -I /login` | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `Cache-Control: no-store, private` |
 | Deployment bootstrap path | `db:seed --class=FirstRunBootstrapSeeder` | PASS — `organization "The TOEFL House", Owner role (133 capabilities) and account "runtime.owner" created`, i.e. the privileged-bootstrapping route a fresh install actually uses |
-| CI on this branch | `Verification` workflow | run `34252336159` (reconciled code state) **and** run `34253638765` (branch tip): Frontend **PASS** · Static analysis **PASS** · Backend **PASS**. This is the gate that was red at `f0e1424` and red at `9225b33` — the reconciled branch is the only one of the three states that passes all three jobs |
+| CI on this branch | `Verification` workflow | Runs `34252336159`, `34253459128`, `34253581349`, `34253638765` — **Frontend PASS · Static analysis PASS · Backend PASS on every one**. This is the gate that was red at `f0e1424` (static + backend) and red at `9225b33` (static + backend): the reconciled branch is the only one of the three states that passes all three jobs |
 
 **A correction of this correction (kept for the record).** While reviewing §7's
 schema row, a static reading of `database/migrations` produced 165 `Schema::create`
@@ -198,7 +198,7 @@ check that was not inherited from it.
    Note for operators: the `GET` half of that pair would serve an unauthenticated
    read of *any* disk with `visibility => 'public'`, so publishing a custom
    `config/filesystems.php` must keep `serve` off public disks deliberately.
-2bis. **Live header and cookie inspection on a running instance** — `curl -I /login`
+2. **Live header and cookie inspection on a running instance** — `curl -I /login`
    against the booted app returns `X-Content-Type-Options: nosniff`,
    `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` and
    `Strict-Transport-Security: max-age=31536000; includeSubDomains`; the session
@@ -211,16 +211,30 @@ check that was not inherited from it.
    header in `ServeFile`). The certification's `Security: EXCELLENT ✅ … 10/10`
    did not mention it; for an app that renders 14 authenticated React consoles this
    is a real, if low-severity, defense-in-depth omission — recorded as
-   verified-open in §9 rather than asserted-away.
-2. **Middleware/exception-path check** — `bootstrap/app.php` confirms CSRF on the
+   verified-open in §10 rather than asserted-away.
+3. **Middleware/exception-path check** — `bootstrap/app.php` confirms CSRF on the
    `api` group, `SecurityHeaders` appended globally, and a `DomainError` renderer
    mapping authorization failures to 403, validation to 422, business and
    concurrency rejections to 409, integration-unknown to 502, with a
    `correlation_id` on every payload.
-3. **Secret hygiene** — no `.env`, key material or credentials are tracked
+4. **Secret hygiene** — no `.env`, key material or credentials are tracked
    (`git ls-tree -r` scan); `phpunit.xml` carries a fixed `APP_KEY`, which is
    test-scoped by design; `.env.example` defaults `SESSION_SECURE_COOKIE=true`.
-4. **Dead tooling audit** — `recovery/_apply_supplied_patch.yml` is a one-shot
+5. **Gate-ordering measurement artifact, found and explained.** Re-running the
+   schema measurements *after* the other gates reported **527** functions in the
+   `public` schema instead of the audited 525. Not drift:
+   `scripts/runtime/concurrency-verification.mjs` creates
+   `conc_capacity_guard()` (line 36) and `conc_refund_guard()` (line 136) and never
+   drops them, so they persist in the target database (`SELECT … ORDER BY oid DESC`
+   puts both at the top: 22695, 22663). They are the only residue;
+   `database-invariants.mjs` and `verify-environment.mjs` create nothing. So the
+   certification's 525/285/168 figures are correct **for a pristine replay**, and
+   any future agent who measures after running the concurrency gate will see 527 —
+   record the count before that gate, or on a fresh cluster. Follow-up worth doing
+   (not done here, to keep this branch's code byte-identical to the verified
+   baseline): have that script drop both functions in its cleanup so the gate stops
+   mutating the schema it is measuring.
+6. **Dead tooling audit** — `recovery/_apply_supplied_patch.yml` is a one-shot
    patch applier left from the `b951c1b`/`d84097d` recovery session; it `test -f`s
    twelve `recovery/chunk*.b64` files of which only a 25-byte stub `chunk1.b64`
    remains, so the workflow is inoperative. Nothing in `.github/`, `tests/`,
@@ -229,7 +243,34 @@ check that was not inherited from it.
    non-functional recovery scaffolding that a future operator could mistake for a
    supported path.
 
-## 9. Production-readiness assessment (truthful)
+## 9. Fresh full verification of the final branch state
+
+Executed against `d3d574d` (this branch's tip) in the provisioned runtime, in one
+chain — every gate the `Verification` workflow runs, plus the live items §10 lists as
+newly closed:
+
+| # | Gate | Result |
+|---|---|---|
+| 0 | `composer validate --strict` / `composer check-platform-reqs` | PASS / PASS |
+| 1 | `npm run verify:environment` | **8/8 satisfied** |
+| 2 | `php artisan migrate:fresh --force` + `StandardFinanceChartSeeder` | **185/185**, seed PASS |
+| 3 | live schema measurement | 168 tables · 1,765 cols · 230 PK · 380 FK · 101 unique · 336 CHECK · 2 exclusion · 392 indexes · 65 partial · 285 triggers (function count read *after* the concurrency gate — see §8.5) |
+| 4 | `vendor/bin/pint --test` | **PASS**, 859 files |
+| 5 | `vendor/bin/phpstan analyse` | **[OK] No errors** |
+| 6 | `scripts/database-migration-audit.php` | **PASS** |
+| 7 | `scripts/terminology-audit.php` | exit **0** (advisory) |
+| 8 | `npm run verify:invariants` | **6/6** |
+| 9 | `npm run verify:concurrency` | **4/4** |
+| 10 | `tsc --noEmit` · `vite build` · `test:frontend` | PASS · PASS · **8/8 consoles** |
+| 11 | `phpunit --testsuite Canonical` | **OK (63 tests, 243 assertions)** |
+| 12 | `phpunit` (full backend suite) | **OK — 899 tests, 6,990 assertions, 1 skipped, 0 failures** |
+| 13 | suites touching the `recovery/` removal (`Feature/Deployment`, `Unit/Launcher`, `Unit/Architecture`) | **OK (73 tests, 593 assertions, 1 skipped)** |
+| — | CI on this branch | `34252336159`, `34253459128`, `34253581349`, `34253638765` → **all three jobs success on each**; tip run `34255157213` recorded in the commit that follows this table |
+
+**No gate fails on this branch. No code was changed to make that true** — the tree is
+`arena/01a080c8` @ `54d7e1a` plus documentation and one dead-directory removal.
+
+## 10. Production-readiness assessment (truthful)
 
 The engineering baseline is **strong and genuinely verified**. The release verdict
 is **not** "production-ready", and that is a documentation-of-record problem, not a
@@ -253,7 +294,7 @@ build and 8/8 console mounts; CI green across all three jobs.
 | Observability | Health probes exist (`/health`, `/up`); no metrics/alerting/pager path is defined in-repo | define SLO + alert routing in `docs/12-OPERATIONS-DEPLOYMENT-DR.md` |
 | Dependency currency policy | 73 + 33 locked packages, `npm ci` clean; no update/vulnerability-triage cadence is documented | add a cadence + `composer audit`/`npm audit` gate to CI |
 | Data volume / performance envelope | "no N+1 / no unbounded queries" is asserted from review, not measured against realistic volumes | run the reporting journeys with seeded realistic data and record query counts |
-| Content-Security-Policy | absent from both `SecurityHeaders` and `deploy/nginx/toefl-house.conf` (§8.2bis), while 14 authenticated consoles execute JS — the certification scored security 10/10 without recording it | add a tested CSP (nonce- or hash-based for the Vite bundles, `default-src 'self'`) at the edge *and* in the middleware so both paths agree |
+| Content-Security-Policy | absent from both `SecurityHeaders` and `deploy/nginx/toefl-house.conf` (§8.2), while 14 authenticated consoles execute JS — the certification scored security 10/10 without recording it | add a tested CSP (nonce- or hash-based for the Vite bundles, `default-src 'self'`) at the edge *and* in the middleware so both paths agree |
 
 **Verdict: `arena/01a081d4-toefl-house` is the authoritative engineering baseline —
 CI-green, and re-verified end to end on a provisioned runtime in this session, now
@@ -269,7 +310,7 @@ path. None of the two input branches evidenced these; a "no changes required bef
 production deployment" claim that skips the protocol's own checklist is exactly the
 failure mode this reconciliation exists to prevent.
 
-### 9.1 This verdict agrees with the repository's own registers
+### 10.1 This verdict agrees with the repository's own registers
 
 The gaps above are not an outside reviewer's importation — they are what the
 project's normative documents already say, which is precisely why the imported
@@ -289,7 +330,7 @@ DR/schema-rollback/observability from "unverified" to "verified-open", with name
 commands to execute. Nothing in either line of work supports a release sign-off yet,
 and this document is the record of why.
 
-## 10. Disposition of the two input branches
+## 11. Disposition of the two input branches
 
 | Branch | Disposition |
 |---|---|
@@ -297,7 +338,7 @@ and this document is the record of why.
 | `arena/01a080c8-toefl-house` | The authoritative code state, preserved exactly (tree-identical at the merge, then documentation-only commits on top). Fast-forward this branch onto the reconciled result to converge. |
 | `arena/01a081d4-toefl-house` | The reconciled result: `01a080c8` history + `9225b33` as an ancestor + absorbed/corrected documentation. |
 
-## 11. How to reproduce this verification
+## 12. How to reproduce this verification
 
 ```bash
 bash scripts/runtime/provision.sh            # PHP 8.4.14 + Composer 2.9.2 + PostgreSQL 18.4
@@ -347,7 +388,7 @@ php artisan route:list --json | jq -r '.[] | select(.method | test("POST|PUT|PAT
 # 511 routes, 433 mutations, 1 unauthenticated: PUT storage/{path}  (framework default, signature-gated)
 ```
 
-## 12. Reading order
+## 13. Reading order
 
 1. This file — what was compared, decided and verified, and what is still open.
 2. `docs/AUDIT-2026-09-08-PRODUCTION-READINESS.md` — the full per-area review, with
