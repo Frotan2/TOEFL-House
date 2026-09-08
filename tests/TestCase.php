@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\TestDatabaseGuard;
 
 /**
  * Base test case.
@@ -22,6 +23,21 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 abstract class TestCase extends \Illuminate\Foundation\Testing\TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Guard placed here rather than in setUp() because that is the first point at
+     * which the container (and so `config()`) exists while still running before
+     * `setUpTheTestEnvironment()`, which is where RefreshDatabase issues
+     * migrate:fresh. A guard that runs before parent::setUp() cannot read the
+     * resolved connection at all: it fails with "Target class [config] does not
+     * exist" and the suite dies for the wrong reason.
+     */
+    protected function refreshApplication(): void
+    {
+        parent::refreshApplication();
+
+        TestDatabaseGuard::assertSafe();
+    }
 
     protected function setUp(): void
     {

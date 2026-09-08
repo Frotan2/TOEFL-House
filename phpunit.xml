@@ -25,18 +25,30 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
+        <!--
+            Isolation-critical settings are forced. Without force="true" a
+            variable already present in the developer's shell wins over the
+            value below, and that is not a theoretical hazard: `RefreshDatabase`
+            runs `migrate:fresh`, which drops every table. Exporting
+            DB_DATABASE=toefl_house_prod in a shell (the natural thing to do
+            after copying the deployment .env) turns `php artisan test` into a
+            production database deletion. Anything that selects *which* store is
+            wiped or written to is therefore pinned here; connection host,
+            port, user and password stay overridable so a test database can live
+            on another cluster.
+        -->
+        <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_KEY" value="base64:N9SUbypTX9WrF+XOAfYSOnmJhIsc9xXmZvTXlAkjStM="/>
         <env name="APP_NAME" value="The TOEFL House"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="APP_URL" value="http://localhost"/>
-        <env name="CACHE_STORE" value="array"/>
-        <env name="SESSION_DRIVER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
         <env name="DB_HOST" value="127.0.0.1"/>
         <env name="DB_PORT" value="5432"/>
-        <env name="DB_DATABASE" value="toefl_house_test"/>
+        <env name="DB_DATABASE" value="toefl_house_test" force="true"/>
         <env name="DB_USERNAME" value="postgres"/>
         <env name="DB_PASSWORD" value="postgres"/>
     </php>
