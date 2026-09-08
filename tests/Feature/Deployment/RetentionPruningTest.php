@@ -93,6 +93,34 @@ final class RetentionPruningTest extends TestCase
         }
     }
 
+    public function test_every_sourced_helper_path_in_the_deploy_scripts_resolves(): void
+    {
+        // The scripts locate deploy/lib/retention.sh relative to themselves, and
+        // a wrong component there only fails on a real deployment (which is how
+        // `deploy/deploy/lib/retention.sh` was briefly shipped).
+        $matched = 0;
+
+        foreach (glob(base_path('deploy/*.sh')) ?: [] as $script) {
+            foreach (file($script, FILE_IGNORE_NEW_LINES) ?: [] as $number => $line) {
+                if (! str_starts_with(trim($line), 'source ')) {
+                    continue;
+                }
+
+                if (preg_match('#\$\{?(?:BACKUP_DIR_SELF|SCRIPT_DIR)\}?/([A-Za-z0-9_./-]+)#', $line, $match) !== 1) {
+                    $this->fail(basename($script).':'.($number + 1).' sources a path this test cannot resolve');
+                }
+
+                $matched++;
+                $this->assertFileExists(
+                    dirname($script).'/'.$match[1],
+                    basename($script).':'.($number + 1).' sources a path that does not exist next to the script'
+                );
+            }
+        }
+
+        $this->assertGreaterThan(0, $matched, 'the deploy scripts are expected to source at least one helper');
+    }
+
     /**
      * @return array{exit: int, output: string}
      */

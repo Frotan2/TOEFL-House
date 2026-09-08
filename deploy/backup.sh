@@ -79,7 +79,7 @@ fi
 # pipeline AFTER a verified dump had already been written).
 log "applying retention (keep last $RETENTION_DAILY)"
 # shellcheck source=./lib/retention.sh
-source "$BACKUP_DIR_SELF/deploy/lib/retention.sh"
+source "$BACKUP_DIR_SELF/lib/retention.sh"
 prune_old_entries "$BACKUP_DIR" "${DB_NAME}-*.dump" "$RETENTION_DAILY"
 prune_old_entries "$BACKUP_DIR" "${DB_NAME}-*.dump.age" "$RETENTION_DAILY"
 
