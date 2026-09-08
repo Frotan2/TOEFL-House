@@ -91,13 +91,17 @@ The audit examined every production-readiness dimension specified in the mission
    - Allows attackers to probe for resource existence
    - **Assessment:** Design decision, not a vulnerability. System correctly denies unauthorized access.
 
-2. **No Rate Limiting Middleware (ADV-002)** — ⚠️ **[R.3] CLAIM IS FALSE**
+2. **~~No Rate Limiting Middleware (ADV-002)~~** — ⚠️ **[R.3] CLAIM IS FALSE**
+   - Original claim, verbatim: *"No explicit rate limiting at application level"* /
+     *"Should be added at web server level (nginx) in production."*
    - Rate limiting *does* exist at the application level: `RateLimiter::for('login', …)`
      in `app/Support/Providers/AppServiceProvider.php` (per-IP + username, 5/min),
      enforced by `throttle:login` on the login route in `routes/web.php`.
    - **Revised assessment:** finding withdrawn.
 
-3. **No HTTPS Enforcement in Development (ADV-003)** — ⚠️ **[R.3] ALREADY IMPLEMENTED IN PRODUCTION CONFIG**
+3. **~~No HTTPS Enforcement in Development (ADV-003)~~** — ⚠️ **[R.3] ALREADY IMPLEMENTED IN PRODUCTION CONFIG**
+   - Original claim, verbatim: *"Vite dev server doesn't enforce HTTPS"* /
+     *"Development convenience. Production must enforce HTTPS."*
    - `deploy/nginx/toefl-house.conf` sends `:80` to `https://` and terminates TLS 1.2/1.3;
      `SecurityHeaders` emits HSTS; `.env.example` sets `SESSION_SECURE_COOKIE=true`.
    - **Revised assessment:** withdrawn for production; the dev-server note is a

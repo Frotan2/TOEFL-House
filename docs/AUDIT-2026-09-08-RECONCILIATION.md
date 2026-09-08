@@ -99,9 +99,11 @@ inference from "green locally" to "production-ready, no changes required".
    attribution keep working) instead of being overwritten or discarded.
 3. **Verbatim import, then correction.** `f5e29a0` imported the three reports
    byte-for-byte (`git diff 9225b33 f5e29a0 -- <paths>` is empty); `d0edd60` added
-   the corrections. Both the original claim and the refutation are readable in the
-   same file, per this repository's own archive rule: *"Historical facts have not
-   been silently rewritten."*
+   the corrections. Refuted sentences are kept struck-through (or re-quoted verbatim
+   next to the correction that retires them) rather than deleted, and the corrections
+   register in §6 quotes every retired claim in its original wording — per this
+   repository's own archive rule: *"Historical facts have not been silently
+   rewritten."*
 4. **Nothing was taken from the red snapshot's tooling** — including its
    `PHP_VERSION: '8.2'`, which is the drift `01a080c8` fixed.
 5. **Result is fast-forwardable onto `arena/01a080c8-toefl-house`.** `54d7e1a` is
