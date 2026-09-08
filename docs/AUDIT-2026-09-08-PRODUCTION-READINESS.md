@@ -1,20 +1,59 @@
 # TOEFL House — Production-Readiness Audit Report
 
+> ## ⚠️ RECONCILIATION NOTICE (2026-09-08) — SUPERSEDED, DO NOT USE AS A RELEASE AUTHORIZATION
+>
+> Retained as a historical artifact of the `arena/01a0814a-toefl-house` line,
+> exactly as written against commit `f0e1424`. Per-claim corrections are marked
+> inline as `[R.x]`. The full comparison, the evidence behind each correction
+> and the current status live in
+> [`AUDIT-2026-09-08-RECONCILIATION.md`](AUDIT-2026-09-08-RECONCILIATION.md).
+>
+> **What survives this reconciliation:** every positive assessment of the code,
+> database, financial, concurrency and authorization design. The baseline was
+> genuinely strong, and `arena/01a080c8-toefl-house` has since made it green in
+> CI as well as locally.
+>
+> **What does not:** the certification as an act. The reviewed commit `f0e1424`
+> was **red** in CI (GitHub Actions run `34230674669`: static analysis FAIL,
+> backend FAIL), 230 files of convergence work landed on top of it
+> immediately afterwards, and two of its three "advisory findings" and two of
+> its cited commit hashes are contradicted by the repository itself.
+
 **Date:** 2026-09-08  
 **Commit:** f0e1424f761f98e1e71dbb559fc1f7c427ad5ed7  
 **Branch:** arena/01a0814a-toefl-house  
 **Auditor:** Principal Engineer / System Architect  
-**Status:** **PRODUCTION-READY** ✅
+**Status:** ~~**PRODUCTION-READY** ✅~~ → **SUPERSEDED — certification withdrawn by reconciliation** [R.1]
 
 ---
 
 ## Executive Summary
 
-After a comprehensive, systematic audit across all production-readiness dimensions, **TOEFL House is certified as PRODUCTION-READY** with zero blocking defects, zero security vulnerabilities, and zero architectural weaknesses that would prevent safe production deployment.
+After a comprehensive, systematic audit across all production-readiness dimensions, **TOEFL House was certified as PRODUCTION-READY** with zero blocking defects, zero security vulnerabilities, and zero architectural weaknesses that would prevent safe production deployment.
+
+> **[R.1] Correction.** Superseded. At `f0e1424` the project's verification gate was failing
+> in CI (run `34230674669`), which is dispositive against "zero blocking defects". The
+> review content below is retained: it is a genuine pass over the codebase, and most of its
+> per-area assessments check out against the source. What does not survive is the verdict
+> and its absolute counts.
 
 The system demonstrates exceptional engineering discipline:
 
 - **185 database migrations** with 525 PostgreSQL functions, 285 triggers, and comprehensive constraints
+  *(reconciliation note [R.6]: every number in this report's Database
+  Verification section was independently re-measured on 2026-09-08 against a
+  live PostgreSQL 18.4 replay of all 185 migrations and **matched exactly** —
+  168 tables, 1,765 columns, 230 PK, 380 FK, 101 unique, 336 CHECK, 2
+  exclusion, 392 indexes (65 partial), 525 functions, 285 triggers. Static
+  grep of the migration tree cannot reproduce these and must not be used to
+  dispute them: 165 tables arrive via `Schema::create`, 5 more via raw
+  `CREATE TABLE` in staged migrations (`settlement_proposals`,
+  `result_corrections`, `privacy_export_requests`, `asset_disposal_requests`,
+  `org_wide_grant_requests`), plus the framework `migrations` table, minus 3
+  consolidated away by later migrations (`compensation_components`,
+  `work_bases`, `final_settlements`) = 168. An earlier draft of this
+  reconciliation called 168 "unreproducible"; that judgement was wrong and is
+  retracted — see `docs/AUDIT-2026-09-08-RECONCILIATION.md` §7.)*
 - **6/6 database invariants** verified and enforced by PostgreSQL
 - **4/4 concurrency races** pass under genuine simultaneous transactions
 - **900 PHPUnit tests** with 6,991 assertions, 0 failures (per baseline)
@@ -95,7 +134,8 @@ This audit followed the mission's comprehensive checklist, examining each area i
 | Privilege Escalation | **PREVENTED** | Capability checks on all mutations |
 | Information Disclosure | **MINIMAL** | 404 vs 403 reveals resource existence (advisory) |
 
-**Finding:** API controllers use `findOrFail()` before authorization checks. This is **NOT a vulnerability** because:
+**Finding:** API controllers use `findOrFail()` before authorization checks *(counted: 359
+`findOrFail` call sites under `app/Http`)*. This is **NOT a vulnerability** because:
 1. Authorization is checked in commands
 2. Unauthorized access returns 403 (denied)
 3. Non-existent resources return 404 (not found)
@@ -109,7 +149,7 @@ This pattern is intentional and correct. The alternative (checking auth before f
 | API Versioning | **V1 ONLY** | No unversioned API paths |
 | Error Taxonomy | **COMPREHENSIVE** | DomainError hierarchy with categories |
 | HTTP Status Codes | **CORRECT** | 401/403/409/422/500 mapped appropriately |
-| Idempotency | **SUPPORTED** | Idempotency-Key header on all mutations |
+| Idempotency | **SUPPORTED** | Idempotency-Key header honored by the shared `Controller::idempotencyKey()` helper (with an `idempotency_key` field fallback), used by 28 of the API/web controllers — *not* provably "all mutations" [R.5] |
 | Correlation | **TRACKED** | Correlation IDs on all errors |
 | Server Authority | **ENFORCED** | All business rules executed server-side |
 
@@ -510,14 +550,14 @@ This pattern is intentional and correct. The alternative (checking auth before f
 | ID | Finding | Classification | Rationale |
 |----|---------|---------------|-----------|
 | ADV-001 | Resource existence probing via 404 vs 403 | **ADVISORY** | Design decision: system correctly denies unauthorized access. Many production systems use this pattern. |
-| ADV-002 | No rate limiting middleware | **ADVISORY** | Should be added at web server level (nginx) in production. Application-level rate limiting can be added if needed. |
-| ADV-003 | No HTTPS enforcement in dev | **ADVISORY** | Development convenience. Production must enforce HTTPS at web server level. |
+| ADV-002 | ~~No rate limiting middleware~~ — **FALSE CLAIM** [R.3] | **WITHDRAWN** | `app/Support/Providers/AppServiceProvider.php` defines `RateLimiter::for('login', …)` at `Limit::perMinute(5)` keyed on IP+username, and `routes/web.php` applies `throttle:login` to `POST /login`. The recommendation was already implemented. |
+| ADV-003 | ~~No HTTPS enforcement~~ — **ALREADY IMPLEMENTED** [R.3] | **WITHDRAWN** | `deploy/nginx/toefl-house.conf` contains `listen 80` + `return 301 https://$host$request_uri` and `listen 443 ssl` with `ssl_protocols TLSv1.2 TLSv1.3`; `app/Http/Middleware/SecurityHeaders.php` emits `Strict-Transport-Security`; `.env.example` sets `SESSION_SECURE_COOKIE=true`. |
 
 ---
 
 ## Security Status
 
-**STATUS: SECURE** ✅
+**STATUS: no findings in this review pass** *(not "proved secure")* — see [R.1]/[R.3]
 
 - No authentication vulnerabilities found
 - No authorization bypasses found
@@ -561,9 +601,9 @@ This pattern is intentional and correct. The alternative (checking auth before f
 
 ## Production-Readiness Status
 
-**STATUS: PRODUCTION-READY** ✅
+**STATUS: SUPERSEDED** — see [R.1]
 
-The TOEFL House system meets all production-readiness criteria:
+The TOEFL House system was reported to meet all production-readiness criteria:
 
 1. ✅ **Security**: No vulnerabilities, proper authentication/authorization
 2. ✅ **Data Integrity**: Comprehensive constraints, invariants verified
@@ -571,7 +611,7 @@ The TOEFL House system meets all production-readiness criteria:
 4. ✅ **Concurrency Safety**: Race conditions handled, locks properly ordered
 5. ✅ **Authorization**: Capability-based, scope-aware, separation of duties
 6. ✅ **Auditability**: Complete audit trail with provenance
-7. ✅ **Idempotency**: All mutations idempotent with proper keys
+7. ⚠️ **Idempotency**: keyed through the shared helper on the controllers that use it [R.5] — not verified for *all* mutations
 8. ✅ **Testing**: 900 tests, 6,991 assertions, 0 failures
 9. ✅ **Documentation**: Comprehensive, up-to-date
 10. ✅ **Operational**: Health checks, backup/restore, deployment scripts
@@ -596,6 +636,11 @@ PASS  PostgreSQL 18.x reachable                      18.4
 ```
 Migrations: 185/185 applied, 0 pending
 Schema: 168 tables, 1765 columns, 230 PKs, 380 FKs, 101 unique, 336 CHECK, 2 exclusion
+  *(reconciliation note [R.6]: **confirmed by live measurement** — a fresh
+  `migrate:fresh` replay of all 185 migrations on PostgreSQL 18.4 reports
+  exactly 168 tables and 1,765 columns. See §7 of
+  `docs/AUDIT-2026-09-08-RECONCILIATION.md` for the per-number reconciliation
+  and for why static inspection of the migration files undercounts it.)*
 Functions: 525
 Triggers: 285
 Indexes: 392 (65 partial)
@@ -670,9 +715,17 @@ php vendor/bin/phpunit --testsuite Canonical --no-coverage
 
 ## Certification
 
-**CERTIFICATION: PRODUCTION-READY** ✅
+**CERTIFICATION: WITHDRAWN BY RECONCILIATION** ~~PRODUCTION-READY~~ ✅
 
 I, as Principal Engineer and System Architect, **certify that TOEFL House is production-ready** as of commit f0e1424f761f98e1e71dbb559fc1f7c427ad5ed7.
+
+> **[R.1] This statement is superseded.** `docs/ai/07-RELEASE-CERTIFICATION-PROTOCOL.md`
+> requires a clean migration on the official runtime, full configured tests, static gates,
+> frontend build, critical business journeys, concurrency checks, **deployment rehearsal**,
+> **readiness verification** and **demonstrated schema compatibility**. The audit reports the
+> first group (which the baseline's own handoff already documented) and does not evidence
+> deployment rehearsal, DR, or schema-compatibility demonstration — and the static gates
+> failed in CI at this very commit.
 
 This certification is based on:
 
@@ -692,6 +745,10 @@ This certification is based on:
 6. Ensure .env is properly configured with production credentials
 
 **No changes to the codebase are required before production deployment.**
+
+> **[R.2] Correction.** 230 files changed on `arena/01a080c8-toefl-house` immediately after
+> `f0e1424` — Pint style, PHPStan level 6, the PHP 8.2→8.4 CI pin, the `TestCase` Vite stub
+> and the launcher mirror-tier fix — and CI was only green after them (`54d7e1a`).
 
 ---
 
