@@ -60,6 +60,7 @@ final class TranscriptIssuanceFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
     use \Tests\Concerns\BuildsTeachers;
+    use \Tests\Concerns\BuildsSessions;
 
     private string $programVersionId;
 
@@ -363,13 +364,23 @@ final class TranscriptIssuanceFeatureTest extends TestCase
 
     private function scheduledSession(string $seed): string
     {
+        // Scheduling requires an explicit skill the assigned teacher is
+        // authorized to deliver; the domain refuses to infer one.
+        $skillId = $this->makeClassSchedulable(
+            $this->academicOfficer('trx-schedule-'.$seed),
+            $this->classId,
+            $this->bootstrapBranchId(),
+            'trxs'.substr(md5($seed), 0, 4)
+        );
+
         return (string) app(MaintainClass::class)->scheduleSession(
             $this->academicOfficer('trx-schedule-'.$seed),
             ClassModel::query()->findOrFail($this->classId),
-            new CarbonImmutable('2026-09-10'),
+            CarbonImmutable::today()->addDays(3),
             '09:00',
             '10:30',
             'trx-session-'.$seed,
+            $skillId,
         )['session_id'];
     }
 
