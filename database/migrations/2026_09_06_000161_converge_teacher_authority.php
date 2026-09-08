@@ -53,7 +53,7 @@ return new class extends Migration
             $table->unique(['teacher_profile_id', 'branch_id', 'effective_from'], 'teacher_profile_branches_identity');
         });
         DB::statement("ALTER TABLE teacher_profile_branches ADD CONSTRAINT teacher_profile_branches_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
-        DB::statement("ALTER TABLE teacher_profile_branches ADD CONSTRAINT teacher_profile_branches_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_profile_branches ADD CONSTRAINT teacher_profile_branches_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
 
         Schema::create('teacher_qualifications', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -72,7 +72,7 @@ return new class extends Migration
             $table->foreign('teacher_profile_id')->references('id')->on('teacher_profiles');
         });
         DB::statement("ALTER TABLE teacher_qualifications ADD CONSTRAINT teacher_qualifications_state_check CHECK (lifecycle_state IN ('pending','verified','expired','revoked'))");
-        DB::statement("ALTER TABLE teacher_qualifications ADD CONSTRAINT teacher_qualifications_period_check CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from)");
+        DB::statement('ALTER TABLE teacher_qualifications ADD CONSTRAINT teacher_qualifications_period_check CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from)');
 
         Schema::create('teacher_skill_authorities', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -93,7 +93,7 @@ return new class extends Migration
         });
         DB::statement("ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_kind_check CHECK (authority_kind IN ('teach','assess','moderate'))");
         DB::statement("ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
-        DB::statement("ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
 
         Schema::create('teacher_availabilities', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -111,9 +111,9 @@ return new class extends Migration
             $table->foreign('branch_id')->references('id')->on('branches');
             $table->unique(['teacher_profile_id', 'weekday', 'starts_at', 'effective_from'], 'teacher_availabilities_identity');
         });
-        DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_weekday_check CHECK (weekday BETWEEN 1 AND 7)");
-        DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_time_check CHECK (ends_at > starts_at)");
-        DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_weekday_check CHECK (weekday BETWEEN 1 AND 7)');
+        DB::statement('ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_time_check CHECK (ends_at > starts_at)');
+        DB::statement('ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
         DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
         DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_kind_check CHECK (availability_kind IN ('available','unavailable'))");
 
@@ -132,8 +132,8 @@ return new class extends Migration
             $table->foreign('branch_id')->references('id')->on('branches');
             $table->unique(['teacher_profile_id', 'branch_id', 'effective_from'], 'teacher_workload_limits_identity');
         });
-        DB::statement("ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_hours_check CHECK (max_hours_per_week > 0)");
-        DB::statement("ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_hours_check CHECK (max_hours_per_week > 0)');
+        DB::statement('ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
         DB::statement("ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
 
         DB::statement(<<<'SQL'
@@ -1376,7 +1376,8 @@ return new class extends Migration
             $fn$ LANGUAGE plpgsql;
             SQL);
         DB::statement('CREATE CONSTRAINT TRIGGER teacher_profile_lifecycle_history_guard_trigger AFTER INSERT OR UPDATE ON teacher_profiles DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION teacher_profile_lifecycle_history_guard()');
-        DB::statement('CREATE INDEX teacher_profile_statuses_history ON teacher_profile_statuses (teacher_profile_id, effective_from, created_at)');    }
+        DB::statement('CREATE INDEX teacher_profile_statuses_history ON teacher_profile_statuses (teacher_profile_id, effective_from, created_at)');
+    }
 
     public function down(): void
     {

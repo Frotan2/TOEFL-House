@@ -32,6 +32,7 @@ Artisan::command('integrations:install-core-schedules {--run-by=}', function ():
     foreach (JobCatalog::keys() as $jobKey) {
         if (JobSchedule::query()->where('job_key', $jobKey)->exists()) {
             $this->line($jobKey.': already registered');
+
             continue;
         }
         $result = app(RegisterJob::class)->register(

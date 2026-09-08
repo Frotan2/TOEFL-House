@@ -10,9 +10,9 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
 use App\Modules\Outbox\Domain\EventConsumer;
 use App\Modules\Outbox\Models\DomainEvent;
+use App\Modules\WorkManagement\Models\WorkflowInstance;
 use App\Modules\WorkManagement\Models\WorkItem;
 use App\Modules\WorkManagement\Models\WorkItemHistory;
-use App\Modules\WorkManagement\Models\WorkflowInstance;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
@@ -124,6 +124,7 @@ final class WorkflowProjectionConsumer implements EventConsumer
                     ]),
                 ])->save();
             }
+
             return;
         }
         if ($assignedTo === null && $queueKey === null) {

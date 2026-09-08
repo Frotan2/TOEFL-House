@@ -243,6 +243,7 @@ final class GradesheetQuery
             ->whereHas('teacherProfile', fn ($profile) => $profile->whereColumn('teacher_profiles.person_id', 'teacher_assignments.teacher_person_id')->where('teacher_profiles.lifecycle_state', 'active'))
             ->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))
             ->exists();
+
         return $everAssigned && ! $this->termEnded($class);
     }
 

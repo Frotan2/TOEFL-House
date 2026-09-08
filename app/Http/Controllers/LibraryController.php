@@ -327,7 +327,7 @@ final class LibraryController extends Controller
 
     /**
      * @param \Illuminate\Database\Eloquent\Builder<*> $query
-     * @param list<string> $branchIds
+     * @param  list<string>  $branchIds
      */
     private function applyRootScope($query, string $table, array $branchIds): void
     {
@@ -352,6 +352,4 @@ final class LibraryController extends Controller
                     ->where('resource_o.lifecycle_state', 'active');
             });
     }
-
 }
-

@@ -24,8 +24,11 @@ use Tests\Canonical\CanonicalTestCase;
 final class CoreIntegrityTest extends CanonicalTestCase
 {
     private string $periodId;
+
     private string $arAccountId;
+
     private string $revenueAccountId;
+
     private string $studentId;
 
     protected function setUp(): void

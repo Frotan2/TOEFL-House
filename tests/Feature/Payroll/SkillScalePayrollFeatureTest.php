@@ -17,12 +17,12 @@ use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Models\Skill;
 use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Audit\Models\AuditEvent;
 use App\Modules\Hr\Commands\MaintainContractVersion;
-use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Commands\MaintainScale;
 use App\Modules\Hr\Models\ContractVersion;
 use App\Modules\Hr\Models\Employment;
@@ -34,10 +34,13 @@ use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Modules\Payroll\Models\TeachingDeliveryFact;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
+use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -50,8 +53,8 @@ use Tests\TestCase;
 final class SkillScalePayrollFeatureTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
-    use \Tests\Concerns\BuildsSessions;
+    use BuildsSessions;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'p16-pay-teacher-1';
@@ -75,7 +78,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
 
         $hrManager = $this->grantedActor('p16-pay-hr-1', ['hr.employ']);
         $this->buildActiveTeacher($this->teacherPersonId, null, 'skillscaf8b');
-        $employment = ['employment_id' => (string) \App\Modules\Hr\Models\Employment::query()
+        $employment = ['employment_id' => (string) Employment::query()
             ->where('person_id', $this->teacherPersonId)->where('lifecycle_state', '!=', 'terminated')
             ->value('id')]; // buildActiveTeacher already opened this employment
         $this->employmentId = $employment['employment_id'];
@@ -115,7 +118,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
         // Attributing a skill to an assignment is not authority to teach it:
         // the teacher must hold an effective subject authority and be
         // available in that branch. Establish that through the real commands.
-        $payProfileId = (string) \App\Modules\Academic\Models\TeacherProfile::query()
+        $payProfileId = (string) TeacherProfile::query()
             ->where('person_id', $this->teacherPersonId)->value('id');
         foreach (array_values($this->skillIds) as $n => $skillId) {
             $this->makeTeacherDeliveryReady($payProfileId, $skillId, $this->bootstrapBranchId(), 'p16sk'.$n);
@@ -295,7 +298,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
         // at all. class_sessions.skill_id is nullable, so such rows can still
         // exist from before that rule, and the payroll hold exists precisely to
         // refuse to pay against them. Insert that historical shape directly.
-        $sessionId = (string) \App\Support\Identifiers\RandomIdentifier::new();
+        $sessionId = (string) RandomIdentifier::new();
         DB::table('class_sessions')->insert([
             'id' => $sessionId,
             'class_id' => $this->classId,
@@ -612,7 +615,7 @@ final class SkillScalePayrollFeatureTest extends TestCase
     {
         $hrManager = $this->grantedActor('p16-pay-hr-1', ['hr.employ']);
         $this->buildActiveTeacher('p16-pay-teacher-2', null, 'skillsca958');
-        $otherEmployment = ['employment_id' => (string) \App\Modules\Hr\Models\Employment::query()
+        $otherEmployment = ['employment_id' => (string) Employment::query()
             ->where('person_id', 'p16-pay-teacher-2')->where('lifecycle_state', '!=', 'terminated')
             ->value('id')]; // buildActiveTeacher already opened this employment
 

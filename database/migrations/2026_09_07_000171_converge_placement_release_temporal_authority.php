@@ -110,6 +110,6 @@ return new class extends Migration
         // Existing release cohorts would become irreproducible if this event
         // clock were removed. Use forward remediation, never a downgrade that
         // reopens updated_at/current-state reporting.
-        throw new \RuntimeException('Placement release temporal authority is one-way; do not erase immutable release-event timing.');
+        throw new RuntimeException('Placement release temporal authority is one-way; do not erase immutable release-event timing.');
     }
 };

@@ -8,7 +8,6 @@ use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Program;
-use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Academic\Queries\GradesheetQuery;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Models\UserAccount;
@@ -78,7 +77,7 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array

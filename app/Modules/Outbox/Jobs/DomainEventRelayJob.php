@@ -15,8 +15,7 @@ final class DomainEventRelayJob implements JobHandler
     public function __construct(private readonly DomainEventRelay $relay) {}
 
     /**
-     * @param array<string, mixed> $context
-     *
+     * @param  array<string, mixed>  $context
      * @return array<string, int>
      */
     public function handle(array $context): array

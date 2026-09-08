@@ -98,7 +98,6 @@ final class FirstRunBootstrapSeeder extends Seeder
 
         $today = CarbonImmutable::now()->toDateString();
 
-
         DB::transaction(function () use ($name, $birthdate, $username, $password, $today): void {
             $ownerPerson = Person::query()->create([
                 'id' => RandomIdentifier::new(),
@@ -217,4 +216,3 @@ final class FirstRunBootstrapSeeder extends Seeder
         return $value === false ? '' : $value;
     }
 }
-

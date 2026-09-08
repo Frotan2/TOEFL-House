@@ -8,12 +8,12 @@ use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Finance\Domain\FinanceLifecycle;
 use App\Modules\Finance\Models\Account;
-use App\Modules\Finance\Models\FinancialPeriod;
-use App\Modules\Finance\Models\Journal;
-use App\Modules\Finance\Models\JournalLine;
 use App\Modules\Finance\Models\Discount;
 use App\Modules\Finance\Models\Expense;
+use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Finance\Models\FundAllocation;
+use App\Modules\Finance\Models\Journal;
+use App\Modules\Finance\Models\JournalLine;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PayrollLiabilityFact;
@@ -21,6 +21,7 @@ use App\Modules\Finance\Models\Refund;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -232,7 +233,7 @@ final class PostJournal
         return [$debit, $credit];
     }
 
-    private function scopeForJournalSource(string $sourceType, ?string $sourceId, ?string $reversalOfId): ?\App\Support\Authorization\StructureScope
+    private function scopeForJournalSource(string $sourceType, ?string $sourceId, ?string $reversalOfId): ?StructureScope
     {
         if ($reversalOfId !== null) {
             $original = Journal::query()->whereKey($reversalOfId)->first();
@@ -309,7 +310,7 @@ final class PostJournal
         return null;
     }
 
-    private function scopeFromBranchId(string $branchId, string $failureMessage): ?\App\Support\Authorization\StructureScope
+    private function scopeFromBranchId(string $branchId, string $failureMessage): StructureScope
     {
         $branchId = trim($branchId);
         if ($branchId === '') {
@@ -376,7 +377,7 @@ final class PostJournal
     }
 
     /**
-     * @param list<array{account_id: string, direction: string, amount: string}> $lines
+     * @param  list<array{account_id: string, direction: string, amount: string}>  $lines
      */
     private function assertExactInverse(Journal $original, array $lines): void
     {
@@ -392,7 +393,7 @@ final class PostJournal
     }
 
     /**
-     * @param list<array{account_id: string, direction: string, amount: string}> $lines
+     * @param  list<array{account_id: string, direction: string, amount: string}>  $lines
      * @return array<string, numeric-string>
      */
     private function lineTotals(array $lines): array
@@ -407,7 +408,7 @@ final class PostJournal
         return $totals;
     }
 
-    private function require(Actor $actor, ?\App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, ?StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, self::CAPABILITY, $scope);
         if (! $outcome->allowed) {

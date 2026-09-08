@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Outbox\Models;
 
 use App\Support\Errors\BusinessRejection;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  * endpoint-specific delivery projection and must not become domain truth.
  * Its event clock is copied by the database from the immutable audit parent.
  *
- * @property \Carbon\CarbonImmutable|null $occurred_at
+ * @property CarbonImmutable|null $occurred_at
  * @property 'audit_event'|null $occurred_time_basis
  */
 final class DomainEvent extends Model

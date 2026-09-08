@@ -84,6 +84,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $hasReferer = $request->headers->get('referer') !== null;
             if (! $hasReferer) {
                 $target = $request->user() !== null ? route('home') : route('login');
+
                 return redirect($target)
                     ->withInput()
                     ->with('error_code', $error->errorCode())

@@ -30,6 +30,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -45,7 +46,7 @@ use Tests\TestCase;
 final class AcademicAppealWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -113,7 +114,7 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array

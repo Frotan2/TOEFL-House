@@ -21,6 +21,7 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -264,7 +265,7 @@ final class MaintainFinancialCorrection
     {
         /** @var FundingSource|null $fund */
         $fund = FundingSource::query()->whereKey($allocation->fund_id)->first();
-        $fundOrganizationId = trim((string) ($fund?->organization_id ?? ''));
+        $fundOrganizationId = trim($fund === null ? '' : (string) ($fund->organization_id ?? ''));
         if ($fund === null || $fundOrganizationId === '' || ! Organization::query()
             ->whereKey($fundOrganizationId)
             ->where('lifecycle_state', 'active')
@@ -399,7 +400,7 @@ final class MaintainFinancialCorrection
         }
     }
 
-    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, string $capability, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

@@ -16,6 +16,7 @@ use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
+use App\Modules\Academic\Models\ProgramVersionLevel;
 use App\Modules\Academic\Models\ProgressionDecision;
 use App\Modules\Academic\Models\ResultCorrection;
 use App\Modules\Academic\Placement\Commands\DecidePlacement;
@@ -30,6 +31,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Tests\Concerns\BuildsPlacementCatalog;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -42,7 +44,7 @@ use Tests\TestCase;
 final class AppealResolutionSemanticsTest extends TestCase
 {
     use BuildsPlacementCatalog;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $branchId;
@@ -95,7 +97,7 @@ final class AppealResolutionSemanticsTest extends TestCase
         // A class requires an OPEN OFFERING for its branch, level and period.
         // The program version already carries levels; reuse one rather than
         // adding a duplicate ordinal, which the domain rejects.
-        $semLevel = ['level_id' => (string) \App\Modules\Academic\Models\ProgramVersionLevel::query()
+        $semLevel = ['level_id' => (string) ProgramVersionLevel::query()
             ->where('program_version_id', $this->programVersionId)->orderBy('ordinal')->value('id')];
         $structure->declareBranchAvailability($org, $this->branchId, $semLevel['level_id'], $period, 'sem-av');
         $structure->openOffering($org, $this->branchId, $semLevel['level_id'], $period, 200, 'sem-of');

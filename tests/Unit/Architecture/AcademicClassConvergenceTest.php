@@ -13,7 +13,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class AcademicClassConvergenceTest extends TestCase
 {
-
     public function test_api_and_commands_share_the_canonical_class_surface(): void
     {
         $controller = $this->source('app/Http/Controllers/Api/AcademicApiController.php');
@@ -75,7 +74,6 @@ final class AcademicClassConvergenceTest extends TestCase
         self::assertStringContainsString('STATE_ARCHIVED', $class);
         self::assertStringContainsString('STATE_CLOSED', $period);
     }
-
 
     private function source(string $relativePath): string
     {

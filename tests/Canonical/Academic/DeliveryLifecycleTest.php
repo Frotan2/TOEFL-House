@@ -13,6 +13,7 @@ use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSession;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
+use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Queries\ClassRosterQuery;
 use App\Modules\Students\Commands\TransitionStudentStatus;
 use App\Modules\Students\Models\Student;
@@ -73,7 +74,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         // carries the session skill. This test builds its class by hand to
         // exercise the lifecycle guards, so it wires that chain explicitly.
         $deliverySkillId = $this->newSkillId($officer, 'canon-delivery-sk');
-        $profileId = (string) \App\Modules\Academic\Models\TeacherProfile::query()
+        $profileId = (string) TeacherProfile::query()
             ->where('person_id', 'canon-delivery-teach')->value('id');
         foreach (range(1, 7) as $weekday) {
             $this->makeTeacherSessionReady(
@@ -154,7 +155,7 @@ final class DeliveryLifecycleTest extends CanonicalTestCase
         // guarantee: a rejected seat claim must not persist partially.
         $this->assertSame(
             2,
-            \Illuminate\Support\Facades\DB::table('enrollments')->where('class_id', $classId)->count(),
+            DB::table('enrollments')->where('class_id', $classId)->count(),
             'a refused seat request must not create an enrollment row'
         );
 

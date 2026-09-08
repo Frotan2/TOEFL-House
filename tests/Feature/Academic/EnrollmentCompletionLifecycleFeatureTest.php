@@ -31,6 +31,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsStudents;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -42,7 +43,7 @@ use Tests\TestCase;
 final class EnrollmentCompletionLifecycleFeatureTest extends TestCase
 {
     use BuildsStudents;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     private string $programVersionId;
 

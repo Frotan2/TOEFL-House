@@ -125,6 +125,6 @@ return new class extends Migration
     {
         // This consolidation is intentionally one-way. Recreating the removed
         // duplicate would reintroduce a competing financial authority.
-        throw new \RuntimeException('The employment-settlement authority consolidation cannot be rolled back by recreating Payroll storage.');
+        throw new RuntimeException('The employment-settlement authority consolidation cannot be rolled back by recreating Payroll storage.');
     }
 };

@@ -15,9 +15,9 @@ use App\Modules\Academic\Commands\RecordAttendance;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
+use App\Modules\Academic\Models\BranchAvailability;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSession;
-use App\Modules\Academic\Models\BranchAvailability;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\GraduationDecision;
 use App\Modules\Academic\Models\Offering;
@@ -29,7 +29,9 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
+use Tests\Concerns\BuildsSessions;
 use Tests\Concerns\BuildsStudents;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -45,9 +47,9 @@ use Tests\TestCase;
  */
 final class ClassTerminalGuardFeatureTest extends TestCase
 {
+    use BuildsSessions;
     use BuildsStudents;
-    use \Tests\Concerns\BuildsSessions;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     /** @return array{version_id: string, period_id: string, class_id: string} */
     private function freshActiveClass(string $seed): array

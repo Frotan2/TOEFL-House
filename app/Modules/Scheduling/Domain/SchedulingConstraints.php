@@ -6,16 +6,16 @@ namespace App\Modules\Scheduling\Domain;
 
 use App\Modules\Academic\Domain\ClassLifecycle;
 use App\Modules\Academic\Domain\ClassSectionLifecycle;
+use App\Modules\Academic\Domain\TeacherAuthority;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\AcademicRoom;
-use Carbon\CarbonImmutable;
-use DateTimeImmutable;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSection;
 use App\Modules\Academic\Models\Skill;
 use App\Modules\Academic\Models\TeacherAssignment;
-use App\Modules\Academic\Domain\TeacherAuthority;
 use App\Support\Errors\BusinessRejection;
+use Carbon\CarbonImmutable;
+use DateTimeImmutable;
 
 /**
  * Scheduling-owned planning constraints. Academic Delivery remains the sole

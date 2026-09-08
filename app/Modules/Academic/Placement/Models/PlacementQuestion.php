@@ -23,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property array<string, mixed>|null $options
  * @property string|null $correct_answer
  * @property string|null $media_ref Legacy read-only column; authoritative
- *   media is exposed through media().
+ *                                  media is exposed through media().
  * @property string $lifecycle_state
  */
 final class PlacementQuestion extends Model

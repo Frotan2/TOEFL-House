@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Facilities work order with immutable originating branch/organization provenance: request, approval, progress, completion with evidence.
+ *
  * @property string $id
  * @property string|null $organization_id
  * @property string|null $originating_branch_id

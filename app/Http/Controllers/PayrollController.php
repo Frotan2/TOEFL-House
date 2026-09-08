@@ -141,6 +141,4 @@ final class PayrollController extends Controller
 
         return redirect()->route('payroll.index')->with('success', 'Settlement proposed; it is recorded only when a distinct approver approves it.');
     }
-
-
 }

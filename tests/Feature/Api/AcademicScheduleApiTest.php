@@ -10,12 +10,15 @@ use App\Modules\Academic\Commands\MaintainSkill;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Program;
+use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Identity\Models\UserAccount;
 use App\Support\Authorization\Actor;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -30,8 +33,8 @@ use Tests\TestCase;
 final class AcademicScheduleApiTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
-    use \Tests\Concerns\BuildsSessions;
+    use BuildsSessions;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -67,7 +70,7 @@ final class AcademicScheduleApiTest extends TestCase
         // Registering a skill is not authority to teach it: the teacher needs an
         // effective subject authority and availability, and the assignment must
         // carry the skill. Establish that through the real commands.
-        $apiProfileId = (string) \App\Modules\Academic\Models\TeacherProfile::query()
+        $apiProfileId = (string) TeacherProfile::query()
             ->where('person_id', 'api-sched-teacher')->value('id');
         $this->makeTeacherDeliveryReady($apiProfileId, $this->skillId, $this->bootstrapBranchId(), 'apisch');
         $this->attributeSkill($this->classId, $this->skillId, 'apisch-at');

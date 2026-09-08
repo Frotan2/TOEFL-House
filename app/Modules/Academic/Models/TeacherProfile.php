@@ -14,8 +14,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 final class TeacherProfile extends Model
 {
     public const STATE_PENDING = 'pending';
+
     public const STATE_ACTIVE = 'active';
+
     public const STATE_SUSPENDED = 'suspended';
+
     public const STATE_RETIRED = 'retired';
 
     public $incrementing = false;
@@ -40,26 +43,50 @@ final class TeacherProfile extends Model
     }
 
     /** @return BelongsTo<Person, $this> */
-    public function person(): BelongsTo { return $this->belongsTo(Person::class); }
+    public function person(): BelongsTo
+    {
+        return $this->belongsTo(Person::class);
+    }
 
     /** @return BelongsTo<Employment, $this> */
-    public function employment(): BelongsTo { return $this->belongsTo(Employment::class); }
+    public function employment(): BelongsTo
+    {
+        return $this->belongsTo(Employment::class);
+    }
 
     /** @return HasMany<TeacherProfileStatus, $this> */
-    public function statuses(): HasMany { return $this->hasMany(TeacherProfileStatus::class, 'teacher_profile_id'); }
+    public function statuses(): HasMany
+    {
+        return $this->hasMany(TeacherProfileStatus::class, 'teacher_profile_id');
+    }
 
     /** @return HasMany<TeacherProfileBranch, $this> */
-    public function branchAuthorizations(): HasMany { return $this->hasMany(TeacherProfileBranch::class, 'teacher_profile_id'); }
+    public function branchAuthorizations(): HasMany
+    {
+        return $this->hasMany(TeacherProfileBranch::class, 'teacher_profile_id');
+    }
 
     /** @return HasMany<TeacherQualification, $this> */
-    public function qualifications(): HasMany { return $this->hasMany(TeacherQualification::class); }
+    public function qualifications(): HasMany
+    {
+        return $this->hasMany(TeacherQualification::class);
+    }
 
     /** @return HasMany<TeacherSkillAuthority, $this> */
-    public function skillAuthorities(): HasMany { return $this->hasMany(TeacherSkillAuthority::class); }
+    public function skillAuthorities(): HasMany
+    {
+        return $this->hasMany(TeacherSkillAuthority::class);
+    }
 
     /** @return HasMany<TeacherAvailability, $this> */
-    public function availabilities(): HasMany { return $this->hasMany(TeacherAvailability::class, 'teacher_profile_id'); }
+    public function availabilities(): HasMany
+    {
+        return $this->hasMany(TeacherAvailability::class, 'teacher_profile_id');
+    }
 
     /** @return HasMany<TeacherWorkloadLimit, $this> */
-    public function workloadLimits(): HasMany { return $this->hasMany(TeacherWorkloadLimit::class, 'teacher_profile_id'); }
+    public function workloadLimits(): HasMany
+    {
+        return $this->hasMany(TeacherWorkloadLimit::class, 'teacher_profile_id');
+    }
 }

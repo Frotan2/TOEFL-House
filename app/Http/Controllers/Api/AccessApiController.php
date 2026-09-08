@@ -71,14 +71,19 @@ final class AccessApiController extends Controller
     {
         $input = $request->validate(['person_id' => ['required', 'string'], 'position_id' => ['required', 'string'], 'effective_from' => ['required', 'date']]);
         app(AssignPosition::class)->assign($this->actor(), $input['person_id'], $input['position_id'], CarbonImmutable::parse($input['effective_from']), $this->idempotencyKey('access.position.assign'));
+
         return response()->json(['status' => 'proposed'], 201);
     }
 
     public function assignmentTransition(Request $request, string $assignmentId, string $action): JsonResponse
     {
         $assignment = PositionAssignment::query()->findOrFail($assignmentId);
-        if ($action === 'activate') app(TransitionPositionAssignment::class)->activate($this->actor(), $assignment, $this->idempotencyKey('access.position.activate'));
-        else app(TransitionPositionAssignment::class)->revoke($this->actor(), $assignment, $this->idempotencyKey('access.position.revoke'));
+        if ($action === 'activate') {
+            app(TransitionPositionAssignment::class)->activate($this->actor(), $assignment, $this->idempotencyKey('access.position.activate'));
+        } else {
+            app(TransitionPositionAssignment::class)->revoke($this->actor(), $assignment, $this->idempotencyKey('access.position.revoke'));
+        }
+
         return response()->json(['status' => $action]);
     }
 
@@ -86,6 +91,7 @@ final class AccessApiController extends Controller
     {
         $input = $request->validate(['position_id' => ['required', 'string'], 'role_id' => ['required', 'string'], 'effective_from' => ['required', 'date']]);
         app(DefineAccessPolicy::class)->bindPositionRole($this->actor(), $input['position_id'], $input['role_id'], CarbonImmutable::parse($input['effective_from']), $this->idempotencyKey('access.policy.bind'));
+
         return response()->json(['status' => 'published'], 201);
     }
 
@@ -93,6 +99,7 @@ final class AccessApiController extends Controller
     {
         $input = $request->validate(['role_id' => ['required', 'string'], 'permission' => ['required', 'string', 'max:120'], 'effective_from' => ['required', 'date']]);
         app(DefineAccessPolicy::class)->grantRolePermission($this->actor(), $input['role_id'], $input['permission'], CarbonImmutable::parse($input['effective_from']), $this->idempotencyKey('access.policy.permission'));
+
         return response()->json(['status' => 'published'], 201);
     }
 
@@ -100,6 +107,7 @@ final class AccessApiController extends Controller
     {
         $input = $request->validate(['person_id' => ['required', 'string'], 'permission' => ['required', 'string', 'max:120'], 'scope_type' => ['required', 'string', 'in:campus,branch,department'], 'scope_id' => ['required', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'], 'emergency' => ['sometimes', 'boolean']]);
         app(GrantScopePermission::class)->grant($this->actor(), $input['person_id'], $input['permission'], $input['scope_type'], $input['scope_id'], CarbonImmutable::parse($input['effective_from']), ! empty($input['effective_to']) ? CarbonImmutable::parse($input['effective_to']) : null, (bool) ($input['emergency'] ?? false), $this->idempotencyKey('access.grant'));
+
         return response()->json(['status' => 'granted'], 201);
     }
 
@@ -107,20 +115,26 @@ final class AccessApiController extends Controller
     {
         $input = $request->validate(['person_id' => ['required', 'string'], 'permission' => ['required', 'string', 'max:120'], 'organization_id' => ['required', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'], 'emergency' => ['sometimes', 'boolean']]);
         app(GrantScopePermission::class)->request($this->actor(), $input['person_id'], $input['permission'], $input['organization_id'], CarbonImmutable::parse($input['effective_from']), ! empty($input['effective_to']) ? CarbonImmutable::parse($input['effective_to']) : null, (bool) ($input['emergency'] ?? false), $this->idempotencyKey('access.org_wide_grant.request'));
+
         return response()->json(['status' => 'requested'], 201);
     }
 
     public function orgWideApproval(Request $request, string $requestId, string $action): JsonResponse
     {
         $grantRequest = OrgWideGrantRequest::query()->findOrFail($requestId);
-        if ($action === 'approve') app(GrantScopePermission::class)->approve($this->actor(), $grantRequest, $this->idempotencyKey('access.org_wide_grant.approve'));
-        else app(GrantScopePermission::class)->execute($this->actor(), $grantRequest, $this->idempotencyKey('access.org_wide_grant.execute'));
+        if ($action === 'approve') {
+            app(GrantScopePermission::class)->approve($this->actor(), $grantRequest, $this->idempotencyKey('access.org_wide_grant.approve'));
+        } else {
+            app(GrantScopePermission::class)->execute($this->actor(), $grantRequest, $this->idempotencyKey('access.org_wide_grant.execute'));
+        }
+
         return response()->json(['status' => $action]);
     }
 
     public function revokeGrant(Request $request, string $grantId): JsonResponse
     {
         app(RevokeScopePermission::class)->revoke($this->actor(), ScopeGrant::query()->findOrFail($grantId), $this->idempotencyKey('access.revoke'));
+
         return response()->json(['status' => 'revoked']);
     }
 
@@ -128,12 +142,14 @@ final class AccessApiController extends Controller
     {
         $input = $request->validate(['delegator_person_id' => ['required', 'string'], 'delegate_person_id' => ['required', 'string'], 'permission' => ['nullable', 'string', 'max:120'], 'scope_type' => ['nullable', 'string', 'in:campus,branch,department,organization'], 'scope_id' => ['nullable', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['required', 'date', 'after:effective_from'], 'reason' => ['required', 'string', 'max:1000']]);
         app(DelegateAuthority::class)->delegate($this->actor(), $input['delegator_person_id'], $input['delegate_person_id'], $input['permission'] ?: null, $input['scope_type'] ?: null, $input['scope_id'] ?: null, CarbonImmutable::parse($input['effective_from']), CarbonImmutable::parse($input['effective_to']), $input['reason'], $this->idempotencyKey('access.delegate'));
+
         return response()->json(['status' => 'active'], 201);
     }
 
     public function revokeDelegation(Request $request, string $delegationId): JsonResponse
     {
         app(RevokeDelegation::class)->revoke($this->actor(), Delegation::query()->findOrFail($delegationId), $this->idempotencyKey('access.delegate.revoke'));
+
         return response()->json(['status' => 'revoked']);
     }
 }

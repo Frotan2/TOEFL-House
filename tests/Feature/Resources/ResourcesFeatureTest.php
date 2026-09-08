@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Resources;
 
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Resources\Commands\CirculateBooks;
 use App\Modules\Resources\Commands\DisposeAsset;
 use App\Modules\Resources\Commands\MaintainAsset;
@@ -13,7 +14,6 @@ use App\Modules\Resources\Models\AssetDisposalRequest;
 use App\Modules\Resources\Models\BookCopy;
 use App\Modules\Resources\Models\BookIssuance;
 use App\Modules\Resources\Models\WorkOrder;
-use App\Modules\Organization\Models\Branch;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;

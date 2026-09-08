@@ -16,6 +16,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -34,7 +35,7 @@ use Tests\TestCase;
 final class ClassAndIntakeTransportFeatureTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     private function signInAs(string $personId, string $username): void
     {

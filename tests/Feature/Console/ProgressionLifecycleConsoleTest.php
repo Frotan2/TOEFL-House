@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -36,7 +37,7 @@ use Tests\TestCase;
 final class ProgressionLifecycleConsoleTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -67,7 +68,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -129,6 +130,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
     {
         return DB::connection()->getTablePrefix().'progression_decisions';
     }
+
     /**
      * Level-aware decisions require the student to hold an ACTIVE seat in
      * the class (the domain will not decide for an unseated or requested
@@ -148,7 +150,6 @@ final class ProgressionLifecycleConsoleTest extends TestCase
 
         return $seatId;
     }
-
 
     private function activeSeatFor(string $studentId): string
     {

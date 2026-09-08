@@ -39,7 +39,9 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
 use Tests\Concerns\BuildsStudents;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -54,9 +56,9 @@ use Tests\TestCase;
 final class BranchIsolationAdversarialTest extends TestCase
 {
     use BuildsActors;
+    use BuildsSessions;
     use BuildsStudents;
-    use \Tests\Concerns\BuildsTeachers;
-    use \Tests\Concerns\BuildsSessions;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private const CAPS = [
@@ -78,7 +80,6 @@ final class BranchIsolationAdversarialTest extends TestCase
     private string $periodId;
 
     private string $programVersionId;
-
 
     private string $availabilityB;
 

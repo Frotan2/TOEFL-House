@@ -21,7 +21,6 @@ use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Hr\Commands\MaintainContractVersion;
-use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Models\ContractVersion;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Payroll\Commands\CalculatePayroll;
@@ -33,6 +32,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -45,7 +45,7 @@ use Tests\TestCase;
 final class DeliveryFactsDirectSqlAttackTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'p16atk-teacher-1';
@@ -67,7 +67,7 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
 
         $hrManager = $this->grantedActor('p16atk-hr-1', ['hr.employ']);
         $teacher = $this->buildActiveTeacher($this->teacherPersonId, null, 'delivery918');
-        $employment = ['employment_id' => (string) \App\Modules\Hr\Models\Employment::query()
+        $employment = ['employment_id' => (string) Employment::query()
             ->where('person_id', $this->teacherPersonId)->where('lifecycle_state', '!=', 'terminated')
             ->value('id')]; // buildActiveTeacher already opened this employment
         $this->employmentId = $employment['employment_id'];

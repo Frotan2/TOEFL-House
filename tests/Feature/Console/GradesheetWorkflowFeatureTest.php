@@ -14,7 +14,6 @@ use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Queries\GradesheetQuery;
-use App\Support\Errors\AuthorizationDenied;
 use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
@@ -23,11 +22,14 @@ use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Students\Models\Student;
+use App\Support\Authorization\Actor;
+use App\Support\Errors\AuthorizationDenied;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -41,7 +43,7 @@ use Tests\TestCase;
 final class GradesheetWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -80,7 +82,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -144,7 +146,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
     private function gradesheetFor(string $personId): array
     {
         return app(GradesheetQuery::class)->forClass(
-            new \App\Support\Authorization\Actor($personId, $personId),
+            new Actor($personId, $personId),
             ClassModel::query()->findOrFail($this->classId),
         );
     }
@@ -153,7 +155,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
     {
         try {
             app(GradesheetQuery::class)->forClass(
-                new \App\Support\Authorization\Actor($personId, $personId),
+                new Actor($personId, $personId),
                 ClassModel::query()->findOrFail($this->classId),
             );
             $this->fail('expected the gradesheet viewer rule to deny '.$personId);

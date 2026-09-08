@@ -17,12 +17,12 @@ use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Organization\Models\Branch;
-use App\Modules\Students\Models\Student;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -37,7 +37,7 @@ use Tests\TestCase;
 final class WaitlistOperationsConsoleTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $branchId;

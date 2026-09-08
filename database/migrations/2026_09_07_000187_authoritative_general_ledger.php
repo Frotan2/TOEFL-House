@@ -228,6 +228,6 @@ return new class extends Migration
         // One-way convergence: removing source types or their exactly-once
         // indexes would allow a money fact to be re-posted or to exist without
         // an accounting entry. Restore from a reviewed pre-convergence baseline.
-        throw new \RuntimeException('Authoritative general-ledger convergence is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
+        throw new RuntimeException('Authoritative general-ledger convergence is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
     }
 };

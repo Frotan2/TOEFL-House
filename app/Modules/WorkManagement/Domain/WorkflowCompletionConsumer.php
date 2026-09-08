@@ -6,9 +6,9 @@ namespace App\Modules\WorkManagement\Domain;
 
 use App\Modules\Outbox\Domain\EventConsumer;
 use App\Modules\Outbox\Models\DomainEvent;
+use App\Modules\WorkManagement\Models\WorkflowInstance;
 use App\Modules\WorkManagement\Models\WorkItem;
 use App\Modules\WorkManagement\Models\WorkItemHistory;
-use App\Modules\WorkManagement\Models\WorkflowInstance;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;

@@ -13,8 +13,6 @@ use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Commands\ManageAssessmentResult;
 use App\Modules\Academic\Commands\RecordAttendance;
 use App\Modules\Academic\Domain\TranscriptComposer;
-use App\Modules\Academic\Placement\Commands\DecidePlacement;
-use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
@@ -29,6 +27,8 @@ use App\Modules\Academic\Models\ProgramVersionLevel;
 use App\Modules\Academic\Models\ProgressionDecision;
 use App\Modules\Academic\Models\ResultCorrection;
 use App\Modules\Academic\Models\Transcript;
+use App\Modules\Academic\Placement\Commands\DecidePlacement;
+use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Queries\TranscriptQuery;
 use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
@@ -48,6 +48,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsPlacementCatalog;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -59,15 +61,14 @@ use Tests\TestCase;
 final class TranscriptIssuanceFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
-    use \Tests\Concerns\BuildsTeachers;
-    use \Tests\Concerns\BuildsSessions;
+    use BuildsSessions;
+    use BuildsTeachers;
 
     private string $programVersionId;
 
     private string $periodId;
 
     private string $levelA1Id;
-
 
     private string $classId;
 

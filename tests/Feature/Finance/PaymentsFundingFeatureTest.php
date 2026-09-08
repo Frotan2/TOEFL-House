@@ -15,7 +15,6 @@ use App\Modules\Finance\Commands\MaintainFinancialPeriod;
 use App\Modules\Finance\Commands\PostObligation;
 use App\Modules\Finance\Commands\RecordPayment;
 use App\Modules\Finance\Commands\RefundPayment;
-use App\Modules\Finance\Queries\FinancialBalanceQuery;
 use App\Modules\Finance\Models\Discount;
 use App\Modules\Finance\Models\FinancialCorrection;
 use App\Modules\Finance\Models\FinancialPeriod;
@@ -24,8 +23,9 @@ use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\ObligationLine;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PaymentAllocation;
-use App\Modules\Organization\Models\Organization;
 use App\Modules\Finance\Models\Refund;
+use App\Modules\Finance\Queries\FinancialBalanceQuery;
+use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
@@ -140,12 +140,12 @@ final class PaymentsFundingFeatureTest extends TestCase
         // this assertion pass while executing the same balance function twice.
         $guards = DB::select(
             "SELECT c.relname AS relation_name, t.tgname AS guard_name, pg_get_triggerdef(t.oid) AS guard_definition\n"
-            . "FROM pg_trigger t\n"
-            . "JOIN pg_class c ON c.oid = t.tgrelid\n"
-            . "JOIN pg_proc p ON p.oid = t.tgfoid\n"
-            . "WHERE NOT t.tgisinternal\n"
-            . "  AND ((c.relname = ? AND p.proname = ?) OR (c.relname = ? AND p.proname = ?))\n"
-            . "ORDER BY c.relname, t.tgname",
+            ."FROM pg_trigger t\n"
+            ."JOIN pg_class c ON c.oid = t.tgrelid\n"
+            ."JOIN pg_proc p ON p.oid = t.tgfoid\n"
+            ."WHERE NOT t.tgisinternal\n"
+            ."  AND ((c.relname = ? AND p.proname = ?) OR (c.relname = ? AND p.proname = ?))\n"
+            .'ORDER BY c.relname, t.tgname',
             ['fund_allocations', 'fund_allocations_balance_guard', 'payment_allocations', 'payment_allocations_balance_guard'],
         );
 

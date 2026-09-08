@@ -8,6 +8,7 @@ use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\Program;
 use App\Support\Authorization\Actor;
+use Carbon\CarbonImmutable;
 
 /**
  * Canonical Academic setup chain.
@@ -69,8 +70,8 @@ trait BuildsAcademicStructure
             'Term '.$keyPrefix,
             // Anchored to today so the term always spans the current date;
             // fixed literals silently expire and make tests time-fragile.
-            \Carbon\CarbonImmutable::today()->subMonth(),
-            \Carbon\CarbonImmutable::today()->addMonths(3),
+            CarbonImmutable::today()->subMonth(),
+            CarbonImmutable::today()->addMonths(3),
             $keyPrefix.'-period',
         );
         $structure->transitionPeriod(

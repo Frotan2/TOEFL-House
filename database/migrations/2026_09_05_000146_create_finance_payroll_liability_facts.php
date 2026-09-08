@@ -61,7 +61,7 @@ return new class extends Migration
             $table->foreign('recognized_by')->references('id')->on('people');
         });
         DB::statement("ALTER TABLE payroll_liability_facts ADD CONSTRAINT payroll_liability_source_check CHECK (source_type IN ('payroll_result','payroll_adjustment'))");
-        DB::statement("ALTER TABLE payroll_liability_facts ADD CONSTRAINT payroll_liability_amount_check CHECK (amount <> 0)");
+        DB::statement('ALTER TABLE payroll_liability_facts ADD CONSTRAINT payroll_liability_amount_check CHECK (amount <> 0)');
         DB::statement("ALTER TABLE payroll_liability_facts ADD CONSTRAINT payroll_liability_evidence_check CHECK (evidence_ref <> '' AND correlation_id <> '')");
         DB::statement('CREATE UNIQUE INDEX payroll_liability_one_recognition_per_source ON payroll_liability_facts (source_type, source_id)');
         DB::statement(<<<'SQL'

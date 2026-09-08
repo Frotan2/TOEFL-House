@@ -57,7 +57,7 @@ final class FinancialGateEvidence
      * must never persist or audit them without deriving them back from the
      * HMAC-protected evidence.
      *
-     * @param array<string, mixed> $assessment
+     * @param  array<string, mixed>  $assessment
      * @return array{evidence: array<string, mixed>, digest: string, signature: string, satisfied: bool, uncovered: numeric-string, remaining: numeric-string, assessed_at: string}|null
      */
     public static function verifiedAssessment(array $assessment): ?array
@@ -117,7 +117,7 @@ final class FinancialGateEvidence
      * the signed source-category totals. A signed malformed extension is not
      * acceptable enrollment evidence.
      *
-     * @param array<string, mixed> $evidence
+     * @param  array<string, mixed>  $evidence
      */
     private static function coverageCommitmentsAreWellFormed(array $evidence): bool
     {

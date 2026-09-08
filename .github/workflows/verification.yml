@@ -11,9 +11,13 @@ on:
   pull_request:
 
 # The locked runtime. Changing these requires updating the lock documents and
-# re-running the full verification chain.
+# re-running the full verification chain. PHP 8.4 is the locked version: it is
+# the best-performing build in the composer.json "^8.2" range, ships every
+# required extension (posix/sockets included), and is exactly what
+# scripts/runtime/provision.sh installs — CI and the local runtime are the same.
+# See docs/RUNTIME_ENVIRONMENT_LOCK.md.
 env:
-  PHP_VERSION: '8.2'
+  PHP_VERSION: '8.4'
   NODE_VERSION: '22'
   POSTGRES_VERSION: '18'
 

@@ -13,7 +13,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class StudentReactConvergenceTest extends TestCase
 {
-
     public function test_students_api_exposes_canonical_lifecycle_operations(): void
     {
         $routes = $this->source('routes/api.php');
@@ -56,7 +55,6 @@ final class StudentReactConvergenceTest extends TestCase
         self::assertStringContainsString('admission_decisions_finalize_applicant', $staging);
         self::assertStringContainsString('AFTER UPDATE OF lifecycle_state', $staging);
     }
-
 
     private function source(string $relativePath): string
     {

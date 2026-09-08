@@ -277,6 +277,6 @@ return new class extends Migration
         // Historical null snapshots deliberately remain unknown. Dropping the
         // guards would reopen a cross-organization reporting disclosure path,
         // so this convergence migration is intentionally forward-only.
-        throw new \RuntimeException('Reporting fund and dashboard provenance convergence is one-way; do not erase tenant-bound reporting safeguards.');
+        throw new RuntimeException('Reporting fund and dashboard provenance convergence is one-way; do not erase tenant-bound reporting safeguards.');
     }
 };

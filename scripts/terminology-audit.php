@@ -9,7 +9,6 @@ declare(strict_types=1);
  * occurrence exists. Historical documentation and explicit compatibility
  * boundaries may legitimately retain a legacy term.
  */
-
 $root = dirname(__DIR__);
 
 /** @var array<string, string> $terms */
@@ -71,7 +70,7 @@ $iterator = new RecursiveIteratorIterator(
 );
 
 foreach ($iterator as $fileInfo) {
-    if (!$fileInfo instanceof SplFileInfo || !$fileInfo->isFile()) {
+    if (! $fileInfo instanceof SplFileInfo || ! $fileInfo->isFile()) {
         continue;
     }
 
@@ -101,12 +100,12 @@ foreach ($iterator as $fileInfo) {
     $relative = ltrim(str_replace($root, '', $path), DIRECTORY_SEPARATOR);
     $extension = strtolower($fileInfo->getExtension());
     $isBlade = str_ends_with(strtolower($relative), '.blade.php');
-    if (!$isBlade && !in_array($extension, $extensions, true)) {
+    if (! $isBlade && ! in_array($extension, $extensions, true)) {
         continue;
     }
 
     $content = file_get_contents($path);
-    if ($content === false || !mb_check_encoding($content, 'UTF-8')) {
+    if ($content === false || ! mb_check_encoding($content, 'UTF-8')) {
         continue;
     }
 
@@ -130,6 +129,7 @@ foreach ($iterator as $fileInfo) {
             if ($isAllowed) {
                 $allowed++;
                 printf("ALLOWED %s:%d `%s` → `%s`\n", $relative, $lineNumber + 1, trim($line), $replacement);
+
                 continue;
             }
 

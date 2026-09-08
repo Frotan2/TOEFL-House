@@ -32,6 +32,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -46,7 +47,7 @@ use Tests\TestCase;
 final class CrossModuleBoundaryAttackTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'bd-teacher-1';

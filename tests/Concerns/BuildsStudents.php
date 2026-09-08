@@ -8,6 +8,7 @@ use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Students\Commands\TransferStudentHomeBranch;
 use App\Modules\Students\Models\Student;
 use App\Support\Identifiers\RandomIdentifier;
 
@@ -92,15 +93,14 @@ trait BuildsStudents
      */
     protected function transferStudentHome(string $studentId, string $targetBranchId, string $key): void
     {
-        $student = \App\Modules\Students\Models\Student::query()->findOrFail($studentId);
+        $student = Student::query()->findOrFail($studentId);
         if (trim((string) $student->current_home_branch_id) === trim($targetBranchId)) {
             return;
         }
 
         $actor = $this->grantedActor($key.'-tr', ['students.transfer']);
 
-        app(\App\Modules\Students\Commands\TransferStudentHomeBranch::class)
+        app(TransferStudentHomeBranch::class)
             ->transfer($actor, $student, $targetBranchId, 'fixture branch transfer', $key.'-trk');
     }
 }
-

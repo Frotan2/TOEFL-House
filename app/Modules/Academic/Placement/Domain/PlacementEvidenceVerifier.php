@@ -7,10 +7,11 @@ namespace App\Modules\Academic\Placement\Domain;
 use App\Modules\Academic\Placement\Models\PlacementAttempt;
 use App\Modules\Academic\Placement\Models\PlacementQuestion;
 use App\Modules\Academic\Placement\Models\PlacementResponse;
-use App\Modules\Academic\Placement\Models\PlacementSection;
 use App\Modules\Academic\Placement\Models\PlacementRubric;
+use App\Modules\Academic\Placement\Models\PlacementSection;
 use App\Modules\Academic\Placement\Models\PlacementSectionResult;
 use App\Support\Errors\BusinessRejection;
+use Illuminate\Support\Collection;
 
 /**
  * Reads the immutable Placement evidence set before it is allowed to drive a
@@ -102,7 +103,7 @@ final class PlacementEvidenceVerifier
             return false;
         }
 
-        /** @var \Illuminate\Support\Collection<string, PlacementSection> $sections */
+        /** @var Collection<string, PlacementSection> $sections */
         $sections = PlacementSection::query()
             ->where('test_version_id', $attempt->test_version_id)
             ->where('lifecycle_state', 'published')

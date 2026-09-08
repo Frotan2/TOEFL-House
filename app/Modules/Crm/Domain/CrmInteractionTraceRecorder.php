@@ -6,8 +6,8 @@ namespace App\Modules\Crm\Domain;
 
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Placement\Models\PlacementAttempt;
-use App\Modules\Audit\Models\AuditEvent;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Audit\Models\AuditEvent;
 use App\Modules\Communication\Models\Message;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorInteraction;

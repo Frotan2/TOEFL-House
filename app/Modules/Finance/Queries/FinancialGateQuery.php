@@ -203,7 +203,7 @@ final class FinancialGateQuery
     }
 
     /**
-     * @param array{allocated: string, reversed: string, funded: string, discounted: string, decreased: string, increased: string, original: string, remaining: string} $breakdown
+     * @param  array{allocated: string, reversed: string, funded: string, discounted: string, decreased: string, increased: string, original: string, remaining: string}  $breakdown
      * @return numeric-string
      */
     private function actualSettlementReduction(array $breakdown): string
@@ -237,7 +237,7 @@ final class FinancialGateQuery
      * as extra coverage would incorrectly activate a seat from corrupted or
      * pre-hardening source facts.
      *
-     * @param numeric-string $remaining
+     * @param  numeric-string  $remaining
      */
     private function assertNonNegativeObligationRemainder(Obligation $obligation, string $remaining): void
     {

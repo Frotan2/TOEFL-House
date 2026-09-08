@@ -6,8 +6,8 @@ namespace App\Modules\Reporting\Queries;
 
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Finance\Models\FundingSource;
-use App\Modules\Organization\Models\Organization;
 use App\Modules\Finance\Queries\FinancialBalanceQuery;
+use App\Modules\Organization\Models\Organization;
 use App\Modules\Reporting\Domain\MetricCalculator;
 use App\Support\Errors\BusinessRejection;
 
@@ -26,7 +26,7 @@ final class FundUtilizationCalculator implements MetricCalculator
         }
         /** @var FundingSource|null $fund */
         $fund = FundingSource::query()->find($scopeId);
-        $organizationId = trim((string) ($fund?->organization_id ?? ''));
+        $organizationId = trim($fund === null ? '' : (string) ($fund->organization_id ?? ''));
         if ($fund === null || $organizationId === '' || ! Organization::query()
             ->whereKey($organizationId)
             ->where('lifecycle_state', 'active')
@@ -40,7 +40,7 @@ final class FundUtilizationCalculator implements MetricCalculator
         if ($periodEnd === null) {
             throw BusinessRejection::forCode('reporting.period_unknown', 'the financial period does not exist');
         }
-        $result = ($this->balances ?? new FinancialBalanceQuery())->fundUtilization($fund, (string) $periodEnd);
+        $result = ($this->balances ?? new FinancialBalanceQuery)->fundUtilization($fund, (string) $periodEnd);
 
         return ['value' => $result['utilization'], 'meta' => [
             'allocated' => $result['allocated'], 'committed' => $result['committed'],

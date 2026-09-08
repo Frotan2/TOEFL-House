@@ -16,18 +16,19 @@ use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Queries\TimetableQuery;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Errors\BusinessRejection;
-use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 final class AcademicRoomsAndSectionsFeatureTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsSessions;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsSessions;
+    use BuildsTeachers;
 
     private string $skillId;
 

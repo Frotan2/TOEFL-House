@@ -20,11 +20,11 @@ use App\Modules\Academic\Placement\Models\PlacementSection;
 use App\Modules\Academic\Placement\Models\PlacementSectionResult;
 use App\Modules\Academic\Placement\Models\PlacementTest;
 use App\Modules\Academic\Placement\Models\PlacementTestVersion;
-use App\Modules\Documents\Commands\RegisterDocument;
 use App\Modules\Academic\Placement\Queries\AcademicEligibilitySnapshotQuery;
 use App\Modules\Academic\Placement\Queries\PlacementAttemptableVersionQuery;
 use App\Modules\Academic\Placement\Queries\PlacementFinanceLinkQuery;
 use App\Modules\Academic\Placement\Queries\PlacementProfileQuery;
+use App\Modules\Documents\Commands\RegisterDocument;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

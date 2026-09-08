@@ -25,7 +25,7 @@ final class CrmReportingEvidence
     public const CONVERSION_EPOCH = 'crm_conversion_time_v1';
 
     /**
-     * @param object{starts_on: string, ends_on: string} $period
+     * @param  object{starts_on: string, ends_on: string}  $period
      * @return array{starts_at: string, ends_exclusive_at: string}
      */
     public static function window(object $period): array
@@ -56,7 +56,9 @@ final class CrmReportingEvidence
             ->greaterThanOrEqualTo(CarbonImmutable::parse((string) $effectiveAt, 'UTC'));
     }
 
-    /** @return Builder */
+    /**
+     * @param  array{starts_at: string, ends_exclusive_at: string}  $window
+     */
     public static function capturedIn(array $window, ?string $scopeId): Builder
     {
         $query = DB::table('visitors')
@@ -71,7 +73,9 @@ final class CrmReportingEvidence
         return $query;
     }
 
-    /** @return Builder */
+    /**
+     * @param  array{starts_at: string, ends_exclusive_at: string}  $window
+     */
     public static function convertedIn(array $window, ?string $scopeId): Builder
     {
         $query = DB::table('visitor_conversions')
@@ -93,7 +97,7 @@ final class CrmReportingEvidence
      * metric cohort. Periods beginning before the epoch are independently
      * incomplete because old rows cannot be assigned truthfully at all.
      *
-     * @return Builder
+     * @param  array{starts_at: string, ends_exclusive_at: string}  $window
      */
     public static function unclassifiedCapturesIn(array $window, ?string $scopeId): Builder
     {
@@ -112,7 +116,9 @@ final class CrmReportingEvidence
         return $query;
     }
 
-    /** @return Builder */
+    /**
+     * @param  array{starts_at: string, ends_exclusive_at: string}  $window
+     */
     public static function unclassifiedConversionsIn(array $window, ?string $scopeId): Builder
     {
         $query = DB::table('visitor_conversions')

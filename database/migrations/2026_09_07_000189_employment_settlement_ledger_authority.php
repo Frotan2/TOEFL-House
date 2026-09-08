@@ -237,6 +237,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new \RuntimeException('Employment-settlement ledger authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
+        throw new RuntimeException('Employment-settlement ledger authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
     }
 };

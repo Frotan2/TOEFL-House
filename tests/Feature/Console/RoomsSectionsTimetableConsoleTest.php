@@ -16,6 +16,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -29,8 +31,8 @@ use Tests\TestCase;
 final class RoomsSectionsTimetableConsoleTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsSessions;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsSessions;
+    use BuildsTeachers;
 
     private string $skillId;
 

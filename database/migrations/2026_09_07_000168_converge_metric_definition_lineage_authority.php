@@ -203,6 +203,6 @@ return new class extends Migration
         // The fields distinguish preserved historical claims from the live
         // canonical registry. Dropping them would erase that audit boundary,
         // so this convergence migration is intentionally forward-only.
-        throw new \RuntimeException('Metric-definition lineage convergence is one-way; do not erase preserved owner claims.');
+        throw new RuntimeException('Metric-definition lineage convergence is one-way; do not erase preserved owner claims.');
     }
 };

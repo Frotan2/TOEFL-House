@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Canonical;
 
+use App\Modules\Academic\Commands\MaintainClass;
+use App\Modules\Academic\Commands\MaintainSkill;
+use App\Modules\Academic\Commands\MaintainTeacherProfile;
+use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Academic\Models\TeacherProfile;
+use App\Modules\Academic\Models\TeacherSkillAuthority;
 use App\Modules\Identity\Models\Person;
+use App\Support\Authorization\Actor;
+use Carbon\CarbonImmutable;
 use Tests\Concerns\BuildsAcademicStructure;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\BuildsEnrollments;
@@ -36,7 +44,7 @@ abstract class CanonicalTestCase extends TestCase
     use BuildsTeachers;
 
     /** @param list<string> $capabilities */
-    protected function actorWith(string $actorId, array $capabilities): \App\Support\Authorization\Actor
+    protected function actorWith(string $actorId, array $capabilities): Actor
     {
         return $this->grantedActor($actorId, $capabilities);
     }
@@ -64,7 +72,7 @@ abstract class CanonicalTestCase extends TestCase
     }
 
     /** @return array<string, string> */
-    protected function newAcademicChain(\App\Support\Authorization\Actor $officer, string $keyPrefix, int $capacity = 25, ?string $branchId = null): array
+    protected function newAcademicChain(Actor $officer, string $keyPrefix, int $capacity = 25, ?string $branchId = null): array
     {
         return $this->buildAcademicChain($officer, $keyPrefix, $capacity, $branchId);
     }
@@ -74,7 +82,7 @@ abstract class CanonicalTestCase extends TestCase
      *
      * @return array<string, string>
      */
-    protected function newActiveClass(\App\Support\Authorization\Actor $officer, string $keyPrefix, int $classCapacity = 2, int $offeringCapacity = 25): array
+    protected function newActiveClass(Actor $officer, string $keyPrefix, int $classCapacity = 2, int $offeringCapacity = 25): array
     {
         $delivery = $this->buildActiveClass($officer, $keyPrefix, $classCapacity, $offeringCapacity);
 
@@ -87,7 +95,7 @@ abstract class CanonicalTestCase extends TestCase
         $tag = substr($keyPrefix, 0, 6).substr(md5($keyPrefix), 0, 4);
 
         $skillId = $this->newSkillId($officer, $tag.'-sk');
-        $profileId = \App\Modules\Academic\Models\TeacherProfile::query()
+        $profileId = TeacherProfile::query()
             ->where('person_id', $delivery['teacher_person_id'])->value('id');
 
         if ($profileId !== null) {
@@ -104,7 +112,7 @@ abstract class CanonicalTestCase extends TestCase
     }
 
     /** @return array{enrollment_id: string, correlation_id: string} */
-    protected function newSeatRequest(\App\Support\Authorization\Actor $requester, string $studentId, string $classId, string $key, ?string $offeringId = null): array
+    protected function newSeatRequest(Actor $requester, string $studentId, string $classId, string $key, ?string $offeringId = null): array
     {
         return $this->requestSeat($requester, $studentId, $classId, $key, $offeringId);
     }
@@ -115,14 +123,14 @@ abstract class CanonicalTestCase extends TestCase
      * Sessions require explicit subject/skill authority; the domain refuses to
      * schedule teaching with no stated subject.
      */
-    protected function newSkillId(\App\Support\Authorization\Actor $officer, string $key): string
+    protected function newSkillId(Actor $officer, string $key): string
     {
         // Skill registration is branchless governance and needs an
         // organization-wide `academic.skill` grant, which a branch-scoped
         // academic officer does not carry.
         $registrar = $this->actorWith('canon-skill-registrar', ['academic.skill']);
 
-        return app(\App\Modules\Academic\Commands\MaintainSkill::class)
+        return app(MaintainSkill::class)
             ->register($registrar, $key, ucfirst(str_replace('-', ' ', $key)), $key.'-skill')['skill_id'];
     }
 
@@ -144,11 +152,11 @@ abstract class CanonicalTestCase extends TestCase
         // authorizeSkill is approval-side; declareAvailability is management-side.
         $approver = $this->actorWith($keyPrefix.'-sk-a', ['academic.teacher_approve']);
         $manager = $this->actorWith($keyPrefix.'-sk-m', ['academic.teacher_manage']);
-        $profiles = app(\App\Modules\Academic\Commands\MaintainTeacherProfile::class);
-        $profile = \App\Modules\Academic\Models\TeacherProfile::query()->findOrFail($teacherProfileId);
-        $from = \Carbon\CarbonImmutable::today()->subYear()->toDateString();
+        $profiles = app(MaintainTeacherProfile::class);
+        $profile = TeacherProfile::query()->findOrFail($teacherProfileId);
+        $from = CarbonImmutable::today()->subYear()->toDateString();
 
-        if (! \App\Modules\Academic\Models\TeacherSkillAuthority::query()
+        if (! TeacherSkillAuthority::query()
             ->where('teacher_profile_id', $teacherProfileId)
             ->where('skill_id', $skillId)->where('branch_id', $branchId)->exists()) {
             $profiles->authorizeSkill(
@@ -157,26 +165,26 @@ abstract class CanonicalTestCase extends TestCase
             );
         }
         $profiles->declareAvailability(
-            $manager, \App\Modules\Academic\Models\TeacherProfile::query()->findOrFail($teacherProfileId),
+            $manager, TeacherProfile::query()->findOrFail($teacherProfileId),
             $branchId, $weekday, '00:00', '23:59', $from, null, 'available', $keyPrefix.'-sk-avail'
         );
     }
 
     /** Attributes a skill to the class's effective teacher assignment. */
     protected function attributeSkillToAssignment(
-        \App\Support\Authorization\Actor $officer,
+        Actor $officer,
         string $classId,
         string $skillId,
         string $key
     ): void {
-        $assignment = \App\Modules\Academic\Models\TeacherAssignment::query()
+        $assignment = TeacherAssignment::query()
             ->where('class_id', $classId)->whereNull('effective_to')->firstOrFail();
 
         // Attribution is a teacher-management action; the scheduling officer
         // does not necessarily hold that capability.
         $manager = $this->actorWith($key.'-mgr', ['academic.teacher_manage', 'academic.schedule']);
 
-        app(\App\Modules\Academic\Commands\MaintainClass::class)
+        app(MaintainClass::class)
             ->assignSkill($manager, $assignment, $skillId, $key);
     }
 }

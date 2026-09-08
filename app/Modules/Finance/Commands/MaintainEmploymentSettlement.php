@@ -11,9 +11,9 @@ use App\Modules\Finance\Models\EmploymentSettlement;
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Employment;
-use App\Modules\Payroll\Domain\SettlementProposalApproval;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
+use App\Modules\Payroll\Domain\SettlementProposalApproval;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
@@ -128,7 +128,6 @@ final class MaintainEmploymentSettlement
         }
     }
 
-    /** @return \App\Modules\Finance\Models\FinancialPeriod */
     private function openPeriodFor(Carbon $date): FinancialPeriod
     {
         $periods = FinancialPeriod::query()

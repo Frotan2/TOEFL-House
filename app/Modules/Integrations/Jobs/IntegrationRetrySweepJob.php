@@ -22,7 +22,6 @@ final class IntegrationRetrySweepJob implements JobHandler
 
     /**
      * @param  array<string, mixed>  $context
-     *
      * @return array<string, int>
      */
     public function handle(array $context): array

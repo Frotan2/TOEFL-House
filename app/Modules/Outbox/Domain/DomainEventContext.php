@@ -126,8 +126,8 @@ final class DomainEventContext
     }
 
     /**
-     * @param array<string, mixed> $fields
-     * @param list<string> $keys
+     * @param  array<string, mixed>  $fields
+     * @param  list<string>  $keys
      */
     private static function first(array $fields, array $keys): ?string
     {
@@ -142,8 +142,8 @@ final class DomainEventContext
     }
 
     /**
-     * @param array<string, mixed> $fields
-     * @param list<string> $keys
+     * @param  array<string, mixed>  $fields
+     * @param  list<string>  $keys
      */
     private static function hasAny(array $fields, array $keys): bool
     {

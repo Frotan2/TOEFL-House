@@ -10,11 +10,10 @@ declare(strict_types=1);
  * data-writing migrations that must be explicitly justified as transitional
  * reference-data behavior.
  */
-
 $root = dirname(__DIR__);
 $migrationsDir = $root.'/database/migrations';
 
-if (!is_dir($migrationsDir)) {
+if (! is_dir($migrationsDir)) {
     fwrite(STDERR, "ERROR: database/migrations directory is missing\n");
     exit(1);
 }
@@ -35,6 +34,7 @@ foreach ($files as $file) {
     // ordinal is the sequence segment after the date, not the year.
     if (preg_match('/^\d{4}_\d{2}_\d{2}_(\d{6})_[^\.]+\.php$/', $file, $match) !== 1) {
         $errors[] = "invalid migration filename: {$file}";
+
         continue;
     }
 
@@ -47,7 +47,7 @@ foreach ($files as $file) {
 
     $content = file_get_contents($migrationsDir.'/'.$file) ?: '';
     $hasDataWrite = preg_match('/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DB::table\s*\(|->insert\s*\(|->update\s*\(|Model::query\(\)->create|::create\s*\()\b/i', $content) === 1;
-    if ($hasDataWrite && !in_array($file, $allowedDataMigrations, true)) {
+    if ($hasDataWrite && ! in_array($file, $allowedDataMigrations, true)) {
         $warnings[] = "data-writing migration requires explicit review: {$file}";
     }
 }

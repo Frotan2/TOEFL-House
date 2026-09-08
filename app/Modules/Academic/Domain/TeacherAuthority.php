@@ -8,9 +8,9 @@ use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSession;
 use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Academic\Models\TeacherAssignmentSkill;
+use App\Modules\Academic\Models\TeacherAvailability;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\TeacherSkillAuthority;
-use App\Modules\Academic\Models\TeacherAvailability;
 use App\Modules\Academic\Models\TeacherWorkloadLimit;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Hr\Models\EmploymentStatus;
@@ -19,6 +19,7 @@ use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use Carbon\CarbonImmutable;
@@ -252,6 +253,7 @@ final class TeacherAuthority
             ->where(function ($valid) use ($endsOn): void {
                 if ($endsOn === null) {
                     $valid->whereNull('effective_to');
+
                     return;
                 }
                 $valid->whereNull('effective_to')->orWhere('effective_to', '>=', $endsOn->toDateString());
@@ -354,7 +356,7 @@ final class TeacherAuthority
         }
     }
 
-    private function requireCapability(Actor $actor, string $capability, ?\App\Support\Authorization\StructureScope $scope, string $errorCode): void
+    private function requireCapability(Actor $actor, string $capability, ?StructureScope $scope, string $errorCode): void
     {
         $decision = $this->access->decide($actor, $capability, $scope);
         if (! $decision->allowed) {
@@ -362,13 +364,14 @@ final class TeacherAuthority
         }
     }
 
-    private function branchScope(string $branchId): \App\Support\Authorization\StructureScope
+    private function branchScope(string $branchId): StructureScope
     {
         $branch = trim($branchId) === '' ? null : Branch::query()->whereKey($branchId)->first();
         $scope = $branch?->structureScope();
         if ($branch === null || $branch->lifecycle_state !== 'active' || $scope === null || $scope->organizationId === '' || $scope->campusId === null) {
             throw BusinessRejection::forCode('academic.teacher_branch_provenance_required', 'teacher authority requires active branch, campus, and organization provenance');
         }
+
         return $scope;
     }
 }

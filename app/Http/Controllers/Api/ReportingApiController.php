@@ -18,6 +18,7 @@ use App\Support\Errors\BusinessRejection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /** JSON interface for source-linked reporting and dashboard projections. */
 final class ReportingApiController extends Controller
@@ -49,6 +50,7 @@ final class ReportingApiController extends Controller
                 $branchIds = array_keys($branchOrganizations);
                 if ($branchIds === []) {
                     $query->whereRaw('1 = 0');
+
                     return;
                 }
                 $query->whereIn('current_home_branch_id', $branchIds)
@@ -59,6 +61,7 @@ final class ReportingApiController extends Controller
             ->get(['id', 'current_home_branch_id', 'originating_branch_id'])
             ->mapWithKeys(static function (Student $student) use ($branchOrganizations): array {
                 $branchId = trim((string) ($student->current_home_branch_id ?: $student->originating_branch_id));
+
                 return isset($branchOrganizations[$branchId]) ? [(string) $student->id => $branchOrganizations[$branchId]] : [];
             })
             ->all();
@@ -68,6 +71,7 @@ final class ReportingApiController extends Controller
             ->get(['id', 'branch_id'])
             ->mapWithKeys(static function (ClassModel $class) use ($branchOrganizations): array {
                 $branchId = trim((string) $class->branch_id);
+
                 return isset($branchOrganizations[$branchId]) ? [(string) $class->id => $branchOrganizations[$branchId]] : [];
             })
             ->all();
@@ -218,12 +222,13 @@ final class ReportingApiController extends Controller
         return response()->json(['status' => 'pinned', 'result' => $result]);
     }
 
-    /** @return \Illuminate\Support\Collection<int, MetricDefinition> */
-    private function resolvedMetrics(): \Illuminate\Support\Collection
+    /** @return Collection<int, MetricDefinition> */
+    private function resolvedMetrics(): Collection
     {
         return MetricDefinition::query()->orderBy('key')->get()->filter(static function (MetricDefinition $metric): bool {
             try {
                 MetricCatalog::assertDefinitionLineage($metric, MetricCatalog::entry((string) $metric->key));
+
                 return true;
             } catch (BusinessRejection) {
                 return false;

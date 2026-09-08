@@ -18,7 +18,6 @@ use App\Modules\Finance\Models\Refund;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Support\Errors\BusinessRejection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Resolves the authoritative double-entry for a Finance source fact.
@@ -37,15 +36,25 @@ use Illuminate\Support\Facades\DB;
 final class LedgerAccountResolver
 {
     public const ACCOUNT_CASH = '1000';
+
     public const ACCOUNT_RECEIVABLE = '1100';
+
     public const ACCOUNT_PAYABLE = '2000';
+
     public const ACCOUNT_PAYROLL_PAYABLE = '2010';
+
     public const ACCOUNT_OPENING_EQUITY = '3000';
+
     public const ACCOUNT_TUITION_REVENUE = '4000';
+
     public const ACCOUNT_FEES_REVENUE = '4100';
+
     public const ACCOUNT_SALARY_EXPENSE = '5000';
+
     public const ACCOUNT_FINANCIAL_AID_EXPENSE = '5100';
+
     public const ACCOUNT_DISCOUNT_EXPENSE = '5200';
+
     public const ACCOUNT_OPERATING_EXPENSE = '6000';
 
     /** Revenue classification for obligation sources. */
@@ -106,7 +115,7 @@ final class LedgerAccountResolver
             'credit_account_id' => $this->accountId(self::ACCOUNT_RECEIVABLE),
             'amount' => (string) $discount->amount,
             'period_id' => (string) $discount->period_id,
-            'organization_id' => $this->organizationForBranch($obligation?->current_home_branch_id ?? $obligation?->originating_branch_id),
+            'organization_id' => $this->organizationForBranch($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id)),
         ];
     }
 
@@ -165,7 +174,7 @@ final class LedgerAccountResolver
             'credit_account_id' => $this->accountId(self::ACCOUNT_RECEIVABLE),
             'amount' => (string) $allocation->amount,
             'period_id' => (string) $obligation?->period_id,
-            'organization_id' => $this->organizationForBranch($allocation->current_home_branch_id ?? $allocation->originating_branch_id ?? $obligation?->current_home_branch_id ?? $obligation?->originating_branch_id),
+            'organization_id' => $this->organizationForBranch($allocation->current_home_branch_id ?? $allocation->originating_branch_id ?? ($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id))),
         ];
     }
 
@@ -294,7 +303,7 @@ final class LedgerAccountResolver
                 'credit_account_id' => $this->accountId(self::ACCOUNT_FINANCIAL_AID_EXPENSE),
                 'amount' => (string) $correction->amount,
                 'period_id' => (string) $correction->period_id,
-                'organization_id' => $this->organizationForBranch($obligation?->current_home_branch_id ?? $obligation?->originating_branch_id),
+                'organization_id' => $this->organizationForBranch($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id)),
             ];
         }
 

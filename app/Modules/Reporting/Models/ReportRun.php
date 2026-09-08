@@ -5,18 +5,27 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Reproducible report execution pinned to a metric version; immutable
  * history.
  *
  * @property string $id
+ * @property string $metric_version_id
+ * @property string $period_key
+ * @property string $scope_type
+ * @property string|null $scope_id
  * @property string $reproducibility_hash
  * @property string $result
  * @property string|null $organization_id
  * @property 'complete'|'incomplete'|null $completeness
  * @property array<string, mixed>|null $meta
  * @property array<string, mixed> $filters
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read string|null $metric_key joined from metric_definitions via the report-listing query
+ * @property-read string|null $metric_name joined from metric_definitions via the report-listing query
  */
 final class ReportRun extends Model
 {

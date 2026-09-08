@@ -16,7 +16,6 @@ use App\Modules\Hr\Models\EmploymentStatus;
 use App\Support\Authorization\Actor;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Canonical teacher fixture.
@@ -96,24 +95,24 @@ trait BuildsTeachers
 
         // Hiring requires an active contract (hr.hire_requires_contract).
         if (! $alreadyActive) {
-        $contractOfficer = $this->grantedActor($keyPrefix.'-hr-contract', ['hr.contract']);
-        // The contract is backdated a year so tests may prepare contract
-        // VERSIONS from earlier dates: a version may not start before its
-        // contract (hr.contract_version_before_contract). The hire itself
-        // stays effective today, which the employment-status ordering relies on.
-        $contract = app(MaintainContract::class)->draft(
-            $contractOfficer,
-            $employmentModel,
-            'Fixture instructor terms',
-            CarbonImmutable::today()->subYear()->toDateString(),
-            $keyPrefix.'-contract-draft',
-        );
-        app(MaintainContract::class)->sign(
-            $contractOfficer,
-            Contract::query()->findOrFail($contract['contract_id']),
-            'evidence/'.$keyPrefix.'/contract',
-            $keyPrefix.'-contract-sign',
-        );
+            $contractOfficer = $this->grantedActor($keyPrefix.'-hr-contract', ['hr.contract']);
+            // The contract is backdated a year so tests may prepare contract
+            // VERSIONS from earlier dates: a version may not start before its
+            // contract (hr.contract_version_before_contract). The hire itself
+            // stays effective today, which the employment-status ordering relies on.
+            $contract = app(MaintainContract::class)->draft(
+                $contractOfficer,
+                $employmentModel,
+                'Fixture instructor terms',
+                CarbonImmutable::today()->subYear()->toDateString(),
+                $keyPrefix.'-contract-draft',
+            );
+            app(MaintainContract::class)->sign(
+                $contractOfficer,
+                Contract::query()->findOrFail($contract['contract_id']),
+                'evidence/'.$keyPrefix.'/contract',
+                $keyPrefix.'-contract-sign',
+            );
 
             app(MaintainEmployment::class)->hire(
                 $hrOfficer,

@@ -220,7 +220,7 @@ final class MaintainTeacherAssignment
                     : ['effective_to' => $effectiveTo->toDateString(), 'lifecycle_state' => 'ended']
                 )->save();
                 $provenance = $this->historicalAssignmentProvenance($assignment);
-                    $this->audit->record($actor->actorId, 'academic.teacher.assignment.close_for_employment', 'teacher_assignment', $assignment->id, $before, [
+                $this->audit->record($actor->actorId, 'academic.teacher.assignment.close_for_employment', 'teacher_assignment', $assignment->id, $before, [
                     'effective_to' => $assignment->effective_to, 'lifecycle_state' => $assignment->lifecycle_state,
                     'employment_id' => $employment->id, 'reason' => $reason, ...$provenance,
                 ]);

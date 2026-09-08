@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain;
 
+use App\Modules\Reporting\Models\MetricDefinition;
 use App\Modules\Reporting\Queries\ActiveEnrollmentCalculator;
 use App\Modules\Reporting\Queries\AttendanceRateCalculator;
 use App\Modules\Reporting\Queries\FundUtilizationCalculator;
@@ -15,7 +16,6 @@ use App\Modules\Reporting\Queries\PlacementReleaseCountCalculator;
 use App\Modules\Reporting\Queries\VisitorCaptureCountCalculator;
 use App\Modules\Reporting\Queries\VisitorConversionCountCalculator;
 use App\Modules\Reporting\Queries\VisitorConversionRateCalculator;
-use App\Modules\Reporting\Models\MetricDefinition;
 use App\Support\Errors\BusinessRejection;
 use Illuminate\Support\Facades\DB;
 
@@ -102,7 +102,7 @@ final class MetricCatalog
      * `funding` label, while `canonical_source_owner` records the authority
      * that live Reporting is allowed to use.
      *
-     * @param array{owner: string, authority: string, scopes: list<string>, calculator: class-string<MetricCalculator>} $entry
+     * @param  array{owner: string, authority: string, scopes: list<string>, calculator: class-string<MetricCalculator>}  $entry
      */
     public static function assertDefinitionLineage(MetricDefinition $definition, array $entry): void
     {

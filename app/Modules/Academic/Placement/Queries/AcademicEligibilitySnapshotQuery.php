@@ -409,5 +409,4 @@ final class AcademicEligibilitySnapshotQuery
             return false;
         }
     }
-
 }

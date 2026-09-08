@@ -11,6 +11,7 @@ use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentHoldEvent;
 use App\Modules\Students\Models\StudentStatus;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -107,34 +108,34 @@ final class StudentLifecycleQuery
             'status_history' => $student->statuses
                 ->filter(fn (StudentStatus $status): bool => (string) $status->effective_from <= $day)
                 ->map(fn (StudentStatus $status): array => [
-                'id' => trim((string) $status->id),
-                'status' => $status->status,
-                'effective_from' => $status->effective_from,
-                'reason' => $status->reason,
-                'actor_id' => trim((string) $status->actor_id),
-            ])->all(),
+                    'id' => trim((string) $status->id),
+                    'status' => $status->status,
+                    'effective_from' => $status->effective_from,
+                    'reason' => $status->reason,
+                    'actor_id' => trim((string) $status->actor_id),
+                ])->all(),
             'holds' => [
                 'open' => $openHold,
                 'history' => $student->holdEvents
                     ->filter(fn (StudentHoldEvent $event): bool => (string) $event->effective_from <= $day)
                     ->map(fn (StudentHoldEvent $event): array => [
-                    'id' => trim((string) $event->id),
-                    'action' => $event->action,
-                    'effective_from' => $event->effective_from,
-                    'reason' => $event->reason,
-                    'actor_id' => trim((string) $event->actor_id),
-                ])->all(),
+                        'id' => trim((string) $event->id),
+                        'action' => $event->action,
+                        'effective_from' => $event->effective_from,
+                        'reason' => $event->reason,
+                        'actor_id' => trim((string) $event->actor_id),
+                    ])->all(),
             ],
             'branch_transfers' => $student->branchTransfers
                 ->filter(static fn ($transfer): bool => (string) $transfer->effective_from <= $day)
                 ->map(static fn ($transfer): array => [
-                'id' => trim((string) $transfer->id),
-                'from_branch_id' => trim((string) ($transfer->from_branch_id ?? '')),
-                'to_branch_id' => trim((string) $transfer->to_branch_id),
-                'effective_from' => $transfer->effective_from,
-                'reason' => $transfer->reason,
-                'transferred_by' => trim((string) $transfer->transferred_by),
-            ])->all(),
+                    'id' => trim((string) $transfer->id),
+                    'from_branch_id' => trim((string) ($transfer->from_branch_id ?? '')),
+                    'to_branch_id' => trim((string) $transfer->to_branch_id),
+                    'effective_from' => $transfer->effective_from,
+                    'reason' => $transfer->reason,
+                    'transferred_by' => trim((string) $transfer->transferred_by),
+                ])->all(),
             'guardians' => $guardians->map(static fn (GuardianRelationship $relationship): array => [
                 'relationship_id' => trim((string) $relationship->id),
                 'guardian_person_id' => trim((string) $relationship->guardian_person_id),
@@ -266,7 +267,7 @@ final class StudentLifecycleQuery
     }
 
     /**
-     * @param list<string>|null $visibleBranches
+     * @param  list<string>|null  $visibleBranches
      * @return list<array<string, mixed>>
      */
     private function obligations(string $studentId, ?array $visibleBranches = null): array
@@ -274,7 +275,7 @@ final class StudentLifecycleQuery
         $query = DB::table('obligations')->where('student_id', $studentId);
         $this->scopeFinanceRows($query, $visibleBranches);
 
-return array_values(
+        return array_values(
             $query
                 ->orderByDesc('created_at')
                 ->limit(50)
@@ -294,7 +295,7 @@ return array_values(
     }
 
     /**
-     * @param list<string>|null $visibleBranches
+     * @param  list<string>|null  $visibleBranches
      * @return list<array<string, mixed>>
      */
     private function payments(string $studentId, ?array $visibleBranches = null): array
@@ -320,8 +321,8 @@ return array_values(
     }
 
     /**
-     * @param \Illuminate\Database\Query\Builder $query
-     * @param list<string>|null $visibleBranches
+     * @param  Builder  $query
+     * @param  list<string>|null  $visibleBranches
      */
     private function scopeFinanceRows($query, ?array $visibleBranches): void
     {

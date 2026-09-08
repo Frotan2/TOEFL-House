@@ -10,14 +10,14 @@ use App\Modules\Audit\AuditRecorder;
 use App\Modules\Audit\Models\AuditEvent;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorConversion;
-use App\Modules\Crm\Models\VisitorFollowup;
 use App\Modules\Crm\Models\VisitorConversionHandoff;
-use App\Modules\Organization\Models\Branch;
+use App\Modules\Crm\Models\VisitorFollowup;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Identity\Models\UserAccount;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Domain\StudentStatusRegistry;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentStatus;
-use App\Modules\Identity\Models\UserAccount;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -60,90 +60,90 @@ final class VisitorConversionRecorder
         try {
             return $this->idempotency->execute('crm.conversion.record', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($actor, $visitor, $conversionType, $downstreamEntity, $downstreamId, $authority, $authorityAuditEventId): array {
-                // Deduplicate: if the exact conversion already exists, the
-                // idempotency map normally catches a repeat; the unique
-                // visitor conversion is the hard truth either way.
-                /** @var Visitor $locked */
-                $locked = Visitor::query()->whereKey($visitor->id)->lockForUpdate()->firstOrFail();
+                    // Deduplicate: if the exact conversion already exists, the
+                    // idempotency map normally catches a repeat; the unique
+                    // visitor conversion is the hard truth either way.
+                    /** @var Visitor $locked */
+                    $locked = Visitor::query()->whereKey($visitor->id)->lockForUpdate()->firstOrFail();
 
-                if (in_array($conversionType, ['applicant', 'student'], true) === false) {
-                    throw BusinessRejection::forCode('crm.conversion_type', 'only authoritative applicant or student conversions are supported');
-                }
-                if (($conversionType === 'applicant' && $authority !== 'admissions')
-                    || ($conversionType === 'student' && $authority !== 'students')) {
-                    throw BusinessRejection::forCode('crm.conversion_authority_required', 'Admissions or Students must own the downstream conversion');
-                }
-                $authorityAuditEventId = trim((string) ($authorityAuditEventId ?? ''));
-                $authorityEvent = $authorityAuditEventId === '' ? null : AuditEvent::query()->whereKey($authorityAuditEventId)->first();
-                $expectedOperations = $conversionType === 'applicant' ? ['admissions.register'] : ['admissions.convert', 'students.register'];
-                $expectedTargetType = $conversionType === 'applicant' ? 'applicant' : 'student';
-                if ($authorityEvent === null
-                    // char(36) identifiers come back blank-padded from the
-                    // column; the logical identifier is the trimmed value.
-                    || trim((string) $authorityEvent->actor_id) !== $actor->actorId
-                    || $authorityEvent->target_type !== $expectedTargetType
-                    || trim((string) $authorityEvent->target_id) !== $downstreamId
-                    || ! in_array($authorityEvent->operation, $expectedOperations, true)) {
-                    throw BusinessRejection::forCode('crm.conversion_authority_event_invalid', 'the conversion must bind to the authoritative downstream audit event');
-                }
-                $existingConversion = VisitorConversion::query()->where('visitor_id', $locked->id)->first();
-                if ($existingConversion !== null) {
-                    if ($conversionType === 'student' && $existingConversion->conversion_type === 'applicant') {
-                        return $this->recordStudentHandoff($actor, $locked, $existingConversion, $downstreamEntity, $downstreamId, $authorityAuditEventId);
+                    if (in_array($conversionType, ['applicant', 'student'], true) === false) {
+                        throw BusinessRejection::forCode('crm.conversion_type', 'only authoritative applicant or student conversions are supported');
                     }
-                    throw BusinessRejection::forCode('crm.conversion_exists', 'this visitor already has a conversion record');
-                }
-                if (! $locked->isOpen()) {
-                    throw BusinessRejection::forCode('crm.conversion_visitor_closed', 'only an open visitor can be converted');
-                }
+                    if (($conversionType === 'applicant' && $authority !== 'admissions')
+                        || ($conversionType === 'student' && $authority !== 'students')) {
+                        throw BusinessRejection::forCode('crm.conversion_authority_required', 'Admissions or Students must own the downstream conversion');
+                    }
+                    $authorityAuditEventId = trim((string) ($authorityAuditEventId ?? ''));
+                    $authorityEvent = $authorityAuditEventId === '' ? null : AuditEvent::query()->whereKey($authorityAuditEventId)->first();
+                    $expectedOperations = $conversionType === 'applicant' ? ['admissions.register'] : ['admissions.convert', 'students.register'];
+                    $expectedTargetType = $conversionType === 'applicant' ? 'applicant' : 'student';
+                    if ($authorityEvent === null
+                        // char(36) identifiers come back blank-padded from the
+                        // column; the logical identifier is the trimmed value.
+                        || trim((string) $authorityEvent->actor_id) !== $actor->actorId
+                        || $authorityEvent->target_type !== $expectedTargetType
+                        || trim((string) $authorityEvent->target_id) !== $downstreamId
+                        || ! in_array($authorityEvent->operation, $expectedOperations, true)) {
+                        throw BusinessRejection::forCode('crm.conversion_authority_event_invalid', 'the conversion must bind to the authoritative downstream audit event');
+                    }
+                    $existingConversion = VisitorConversion::query()->where('visitor_id', $locked->id)->first();
+                    if ($existingConversion !== null) {
+                        if ($conversionType === 'student' && $existingConversion->conversion_type === 'applicant') {
+                            return $this->recordStudentHandoff($actor, $locked, $existingConversion, $downstreamEntity, $downstreamId, $authorityAuditEventId);
+                        }
+                        throw BusinessRejection::forCode('crm.conversion_exists', 'this visitor already has a conversion record');
+                    }
+                    if (! $locked->isOpen()) {
+                        throw BusinessRejection::forCode('crm.conversion_visitor_closed', 'only an open visitor can be converted');
+                    }
 
-                [$personId, $applicantId, $studentId] = $this->resolveDownstream($conversionType, $downstreamEntity, $downstreamId, $locked);
-                $this->bindPerson($locked, $personId, $actor->actorId);
-                $this->closeOpenFollowups($locked, $actor);
+                    [$personId, $applicantId, $studentId] = $this->resolveDownstream($conversionType, $downstreamEntity, $downstreamId, $locked);
+                    $this->bindPerson($locked, $personId, $actor->actorId);
+                    $this->closeOpenFollowups($locked, $actor);
 
-                $conversion = VisitorConversion::query()->create([
-                    'id' => RandomIdentifier::new(),
-                    'visitor_id' => $locked->id,
-                    'conversion_type' => $conversionType,
-                    'authority' => $authority,
-                    'person_id' => $personId,
-                    'applicant_id' => $applicantId,
-                    'student_id' => $studentId,
-                    'converted_by' => $actor->actorId,
-                    'authority_audit_event_id' => $authorityAuditEventId,
-                    'correlation_id' => RandomIdentifier::new(),
-                ]);
+                    $conversion = VisitorConversion::query()->create([
+                        'id' => RandomIdentifier::new(),
+                        'visitor_id' => $locked->id,
+                        'conversion_type' => $conversionType,
+                        'authority' => $authority,
+                        'person_id' => $personId,
+                        'applicant_id' => $applicantId,
+                        'student_id' => $studentId,
+                        'converted_by' => $actor->actorId,
+                        'authority_audit_event_id' => $authorityAuditEventId,
+                        'correlation_id' => RandomIdentifier::new(),
+                    ]);
 
-                // The database copies the bound downstream authority audit
-                // event's clock; reload before audit/transport output instead
-                // of treating CRM mirror insertion time as conversion evidence.
-                /** @var VisitorConversion $conversion */
-                $conversion = VisitorConversion::query()->whereKey($conversion->id)->firstOrFail();
+                    // The database copies the bound downstream authority audit
+                    // event's clock; reload before audit/transport output instead
+                    // of treating CRM mirror insertion time as conversion evidence.
+                    /** @var VisitorConversion $conversion */
+                    $conversion = VisitorConversion::query()->whereKey($conversion->id)->firstOrFail();
 
-                $before = ['status' => $locked->status];
-                VisitorStatus::requireTransition($locked->status, Visitor::STATUS_CONVERTED);
-                $locked->forceFill(['status' => Visitor::STATUS_CONVERTED, 'updated_by' => $actor->actorId]);
-                $locked->save();
+                    $before = ['status' => $locked->status];
+                    VisitorStatus::requireTransition($locked->status, Visitor::STATUS_CONVERTED);
+                    $locked->forceFill(['status' => Visitor::STATUS_CONVERTED, 'updated_by' => $actor->actorId]);
+                    $locked->save();
 
-                $event = $this->audit->record($actor->actorId, 'crm.conversion.record', 'visitor_conversion', $conversion->id, null, [
-                    'visitor_id' => $locked->id, 'conversion_type' => $conversionType,
-                    'person_id' => $personId, 'applicant_id' => $applicantId, 'student_id' => $studentId,
-                    'prev_status' => $before['status'], 'status' => Visitor::STATUS_CONVERTED,
-                    'downstream_entity' => $downstreamEntity, 'downstream_id' => $downstreamId, 'authority' => $authority,
-                    'authority_audit_event_id' => $authorityAuditEventId,
-                    'converted_at' => $conversion->converted_at?->toDateTimeString(),
-                    'conversion_time_basis' => $conversion->conversion_time_basis,
-                    ...$this->branchProvenance($conversionType, $downstreamId),
-                ]);
+                    $event = $this->audit->record($actor->actorId, 'crm.conversion.record', 'visitor_conversion', $conversion->id, null, [
+                        'visitor_id' => $locked->id, 'conversion_type' => $conversionType,
+                        'person_id' => $personId, 'applicant_id' => $applicantId, 'student_id' => $studentId,
+                        'prev_status' => $before['status'], 'status' => Visitor::STATUS_CONVERTED,
+                        'downstream_entity' => $downstreamEntity, 'downstream_id' => $downstreamId, 'authority' => $authority,
+                        'authority_audit_event_id' => $authorityAuditEventId,
+                        'converted_at' => $conversion->converted_at?->toDateTimeString(),
+                        'conversion_time_basis' => $conversion->conversion_time_basis,
+                        ...$this->branchProvenance($conversionType, $downstreamId),
+                    ]);
 
-                return [
-                    'conversion_id' => $conversion->id,
-                    'visitor_id' => $locked->id,
-                    'status' => Visitor::STATUS_CONVERTED,
-                    'converted_at' => $conversion->converted_at?->toDateTimeString(),
-                    'conversion_time_basis' => $conversion->conversion_time_basis,
-                    'correlation_id' => $event->correlation_id,
-                ];
+                    return [
+                        'conversion_id' => $conversion->id,
+                        'visitor_id' => $locked->id,
+                        'status' => Visitor::STATUS_CONVERTED,
+                        'converted_at' => $conversion->converted_at?->toDateTimeString(),
+                        'conversion_time_basis' => $conversion->conversion_time_basis,
+                        'correlation_id' => $event->correlation_id,
+                    ];
                 }),
             );
         } catch (QueryException $exception) {

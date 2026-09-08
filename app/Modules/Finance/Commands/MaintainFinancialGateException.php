@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Finance\Commands;
 
 use App\Modules\Academic\Domain\RecordBranch;
-use App\Modules\Organization\Models\Branch;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Offering;
 use App\Modules\Audit\AttemptedOperation;
@@ -13,9 +12,11 @@ use App\Modules\Audit\AuditRecorder;
 use App\Modules\Finance\Domain\FinancialCoverageCommitmentAllocator;
 use App\Modules\Finance\Domain\FinancialCoverageLock;
 use App\Modules\Finance\Models\FinancialGateException;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -208,8 +209,7 @@ final class MaintainFinancialGateException
     }
 
     /**
-     * @param list<Branch> $branches
-     *
+     * @param  list<Branch>  $branches
      * @return array{branch_id: string|null, organization_id: string|null}
      */
     private function provenanceForBranches(array $branches): array
@@ -236,7 +236,7 @@ final class MaintainFinancialGateException
         ];
     }
 
-    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, string $capability, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

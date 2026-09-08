@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Students\Commands;
 
+use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentBranchTransfer;
 use App\Modules\Students\Models\StudentStatus;
-use App\Modules\Academic\Domain\RecordBranch;
-use App\Support\Authorization\BranchScopedAccess;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\BranchScopedAccess;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;

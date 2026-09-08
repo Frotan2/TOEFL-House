@@ -25,7 +25,7 @@ use App\Modules\Academic\Placement\Queries\PlacementProfileQuery;
 use App\Modules\Documents\Commands\RegisterDocument;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -68,7 +68,7 @@ final class PlacementController extends Controller
             ->get();
         $catalogQuestions = PlacementQuestion::query()
             ->whereIn('section_id', $catalogSections->pluck('id'))
-            ->with(['media' => static function (HasMany $media): void {
+            ->with(['media' => static function (Relation $media): void {
                 $media->orderBy('id');
             }])
             ->orderBy('section_id')
@@ -135,7 +135,7 @@ final class PlacementController extends Controller
             ? PlacementQuestion::query()
                 ->whereIn('section_id', PlacementSection::query()->where('test_version_id', $inProgress->test_version_id)->pluck('id'))
                 ->where('lifecycle_state', 'published')
-                ->with(['media' => static function (HasMany $media): void {
+                ->with(['media' => static function (Relation $media): void {
                     $media->where('lifecycle_state', 'active')->orderBy('id');
                 }])
                 ->orderBy('code')

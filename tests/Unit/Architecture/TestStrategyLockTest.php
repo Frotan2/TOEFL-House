@@ -52,7 +52,7 @@ final class TestStrategyLockTest extends PHPUnitTestCase
     {
         $offenders = [];
 
-        foreach ($this->testFiles() as $file) {
+        foreach ($this->collectTestFiles() as $file) {
             $source = $this->withoutComments((string) file_get_contents($file));
             if (str_contains($source, 'Illuminate\\Foundation\\Testing\\DatabaseMigrations')) {
                 $offenders[] = $this->relative($file);
@@ -71,7 +71,7 @@ final class TestStrategyLockTest extends PHPUnitTestCase
     {
         $bases = [];
 
-        foreach ($this->testFiles() as $file) {
+        foreach ($this->collectTestFiles() as $file) {
             $source = (string) file_get_contents($file);
             // A second class extending the framework TestCase directly would be
             // a parallel base able to choose its own isolation strategy.
@@ -106,7 +106,7 @@ final class TestStrategyLockTest extends PHPUnitTestCase
     }
 
     /** @return list<string> */
-    private function testFiles(): array
+    private function collectTestFiles(): array
     {
         $root = realpath(__DIR__.'/../../') ?: __DIR__.'/../../';
         $files = [];

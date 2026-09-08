@@ -164,6 +164,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new \RuntimeException('Finance expense journal-source authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
+        throw new RuntimeException('Finance expense journal-source authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
     }
 };

@@ -50,6 +50,6 @@ return new class extends Migration
     {
         // Removing the classification would turn retained incomplete report
         // evidence back into an apparently ordinary numeric report.
-        throw new \RuntimeException('Report-run evidence completeness is one-way; do not erase retained source provenance.');
+        throw new RuntimeException('Report-run evidence completeness is one-way; do not erase retained source provenance.');
     }
 };

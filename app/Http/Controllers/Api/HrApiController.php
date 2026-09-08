@@ -16,6 +16,7 @@ use App\Modules\Hr\Models\Employment;
 use App\Modules\Hr\Models\Leave;
 use App\Modules\Hr\Models\Scale;
 use App\Modules\Identity\Models\Person;
+use App\Support\Authorization\AccessDecision;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -56,6 +57,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['person_id' => ['required', 'string']]);
         $result = app(MaintainEmployment::class)->employ($this->actor(), $input['person_id'], $this->idempotencyKey('hr.employ'));
+
         return response()->json(['status' => 'candidate_created', 'result' => $result], 201);
     }
 
@@ -73,6 +75,7 @@ final class HrApiController extends Controller
             'terminate' => app(MaintainEmployment::class)->terminate($this->actor(), $employment, $effectiveFrom, (string) ($input['reason'] ?? ''), $idempotency),
             default => abort(404, 'unknown_hr_employment_action'),
         };
+
         return response()->json(['status' => $action.'_recorded', 'result' => $result]);
     }
 
@@ -80,6 +83,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['category' => ['required', 'string', 'max:120'], 'date_from' => ['required', 'date'], 'date_to' => ['required', 'date', 'after_or_equal:date_from'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainLeave::class)->request($this->actor(), Employment::query()->findOrFail($employmentId), $input['category'], $input['date_from'], $input['date_to'], $input['reason'], $this->idempotencyKey('hr.leave.request'));
+
         return response()->json(['status' => 'requested', 'result' => $result], 201);
     }
 
@@ -87,12 +91,14 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['decision' => ['required', 'in:approve,reject']]);
         $result = app(MaintainLeave::class)->decide($this->actor(), Leave::query()->findOrFail($leaveId), $input['decision'] === 'approve', $this->idempotencyKey('hr.leave.decide'));
+
         return response()->json(['status' => 'decided', 'result' => $result]);
     }
 
     public function cancelLeave(string $leaveId): JsonResponse
     {
         $result = app(MaintainLeave::class)->cancel($this->actor(), Leave::query()->findOrFail($leaveId), $this->idempotencyKey('hr.leave.cancel'));
+
         return response()->json(['status' => 'cancelled', 'result' => $result]);
     }
 
@@ -100,6 +106,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['employment_id' => ['required', 'string'], 'terms_ref' => ['required', 'string', 'max:255'], 'scale_id' => ['nullable', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from']]);
         $result = app(MaintainContractVersion::class)->prepare($this->actor(), Employment::query()->findOrFail($input['employment_id']), $input['terms_ref'], ($input['scale_id'] ?? '') !== '' ? $input['scale_id'] : null, $input['effective_from'], $input['effective_to'] ?? null, $this->idempotencyKey('hr.version.prepare'));
+
         return response()->json(['status' => 'prepared', 'result' => $result], 201);
     }
 
@@ -107,6 +114,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['method' => ['required', 'in:fixed_monthly,session_rate,hourly_rate,allowance'], 'rate' => ['required', 'numeric', 'money', 'gte:0'], 'skill_id' => ['nullable', 'string'], 'scale_id' => ['nullable', 'string'], 'label' => ['nullable', 'string', 'max:120']]);
         $result = app(MaintainContractVersion::class)->addRule($this->actor(), ContractVersion::query()->findOrFail($versionId), $input['method'], $input['rate'], ($input['skill_id'] ?? '') !== '' ? $input['skill_id'] : null, ($input['scale_id'] ?? '') !== '' ? $input['scale_id'] : null, ($input['label'] ?? '') !== '' ? $input['label'] : null, $this->idempotencyKey('hr.version.rule'));
+
         return response()->json(['status' => 'rule_added', 'result' => $result], 201);
     }
 
@@ -119,6 +127,7 @@ final class HrApiController extends Controller
             'approve' => app(MaintainContractVersion::class)->approve($this->actor(), $version, $this->idempotencyKey('hr.version.approve')),
             default => abort(404, 'unknown_hr_version_action'),
         };
+
         return response()->json(['status' => $action.'_recorded', 'result' => $result]);
     }
 
@@ -126,6 +135,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['employment_id' => ['required', 'string'], 'terms_summary' => ['required', 'string', 'max:2000'], 'effective_from' => ['required', 'date']]);
         $result = app(MaintainContract::class)->draft($this->actor(), Employment::query()->findOrFail($input['employment_id']), $input['terms_summary'], $input['effective_from'], $this->idempotencyKey('hr.contract.draft'));
+
         return response()->json(['status' => 'drafted', 'result' => $result], 201);
     }
 
@@ -133,6 +143,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['signed_ref' => ['required', 'string', 'max:255']]);
         $result = app(MaintainContract::class)->sign($this->actor(), Contract::query()->findOrFail($contractId), $input['signed_ref'], $this->idempotencyKey('hr.contract.sign'));
+
         return response()->json(['status' => 'signed', 'result' => $result]);
     }
 
@@ -140,6 +151,7 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['effective_to' => ['required', 'date']]);
         $result = app(MaintainContract::class)->close($this->actor(), Contract::query()->findOrFail($contractId), $input['effective_to'], $this->idempotencyKey('hr.contract.close'));
+
         return response()->json(['status' => 'closed', 'result' => $result]);
     }
 
@@ -147,17 +159,19 @@ final class HrApiController extends Controller
     {
         $input = $request->validate(['key' => ['required', 'string', 'max:64'], 'name' => ['required', 'string', 'max:255'], 'rank_order' => ['required', 'integer', 'min:1']]);
         $result = app(MaintainScale::class)->register($this->actor(), $input['key'], $input['name'], (int) $input['rank_order'], $this->idempotencyKey('hr.scale.register'));
+
         return response()->json(['status' => 'registered', 'result' => $result], 201);
     }
 
     public function retireScale(string $scaleId): JsonResponse
     {
         $result = app(MaintainScale::class)->retire($this->actor(), Scale::query()->findOrFail($scaleId), $this->idempotencyKey('hr.scale.retire'));
+
         return response()->json(['status' => 'retired', 'result' => $result]);
     }
 
     private function can(string $capability): bool
     {
-        return app(\App\Support\Authorization\AccessDecision::class)->decide($this->actor(), $capability, null)->allowed;
+        return app(AccessDecision::class)->decide($this->actor(), $capability, null)->allowed;
     }
 }

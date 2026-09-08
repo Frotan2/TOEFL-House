@@ -35,8 +35,14 @@ final class TeacherAssignment extends Model
     ];
 
     /** @return BelongsTo<TeacherProfile, $this> */
-    public function teacherProfile(): BelongsTo { return $this->belongsTo(TeacherProfile::class, 'teacher_profile_id'); }
+    public function teacherProfile(): BelongsTo
+    {
+        return $this->belongsTo(TeacherProfile::class, 'teacher_profile_id');
+    }
 
     /** @return HasMany<TeacherAssignmentSkill, $this> */
-    public function skills(): HasMany { return $this->hasMany(TeacherAssignmentSkill::class, 'teacher_assignment_id'); }
+    public function skills(): HasMany
+    {
+        return $this->hasMany(TeacherAssignmentSkill::class, 'teacher_assignment_id');
+    }
 }

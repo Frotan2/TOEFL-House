@@ -7,6 +7,7 @@ namespace App\Modules\Academic\Queries;
 use App\Modules\Academic\Models\LevelPrerequisite;
 use App\Modules\Academic\Models\LevelProgressFact;
 use App\Modules\Academic\Models\ProgramVersionLevel;
+use App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder;
 use App\Modules\Academic\Placement\Models\AcademicEligibilitySnapshot;
 use App\Modules\Academic\Placement\Queries\AcademicEligibilitySnapshotQuery;
 use App\Modules\Students\Models\Student;
@@ -158,7 +159,7 @@ final class AcademicHistoryQuery
             return null;
         }
         if ($forNewDecision
-            && $snapshot->snapshot_schema_version !== \App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION) {
+            && $snapshot->snapshot_schema_version !== AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION) {
             return null;
         }
 

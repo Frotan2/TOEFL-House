@@ -612,7 +612,7 @@ final class MaintainPlacementCatalog
             /** @var PlacementSection|null $section */
             $section = $componentSections->first();
             if ($section === null || $section->lifecycle_state !== 'published') {
-                throw BusinessRejection::forCode('placement.version_section_not_published', sprintf('placement section %s must be published with its version', $section?->code ?? $component));
+                throw BusinessRejection::forCode('placement.version_section_not_published', sprintf('placement section %s must be published with its version', $section === null ? $component : ($section->code ?? $component)));
             }
             if (! $section->can_auto_score
                 && $section->delivery_mode !== PlacementDelivery::PHYSICAL

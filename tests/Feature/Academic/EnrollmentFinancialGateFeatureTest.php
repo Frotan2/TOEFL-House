@@ -33,9 +33,10 @@ use App\Support\Errors\DomainError;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
-use Tests\Concerns\BuildsStudents;
-use Tests\TestCase;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\BuildsStudents;
+use Tests\Concerns\BuildsTeachers;
+use Tests\TestCase;
 
 /**
  * AC3 financial gate: Academic activation is allowed only when the
@@ -47,7 +48,7 @@ use Illuminate\Support\Facades\DB;
 final class EnrollmentFinancialGateFeatureTest extends TestCase
 {
     use BuildsStudents;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
 
     /** @return array{class_id: string, student_id: string, enrollment_id: string, period_id: string, program_version_id: string, level_id: string} */
     private function makeEnrollmentRequest(string $seed): array

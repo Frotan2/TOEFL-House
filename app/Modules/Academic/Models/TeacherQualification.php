@@ -11,9 +11,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 final class TeacherQualification extends Model
 {
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     protected $fillable = ['id', 'teacher_profile_id', 'qualification_type', 'title', 'issuer', 'evidence_ref', 'submitted_by', 'valid_from', 'valid_to', 'lifecycle_state', 'verified_by', 'verified_at'];
 
     /** @return BelongsTo<TeacherProfile, $this> */
-    public function teacherProfile(): BelongsTo { return $this->belongsTo(TeacherProfile::class); }
+    public function teacherProfile(): BelongsTo
+    {
+        return $this->belongsTo(TeacherProfile::class);
+    }
 }

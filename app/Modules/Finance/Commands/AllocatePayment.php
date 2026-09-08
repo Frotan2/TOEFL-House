@@ -6,18 +6,15 @@ namespace App\Modules\Finance\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
-use App\Modules\Finance\Models\Discount;
-use App\Modules\Finance\Models\FundAllocation;
-use App\Modules\Finance\Models\FinancialCorrection;
-use App\Modules\Finance\Models\Obligation;
-use App\Modules\Finance\Models\ObligationLine;
-use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Domain\FinancialCoverageLock;
+use App\Modules\Finance\Models\Obligation;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PaymentAllocation;
 use App\Modules\Finance\Queries\FinancialBalanceQuery;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -73,7 +70,7 @@ final class AllocatePayment
                     $paymentBranchId = trim((string) ($lockedPayment->current_home_branch_id ?? $lockedPayment->originating_branch_id ?? ''));
                     $obligationBranchId = trim((string) ($lockedObligation->current_home_branch_id ?? $lockedObligation->originating_branch_id ?? ''));
 
-                    /** @var array<string, \App\Support\Authorization\StructureScope> $scopes */
+                    /** @var array<string, StructureScope> $scopes */
                     $scopes = [];
                     foreach (array_values(array_unique([$paymentBranchId, $obligationBranchId])) as $branchId) {
                         $branch = $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
@@ -148,22 +145,22 @@ final class AllocatePayment
     /** @return numeric-string */
     public function paymentRemaining(Payment $payment): string
     {
-        return ($this->balances ?? new FinancialBalanceQuery())->paymentRemaining($payment);
+        return ($this->balances ?? new FinancialBalanceQuery)->paymentRemaining($payment);
     }
 
     /** @return numeric-string */
     public function obligationRemaining(Obligation $obligation): string
     {
-        return ($this->balances ?? new FinancialBalanceQuery())->obligationRemaining($obligation);
+        return ($this->balances ?? new FinancialBalanceQuery)->obligationRemaining($obligation);
     }
 
     /** @return numeric-string */
     public function studentUncovered(string $studentId): string
     {
-        return ($this->balances ?? new FinancialBalanceQuery())->studentUncovered($studentId);
+        return ($this->balances ?? new FinancialBalanceQuery)->studentUncovered($studentId);
     }
 
-    private function require(Actor $actor, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, self::CAPABILITY, $scope);
         if (! $outcome->allowed) {

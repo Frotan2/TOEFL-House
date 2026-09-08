@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Workspace\Queries;
 
+use App\Modules\Academic\Models\AcademicAppeal;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
-use App\Modules\Academic\Models\AcademicAppeal;
 use App\Modules\Admissions\Models\AdmissionDecision;
 use App\Modules\Communication\Queries\NotificationQuery;
 use App\Modules\Crm\Models\VisitorFollowup;
@@ -15,8 +15,8 @@ use App\Modules\Hr\Models\Employment;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
 use App\Modules\Payroll\Models\PayrollCalculation;
-use App\Support\Authorization\AccessDecision;
 use App\Modules\WorkManagement\Queries\WorkItemQuery;
+use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
@@ -122,17 +122,17 @@ final class EmployeeWorkspaceQuery
                 })
                 ->whereNotIn('lifecycle_state', ['resolved', 'closed', 'rejected'])
                 ->orderBy('created_at')
-            ->limit(50)
-            ->get(['id', 'student_id', 'subject_type', 'subject_id', 'lifecycle_state']) as $appeal) {
-            $items[] = [
-                'kind' => 'academic_appeal',
-                'source_type' => 'academic_appeal',
-                'source_id' => (string) $appeal->id,
-                'title' => 'Academic appeal requires review',
-                'status' => (string) $appeal->lifecycle_state,
-                'due_at' => null,
-                'route' => '/academic',
-            ];
+                ->limit(50)
+                ->get(['id', 'student_id', 'subject_type', 'subject_id', 'lifecycle_state']) as $appeal) {
+                $items[] = [
+                    'kind' => 'academic_appeal',
+                    'source_type' => 'academic_appeal',
+                    'source_id' => (string) $appeal->id,
+                    'title' => 'Academic appeal requires review',
+                    'status' => (string) $appeal->lifecycle_state,
+                    'due_at' => null,
+                    'route' => '/academic',
+                ];
             }
         }
 
@@ -186,8 +186,7 @@ final class EmployeeWorkspaceQuery
     }
 
     /**
-     * @param list<string> $branches
-     *
+     * @param  list<string>  $branches
      * @return iterable<int, VisitorFollowup>
      */
     private function assignedFollowups(Actor $actor, array $branches, bool $organizationScope): iterable
@@ -243,11 +242,11 @@ final class EmployeeWorkspaceQuery
                         $approve->where('approver_id', $actor->actorId)
                             ->where('lifecycle_state', 'reviewed')
                             ->whereHas('applicant', function ($applicant) use ($approveBranches): void {
-                            $applicant->whereIn('current_home_branch_id', $approveBranches)
-                                ->orWhere(function ($fallback) use ($approveBranches): void {
-                                    $fallback->whereNull('current_home_branch_id')->whereIn('originating_branch_id', $approveBranches);
-                                });
-                        });
+                                $applicant->whereIn('current_home_branch_id', $approveBranches)
+                                    ->orWhere(function ($fallback) use ($approveBranches): void {
+                                        $fallback->whereNull('current_home_branch_id')->whereIn('originating_branch_id', $approveBranches);
+                                    });
+                            });
                     };
                     if ($reviewBranches === []) {
                         $query->where($approve);

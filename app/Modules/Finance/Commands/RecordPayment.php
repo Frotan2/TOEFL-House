@@ -14,6 +14,7 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -99,7 +100,7 @@ final class RecordPayment
         }
     }
 
-    private function require(Actor $actor, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, self::CAPABILITY, $scope);
         if (! $outcome->allowed) {

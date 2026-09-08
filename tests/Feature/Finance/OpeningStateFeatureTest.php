@@ -76,7 +76,7 @@ final class OpeningStateFeatureTest extends TestCase
     }
 
     /**
-     * @param list<array{category: string, amount: string, studentId?: string|null, personId?: string|null, asset?: string|null, equity?: string|null, source: string, description?: string}> $entries
+     * @param  list<array{category: string, amount: string, studentId?: string|null, personId?: string|null, asset?: string|null, equity?: string|null, source: string, description?: string}>  $entries
      * @return array{state: OpeningState, entries: array<string, string>}
      */
     private function preparedState(array $entries = []): array

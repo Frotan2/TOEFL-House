@@ -32,10 +32,10 @@ return new class extends Migration
             $table->index(['actor_id', 'lifecycle_state', 'effective_from']);
             $table->index(['queue_key', 'organization_id', 'branch_id', 'lifecycle_state']);
         });
-        DB::statement("CREATE UNIQUE INDEX work_queue_memberships_global_unique ON work_queue_memberships (actor_id, queue_key, organization_id) WHERE branch_id IS NULL");
+        DB::statement('CREATE UNIQUE INDEX work_queue_memberships_global_unique ON work_queue_memberships (actor_id, queue_key, organization_id) WHERE branch_id IS NULL');
         DB::statement("ALTER TABLE work_queue_memberships ADD CONSTRAINT work_queue_memberships_scope_check CHECK (btrim(organization_id) <> '')");
         DB::statement("ALTER TABLE work_queue_memberships ADD CONSTRAINT work_queue_memberships_state_check CHECK (lifecycle_state IN ('active','revoked'))");
-        DB::statement("ALTER TABLE work_queue_memberships ADD CONSTRAINT work_queue_memberships_window_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE work_queue_memberships ADD CONSTRAINT work_queue_memberships_window_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION work_queue_memberships_provenance_guard() RETURNS trigger AS $fn$
             BEGIN

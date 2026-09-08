@@ -28,6 +28,7 @@ use App\Modules\Finance\Models\FundingSource;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\ObligationLine;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Organization\Models\Organization;
 use App\Modules\Payroll\Commands\MaintainPayrollPeriod;
 use App\Modules\Reporting\Commands\ComputeProjection;
 use App\Modules\Reporting\Commands\DefineMetric;
@@ -37,7 +38,6 @@ use App\Modules\Reporting\Commands\RunReport;
 use App\Modules\Reporting\Models\Dashboard;
 use App\Modules\Reporting\Models\MetricDefinition;
 use App\Modules\Reporting\Models\MetricVersion;
-use App\Modules\Organization\Models\Organization;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use Carbon\CarbonImmutable;
@@ -45,14 +45,15 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
 final class ReportingFeatureTest extends TestCase
 {
     use BuildsActors;
-    use \Tests\Concerns\BuildsSessions;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsSessions;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $financialPeriodKey = '2026-12';

@@ -1157,3 +1157,77 @@ depends on the items that remain genuinely runtime/host-gated here — the live
 browser E2E (`verify:browser` needs a Chromium binary this sandbox lacks) and
 the two network-gated launcher probes — but every gate that can be executed in
 this environment is green.
+
+---
+
+# Part J — CI Convergence & Version-Drift Elimination (2026-09-08)
+
+The push after Part I went red on GitHub Actions even though the local backend
+suite was green. Two real gaps were found and closed; a third — a runtime
+version drift I had introduced — was eliminated at the root.
+
+## J.1 What Actually Failed On CI
+
+- **Static analysis job — `vendor/bin/pint --test`.** Never run locally before
+  this session. 222 pre-existing style issues across migrations, app and tests.
+  PHPStan and the audits after it were *skipped*, not passing — Pint failed
+  first and stopped the job.
+- **Backend job — full PHPUnit suite on PHP 8.2.** One error, and it was
+  **caused by the Pint auto-fix itself**: `php_unit_method_casing` renamed the
+  private helper `TestStrategyLockTest::testFiles()` to `test_files()` at its
+  definition but not at its two call sites → `Call to undefined method`. This is
+  exactly why a formatter pass must be followed by a full suite run.
+
+## J.2 Fixes
+
+- **Pint**: applied `vendor/bin/pint` (formatting-only) across 859 files, then
+  re-ran the full suite to prove no behavioural change.
+- **The renamed helper**: renamed to `collectTestFiles()` (a name Pint's
+  test-method rule does not touch) and updated both call sites — a permanent
+  fix, not a re-format that would recur.
+- **PHPStan level 6 (24 pre-existing errors, no baseline)**, all fixed at root,
+  none suppressed:
+  - `nullsafe.neverNull` on the left of `??` (Ledger/Reporting/Finance
+    scope resolvers) — rewritten as explicit `$x === null ? … : ($x->… ?? …)`
+    so the code is **both** runtime-null-safe and analyzer-clean (larastan types
+    `find()`/`first()` non-null; a blind `?->`→`->` would risk a runtime error).
+  - `ReportRun` missing `@property`/`@property-read` for its fillable columns and
+    the two columns joined in the report-listing query (`metric_key`,
+    `metric_name`).
+  - `PostJournal::scopeFromBranchId()` never returns null → return type narrowed
+    to `StructureScope`.
+  - `RevokeFinancialCoverage` `match($sourceType)` given an explicit `default`
+    throwing arm (exhaustive).
+  - `FinancialCoverageCommitmentQuery::isComplete()` and the four
+    `CrmReportingEvidence` window methods given typed-iterable `@param`s.
+  - `PlacementController` `with()` closures typed `Relation` (what `with()`
+    actually passes) instead of `HasMany`.
+
+## J.3 Version Drift Eliminated
+
+Part I moved the provisioner/lock to **PHP 8.4** but left **CI on 8.2** — a
+silent drift: CI and the local runtime were no longer the same interpreter.
+The earlier reasoning that "the 8.2 native build can't run on this host" was
+also disproven — the `@libphp/amazon-linux-2-v82` build *does* run (it ships its
+own OpenSSL 1.0), and the full suite passes on it (PHP 8.2.20) too. The
+deciding factor for 8.4 is that the 8.2 npm build **omits `posix`/`sockets`**
+(the environment-lock contract requires them) while the 8.4 build ships every
+required extension.
+
+Resolution: **CI now pins PHP 8.4**, matching `scripts/runtime/provision.sh`
+and `docs/RUNTIME_ENVIRONMENT_LOCK.md` exactly. One version, one source of
+truth, verified on both — no future agent should have to rediscover this.
+
+## J.4 Gates Re-verified This Session
+
+Executed on the provisioned runtime, and additionally cross-run on a
+self-contained PHP 8.2.20 build to prove range compatibility:
+
+Pint `--test` **PASS (859 files, 0 issues)** · PHPStan level 6 **0 errors** ·
+`composer validate --strict` **valid** · `composer check-platform-reqs`
+**success** · environment lock **8/8** · migration replay **185/185** · full
+PHPUnit **900 / 6,991 / 0 failures / 2 skips** on **both PHP 8.4.14 and
+8.2.20** · database invariants **6/6** (against the real migrated schema) ·
+concurrency **4/4** · frontend typecheck **clean** · Vite build **clean** ·
+console mount **8/8** · migration-discipline audit **PASS** · terminology audit
+**exit 0**.

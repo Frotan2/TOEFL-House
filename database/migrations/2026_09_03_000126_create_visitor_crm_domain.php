@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Crm\Domain\VisitorInteractionCatalog;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -273,9 +274,9 @@ return new class extends Migration
             $table->foreign('assessment_attempt_id')->references('id')->on('assessment_attempts');
             $table->foreign('payment_id')->references('id')->on('payments');
         });
-        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_direction_check CHECK (direction IN ('".implode("','", \App\Modules\Crm\Domain\VisitorInteractionCatalog::directions())."'))");
-        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_type_check CHECK (type IN ('".implode("','", \App\Modules\Crm\Domain\VisitorInteractionCatalog::types())."'))");
-        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_outcome_check CHECK (outcome IN ('".implode("','", \App\Modules\Crm\Domain\VisitorInteractionCatalog::outcomes())."'))");
+        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_direction_check CHECK (direction IN ('".implode("','", VisitorInteractionCatalog::directions())."'))");
+        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_type_check CHECK (type IN ('".implode("','", VisitorInteractionCatalog::types())."'))");
+        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_outcome_check CHECK (outcome IN ('".implode("','", VisitorInteractionCatalog::outcomes())."'))");
         DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_trace_origin_check CHECK (trace_origin IN ('crm','downstream'))");
         DB::statement('CREATE UNIQUE INDEX visitor_interactions_authority_event_unique ON visitor_interactions (authority_audit_event_id) WHERE authority_audit_event_id IS NOT NULL');
         DB::statement(<<<'SQL'

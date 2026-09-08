@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Canonical\Academic;
 
-use App\Modules\Academic\Commands\ManageAcademicOffering;
-use App\Modules\Academic\Commands\ManageClassWaitlist;
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
 use App\Modules\Academic\Commands\MaintainEnrollment;
+use App\Modules\Academic\Commands\ManageAcademicOffering;
+use App\Modules\Academic\Commands\ManageClassWaitlist;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\BranchAvailability;
 use App\Modules\Academic\Models\ClassModel;
@@ -22,10 +22,11 @@ use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Organization\Models\Branch;
+use App\Support\Authorization\Actor;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Tests\Canonical\CanonicalTestCase;
 use Tests\Concerns\DecidesAdmissions;
 
@@ -34,11 +35,17 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
     use DecidesAdmissions;
 
     private string $branchId;
+
     private string $levelId;
+
     private string $periodId;
+
     private string $programVersionId;
+
     private string $offeringId;
+
     private string $classId;
+
     private string $teacherPersonId = 'offr-tchr-1';
 
     protected function setUp(): void
@@ -190,7 +197,7 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
 
         $this->assertSame(
             2,
-            \Illuminate\Support\Facades\DB::table('enrollments')
+            DB::table('enrollments')
                 ->where('offering_id', $this->offeringId)
                 ->whereIn('lifecycle_state', ['requested', 'active', 'frozen'])->count(),
             'a refused request must not add a live claim'
@@ -262,7 +269,7 @@ final class OfferingWaitlistLifecycleTest extends CanonicalTestCase
      * offering capacity of 1). Tests that need two claims resize the offering
      * first and define their own class, rather than mutating shared state.
      */
-    private function roomyClassId(\App\Support\Authorization\Actor $officer, string $key): string
+    private function roomyClassId(Actor $officer, string $key): string
     {
         app(ManageAcademicOffering::class)->resizeCapacity(
             $officer,

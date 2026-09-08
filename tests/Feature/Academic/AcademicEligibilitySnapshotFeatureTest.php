@@ -23,12 +23,14 @@ use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\AdmissionDecision;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Students\Models\Student;
+use App\Support\Identifiers\RandomIdentifier;
 use App\Support\Signing\AcademicEligibilitySigner;
 use App\Support\Signing\CanonicalJson;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsPlacementCatalog;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -42,7 +44,7 @@ use Tests\TestCase;
 final class AcademicEligibilitySnapshotFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
-    use \Tests\Concerns\BuildsTeachers;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     public function test_release_produces_signed_versioned_immutable_eligibility_snapshot(): void
@@ -237,7 +239,7 @@ final class AcademicEligibilitySnapshotFeatureTest extends TestCase
         // v2 INSERT/link guards were deployed. Disabling guards is strictly a
         // fixture operation; production direct-SQL attacks are covered in the
         // Placement authority test and the guards are restored immediately.
-        $legacyId = \App\Support\Identifiers\RandomIdentifier::new();
+        $legacyId = RandomIdentifier::new();
         $legacyPayload = [
             'legacy_snapshot' => $legacyId,
             'person_id' => $student->person_id,

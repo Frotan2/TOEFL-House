@@ -30,7 +30,7 @@ final class FinancialCoverageCommitmentQuery
      * while Finance materializes a newly approved source under the canonical
      * student lock.
      *
-     * @param list<string> $obligationIds
+     * @param  list<string>  $obligationIds
      * @return list<FinancialCoverageCommitment>
      */
     public function activeForCoverageAllocation(array $obligationIds, string $asOf): array
@@ -43,7 +43,7 @@ final class FinancialCoverageCommitmentQuery
      * target. A scoped plan or exception cannot satisfy another offering or
      * class merely because the student has unrelated debt.
      *
-     * @param list<string> $obligationIds
+     * @param  list<string>  $obligationIds
      * @return list<FinancialCoverageCommitment>
      */
     public function activeForEnrollment(array $obligationIds, ?string $offeringId, ?string $classId, string $asOf): array
@@ -56,7 +56,7 @@ final class FinancialCoverageCommitmentQuery
      * student-wide sources can clear it; offering/class-specific plans and
      * exceptions remain limited to their declared enrollment scope.
      *
-     * @param list<string> $obligationIds
+     * @param  list<string>  $obligationIds
      * @return list<FinancialCoverageCommitment>
      */
     public function activeForStudentClearance(array $obligationIds, string $asOf): array
@@ -65,7 +65,7 @@ final class FinancialCoverageCommitmentQuery
     }
 
     /**
-     * @param list<string> $obligationIds
+     * @param  list<string>  $obligationIds
      * @return list<FinancialCoverageCommitment>
      */
     private function active(array $obligationIds, string $asOf, ?string $offeringId, ?string $classId, bool $forEnrollment, bool $studentClearance): array
@@ -200,7 +200,9 @@ final class FinancialCoverageCommitmentQuery
         return $active;
     }
 
-    /** @param FinancialCredit|EnrollmentInstallmentPlan|FinancialGateException $source */
+    /**
+     * @param  array<string, string|null>  $totals
+     */
     private function isComplete(string $type, string $sourceId, FinancialCredit|EnrollmentInstallmentPlan|FinancialGateException $source, array $totals): bool
     {
         $total = $totals[$this->sourceKey($type, $sourceId)] ?? null;
@@ -215,7 +217,6 @@ final class FinancialCoverageCommitmentQuery
         }
     }
 
-    /** @param EnrollmentInstallmentPlan|FinancialGateException|FinancialCredit $source */
     private function appliesToContext(string $type, FinancialCredit|EnrollmentInstallmentPlan|FinancialGateException $source, ?string $offeringId, ?string $classId, bool $forEnrollment, bool $studentClearance): bool
     {
         if ($type === FinancialCoverageCommitment::SOURCE_FINANCIAL_CREDIT) {

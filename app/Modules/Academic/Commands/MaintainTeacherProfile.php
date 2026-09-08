@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Academic\Commands;
 
 use App\Modules\Academic\Models\Skill;
-use App\Modules\Academic\Models\TeacherAvailability;
 use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Academic\Models\TeacherAvailability;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\TeacherProfileBranch;
 use App\Modules\Academic\Models\TeacherProfileStatus;
@@ -35,6 +35,7 @@ use Illuminate\Support\Facades\DB;
 final class MaintainTeacherProfile
 {
     public const CAPABILITY = 'academic.teacher_manage';
+
     public const CAPABILITY_APPROVE = 'academic.teacher_approve';
 
     public function __construct(
@@ -100,6 +101,7 @@ final class MaintainTeacherProfile
                         'person_id' => $person->id, 'employment_id' => $locked->id, 'branch_id' => $branch->id,
                         'lifecycle_state' => TeacherProfile::STATE_PENDING,
                     ]);
+
                     return ['teacher_profile_id' => $profile->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -132,6 +134,7 @@ final class MaintainTeacherProfile
                         'lifecycle_state' => 'pending',
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.qualification.add', 'teacher_qualification', $qualification->id, null, ['teacher_profile_id' => $locked->id, 'evidence_ref' => $evidenceRef]);
+
                     return ['qualification_id' => $qualification->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -158,6 +161,7 @@ final class MaintainTeacherProfile
                     }
                     $locked->forceFill(['lifecycle_state' => 'verified', 'verified_by' => $actor->actorId, 'verified_at' => now()])->save();
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.qualification.verify', 'teacher_qualification', $locked->id, ['lifecycle_state' => 'pending'], ['lifecycle_state' => 'verified', 'teacher_profile_id' => $profile->id]);
+
                     return ['qualification_id' => $locked->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -196,6 +200,7 @@ final class MaintainTeacherProfile
                         'reason' => $reason, 'actor_id' => $actor->actorId,
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.profile.transition', 'teacher_profile', $locked->id, $before, ['lifecycle_state' => $toState, 'reason' => $reason]);
+
                     return ['teacher_profile_id' => $locked->id, 'lifecycle_state' => $toState, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -241,6 +246,7 @@ final class MaintainTeacherProfile
                     ]);
                     $locked->forceFill(['current_home_branch_id' => $branch->id])->save();
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.branch.transfer', 'teacher_profile', $locked->id, ['current_home_branch_id' => $profile->current_home_branch_id], ['current_home_branch_id' => $branch->id, 'branch_authorization_id' => $authorization->id, 'effective_from' => $effectiveFrom, 'reason' => $reason]);
+
                     return ['teacher_profile_id' => $locked->id, 'branch_id' => $branch->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -276,6 +282,7 @@ final class MaintainTeacherProfile
                         'provenance_reason' => $reason, 'approved_by' => $actor->actorId,
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.branch.authorize', 'teacher_profile_branch', $row->id, null, ['teacher_profile_id' => $locked->id, 'branch_id' => $branch->id, 'effective_from' => $effectiveFrom, 'effective_to' => $effectiveTo]);
+
                     return ['branch_authorization_id' => $row->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -320,6 +327,7 @@ final class MaintainTeacherProfile
                         'lifecycle_state' => 'active', 'approved_by' => $actor->actorId, 'evidence_ref' => $evidenceRef,
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.skill.authorize', 'teacher_skill_authority', $row->id, null, ['teacher_profile_id' => $locked->id, 'skill_id' => $skill->id, 'authority_kind' => $kind]);
+
                     return ['skill_authority_id' => $row->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -362,6 +370,7 @@ final class MaintainTeacherProfile
                         'effective_to' => $effectiveTo, 'lifecycle_state' => 'active', 'availability_kind' => $kind, 'branch_id' => $branch->id,
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.availability.declare', 'teacher_availability', $row->id, null, ['teacher_profile_id' => $locked->id, 'branch_id' => $branch->id, 'weekday' => $weekday]);
+
                     return ['availability_id' => $row->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -404,6 +413,7 @@ final class MaintainTeacherProfile
                         'lifecycle_state' => 'active', 'approved_by' => $actor->actorId, 'evidence_ref' => $evidenceRef,
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.workload.set', 'teacher_workload_limit', $row->id, null, ['teacher_profile_id' => $locked->id, 'branch_id' => $branch->id, 'max_hours_per_week' => $maxHoursPerWeek]);
+
                     return ['workload_limit_id' => $row->id, 'correlation_id' => $event->correlation_id];
                 }),
             );

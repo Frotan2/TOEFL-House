@@ -88,7 +88,7 @@ final class ComputeProjection
                         ->where(fn ($query) => $scopeId === null ? $query->whereNull('scope_id') : $query->where('scope_id', $scopeId))
                         ->lockForUpdate()
                         ->first();
-                    $projectionOrganizationId = trim((string) ($projection?->organization_id ?? ''));
+                    $projectionOrganizationId = trim($projection === null ? '' : (string) ($projection->organization_id ?? ''));
                     if ($projection !== null && (($organizationId === null && $projectionOrganizationId !== '') || ($organizationId !== null && $projectionOrganizationId !== $organizationId))) {
                         // Do not overwrite an old unknown/wrong tenant snapshot
                         // during a rebuild. It is evidence requiring explicit

@@ -33,7 +33,7 @@ final class HealthController extends Controller
 
         try {
             DB::connection()->select('select 1');
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $checks['database'] = 'error';
             $healthy = false;
         }

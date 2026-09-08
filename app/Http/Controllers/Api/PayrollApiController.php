@@ -44,6 +44,7 @@ final class PayrollApiController extends Controller
     public function periods(): JsonResponse
     {
         $this->requireOrganizationRead('payroll.calculate', 'api.payroll.periods');
+
         return response()->json(['periods' => PayrollPeriod::query()->orderByDesc('period_key')->limit(100)->get()]);
     }
 
@@ -52,6 +53,7 @@ final class PayrollApiController extends Controller
         $this->requireOrganizationRead('payroll.calculate', 'api.payroll.calculations');
         $payrollBranches = $this->authorizedBranches('payroll.calculate');
         $employmentIds = Employment::query()->whereIn('person_id', Person::query()->whereIn('home_branch_id', $payrollBranches)->select('id'))->select('id');
+
         return response()->json(['calculations' => PayrollCalculation::query()->whereIn('employment_id', $employmentIds)->orderByDesc('id')->limit(200)->get()]);
     }
 
@@ -59,12 +61,14 @@ final class PayrollApiController extends Controller
     {
         $input = $request->validate(['period_id' => ['required', 'string'], 'employment_id' => ['required', 'string']]);
         $result = app(CalculatePayroll::class)->prepare($this->actor(), PayrollPeriod::query()->findOrFail((string) $input['period_id']), Employment::query()->findOrFail((string) $input['employment_id']), $this->idempotencyKey('payroll.calculate'));
+
         return response()->json(['status' => 'prepared', 'calculation_id' => $result['calculation_id'], 'lifecycle_state' => $result['lifecycle_state']], 201);
     }
 
     public function approve(Request $request, string $calculationId): JsonResponse
     {
         app(ApprovePayrollResult::class)->approve($this->actor(), PayrollCalculation::query()->findOrFail($calculationId), $this->idempotencyKey('payroll.approve'));
+
         return response()->json(['status' => 'approved']);
     }
 
@@ -72,6 +76,7 @@ final class PayrollApiController extends Controller
     {
         $input = $request->validate(['replacement_calculation_id' => ['required', 'string'], 'resolution_ref' => ['required', 'string', 'max:2000']]);
         $result = app(ResolveHeldPayrollCalculation::class)->resolve($this->actor(), PayrollCalculation::query()->findOrFail($calculationId), PayrollCalculation::query()->findOrFail((string) $input['replacement_calculation_id']), $input['resolution_ref'], $this->idempotencyKey('payroll.resolve-held'));
+
         return response()->json(['status' => 'resolved', ...$result]);
     }
 
@@ -79,6 +84,7 @@ final class PayrollApiController extends Controller
     {
         $input = $request->validate(['domain' => ['required', 'in:hr,finance'], 'note' => ['required', 'string', 'max:1000']]);
         $result = app(SettleEmployment::class)->clear($this->actor(), Employment::query()->findOrFail($employmentId), $input['domain'], $input['note'], $this->idempotencyKey('payroll.clearance'));
+
         return response()->json(['status' => 'cleared', ...$result], 201);
     }
 
@@ -86,6 +92,7 @@ final class PayrollApiController extends Controller
     {
         $input = $request->validate(['amount' => ['required', 'numeric', 'money', 'min:0', 'max:99999999999999'], 'basis' => ['required', 'string', 'max:1000']]);
         $result = app(SettleEmployment::class)->propose($this->actor(), Employment::query()->findOrFail($employmentId), $input['amount'], $input['basis'], $this->idempotencyKey('payroll.settlement.propose'));
+
         return response()->json(['status' => 'proposed', ...$result], 201);
     }
 }

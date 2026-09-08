@@ -177,6 +177,6 @@ return new class extends Migration
         // The marker distinguishes evidence written under a stricter immutable
         // lifecycle boundary. Removing it would make historic projections
         // appear to have a weaker provenance, so remediation is forward-only.
-        throw new \RuntimeException('Placement decision-fact immutability is one-way; do not erase authoritative provenance.');
+        throw new RuntimeException('Placement decision-fact immutability is one-way; do not erase authoritative provenance.');
     }
 };

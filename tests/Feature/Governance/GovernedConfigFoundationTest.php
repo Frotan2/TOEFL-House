@@ -262,7 +262,7 @@ final class GovernedConfigFoundationTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $envelope
+     * @param  array<string, mixed>  $envelope
      * @return array<string, mixed>
      */
     private function rawRow(string $key, int $versionNo, array $envelope, string $from, ?string $to, string $lifecycle): array
