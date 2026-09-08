@@ -831,9 +831,13 @@ server. So the register's ~500 ms is exactly what a single-worker dev server pro
 when 14 consoles fire concurrently: fourteen-ish in-flight requests at tens of
 milliseconds of service time each, and three *different* endpoints all reporting
 500.36 / 500.91 / 501.07 ms is the signature of a shared queue, not of three slow
-queries. The `php -S` access log of that run confirms it from the other side — two
-lines reading `~ 500.59ms`, identically, for requests whose burst completed in 107 ms
-of wall time once the app had warmed.
+queries. The dev server's own access log confirms it from the other side, and it is the clearest
+single piece of evidence in this gate: during the 1-worker bursts the log shows a few
+lines reading `~ 500.53ms`, `~ 500.59ms`, `~ 500.64ms`, `~ 504.07ms` — always in pairs or
+triplets at the end of a burst — while the same `/health` request logs `~ 0.20ms` of
+application time when it is served without competition. The work inside the request never
+changed; only its position in a queue did. The register's numbers were the 500 ms
+column, and the endpoints were not slow.
 
 Two things follow, and they point in opposite directions for the operator:
 
