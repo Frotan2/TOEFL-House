@@ -48,6 +48,10 @@ SCHEMA_PROBE="${SCHEMA_PROBE:-$SCRIPT_DIR/schema-compatibility.sh}"
 # prefix differs per distribution). Read once, used by the pool syntax test and
 # by the storage ownership step, so the two can never disagree.
 PHP_FPM_POOL="${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf}"
+# How to make PHP-FPM pick up the activated release, and where its pid file is.
+# Both are host facts, like the pool path and the web user below.
+PHP_FPM_RELOAD_CMD="${PHP_FPM_RELOAD_CMD:-}"
+PHP_FPM_PID_FILE="${PHP_FPM_PID_FILE:-}"
 
 log()  { printf '[deploy] %s\n' "$*"; }
 die()  { printf '[deploy][ERROR] %s\n' "$*" >&2; exit 1; }
@@ -273,7 +277,69 @@ fi
 # 9. Go live: switch the symlink, then verify the release over HTTP.
 PREV_RELEASE="$(readlink "$CURRENT_LINK" 2>/dev/null || true)"
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
-( systemctl reload php*-fpm 2>/dev/null || service php*-fpm reload 2>/dev/null || true )
+#
+# Reload PHP-FPM, and treat "could not reload" as a failed deployment.
+#
+# `opcache.validate_timestamps=0` is the documented production setting (it is the
+# point of caching config/routes/views), which means a running master never stats a
+# PHP file again: after the symlink moves, it keeps executing the files of whatever
+# release it last loaded, and `opcache_reset` alone does not help because the entry
+# script path is what changed. Reloading used to be written
+#
+#   ( systemctl reload php*-fpm || service php*-fpm reload || true )
+#
+# so on a host with neither systemd nor sysvinit — a container, a
+# supervisor/systemd-less image, anything where the pool is managed by something
+# else — the deployment switched the symlink, reported "deployment OK", and served
+# the PREVIOUS release indefinitely. Measured on 2026-09-08: `current` pointed at
+# releases/20260908191650 while the exception produced by a live request was
+# written by `releases/20260908191449/public/index.php`, and /health agreed the
+# deployment was healthy. The new release's migrations had already run against the
+# database, so the live system was "new schema, old application" — and since
+# `--rollback` also only moves a symlink, it could not have fixed that either.
+#
+# So: try the operator's command, then the service managers, then SIGUSR2 to the
+# master from the pid file. If none of them works, put the symlink back and fail,
+# because the alternative is a success report nobody can trust.
+reload_php_fpm() {
+    if [ -n "$PHP_FPM_RELOAD_CMD" ]; then
+        if bash -c "$PHP_FPM_RELOAD_CMD" >/dev/null 2>&1; then
+            log "PHP-FPM reloaded via PHP_FPM_RELOAD_CMD"
+            return 0
+        fi
+        return 1
+    fi
+
+    if command -v systemctl >/dev/null 2>&1 && systemctl reload php*-fpm >/dev/null 2>&1; then
+        log "PHP-FPM reloaded via systemctl"
+        return 0
+    fi
+
+    if command -v service >/dev/null 2>&1 && service php*-fpm reload >/dev/null 2>&1; then
+        log "PHP-FPM reloaded via service"
+        return 0
+    fi
+
+    if [ -n "$PHP_FPM_PID_FILE" ] && [ -r "$PHP_FPM_PID_FILE" ]; then
+        local master_pid
+        master_pid="$(tr -dc '0-9' < "$PHP_FPM_PID_FILE")"
+        if [ -n "$master_pid" ] && kill -0 "$master_pid" 2>/dev/null && kill -USR2 "$master_pid" 2>/dev/null; then
+            log "PHP-FPM reloaded (SIGUSR2 to master pid $master_pid)"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+if ! reload_php_fpm; then
+    if [ -n "$PREV_RELEASE" ]; then
+        ln -sfn "$PREV_RELEASE" "$CURRENT_LINK"
+        log "current restored to $(basename "$PREV_RELEASE") so the symlink matches what is executing"
+    fi
+    die "PHP-FPM was not reloaded, so the new release is not actually serving traffic (opcache.validate_timestamps=0 keeps the previous release loaded). Set PHP_FPM_RELOAD_CMD (for example: kill -USR2 \$(cat /run/php/php-fpm.pid), or your supervisor's restart command) and optionally PHP_FPM_PID_FILE, then re-run. NOTE: the database was already migrated by this release; restoring the symlink does not undo that."
+fi
+
 nginx -t >/dev/null 2>&1 && systemctl reload nginx 2>/dev/null || true
 
 log "verifying release at $HEALTH_URL"
