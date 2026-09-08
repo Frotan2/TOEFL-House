@@ -33,6 +33,9 @@ Application code, API contracts, tests, user-facing text and current documentati
 | Subdivision of a class | Section | Named subdivision of a class used for grouping or scheduling | Academic | Class, cohort when the model means a section |
 | Scheduled teaching occurrence | Session | One scheduled occurrence of a class | Academic | Lesson, class when referring to the occurrence rather than the class |
 | Student academic participation | Enrollment | Student's governed participation in an offering/class lifecycle | Academic/Students | Registration, admission, joining |
+| Prospective student record | Applicant | A person put forward for admission, before any student exists | Admissions | Student, enrollee — an applicant is not yet a student |
+| Creation of an applicant file | Applicant registration | Recording a person as an applicant against an operational branch (`RegisterApplicant`) | Admissions | Enrollment — this creates an APPLICANT, not academic participation |
+| Governed admission outcome | Admission decision | The reviewed and approved decision that converts an applicant into a student | Admissions | Enrollment, acceptance |
 | Capacity overflow queue | Waitlist | Ordered set of students waiting for available capacity | Academic | Waiting list when the domain object is meant |
 | Attendance fact | Attendance | Recorded presence/absence fact for a session and student | Academic | Presence, check-in when the canonical fact is meant |
 | Evaluated academic attempt | Assessment | Governed assessment attempt/result lifecycle | Academic | Exam when the broader assessment lifecycle is meant |
@@ -134,3 +137,34 @@ php scripts/terminology-audit.php
 ```
 
 The audit is intentionally advisory by default so that historical/compatibility usages can be reviewed rather than mechanically deleted. Use an allowlist or an explicit source comment for legitimate exceptions.
+
+### Registration is scope-qualified
+
+`Registration` is a prohibited synonym **only** for *student academic
+participation*, which is always `Enrollment`. It remains the correct word for
+other governed acts of recording something into a catalogue or register, and
+those are genuinely different facts with different owners and lifecycles:
+
+| Phrase | Meaning | Owner | Not a synonym for |
+|---|---|---|---|
+| applicant registration | recording a person as an applicant | Admissions | Enrollment |
+| skill registration | adding a teaching skill to the catalogue | Academic | Enrollment |
+| endpoint / job registration | registering an integration endpoint or job | Integrations | Enrollment |
+
+The terminology audit matches substrings and therefore reports these. They are
+**advisory, not violations**: each names a distinct concept in a distinct
+module. Do not rename them to `Enrollment` — doing so would merge separate
+facts under one term and break the one-fact-one-owner rule this document
+exists to protect.
+
+### Faculty is a collective label, not a second term for Teacher
+
+`Teacher` is the canonical name for the *teaching profile* — the record that
+carries qualification, branch authority and assignment. `Faculty` is
+prohibited when it is used to mean that record.
+
+It remains acceptable as a **collective UI label** for the teaching body as a
+whole, e.g. the "Teacher & Faculty" workspace heading, where it appears
+alongside `Teacher` rather than replacing it. The audit matches substrings and
+reports these; they are advisory. A finding is only a violation when `Faculty`
+is used *in place of* `Teacher` to denote the profile itself.
