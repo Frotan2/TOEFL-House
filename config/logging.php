@@ -60,14 +60,22 @@ return [
 
         'single' => [
             'driver' => 'single',
-            'path' => storage_path('logs/laravel.log'),
+            // LOG_PATH exists because a release-directory log is a log that gets
+            // deleted: deploy.sh keeps the 4 newest release directories and prunes the
+            // rest, so anything written under storage/logs vanishes with its release.
+            // Point it outside the releases tree to keep the incident record.
+            'path' => env('LOG_PATH', storage_path('logs/laravel.log')),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
         ],
 
         'daily' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/laravel.log'),
+            // LOG_PATH exists because a release-directory log is a log that gets
+            // deleted: deploy.sh keeps the 4 newest release directories and prunes the
+            // rest, so anything written under storage/logs vanishes with its release.
+            // Point it outside the releases tree to keep the incident record.
+            'path' => env('LOG_PATH', storage_path('logs/laravel.log')),
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
@@ -124,6 +132,9 @@ return [
         ],
 
         'emergency' => [
+            // Deliberately NOT LOG_PATH: this is Monolog's last-resort target when the
+            // configured channel itself fails, so it must not live on the filesystem
+            // that just failed. It stays local and is therefore ephemeral by design.
             'path' => storage_path('logs/laravel.log'),
         ],
 

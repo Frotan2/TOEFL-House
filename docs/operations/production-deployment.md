@@ -190,6 +190,23 @@ Point your orchestrator (systemd `ExecStartPost`, a load balancer, or a
 deploy script) at `/health`. `deploy/deploy.sh` itself polls `/health` after
 switching the live release.
 
+Both probes were observed during a real database outage on a deployed release
+(`pg_ctl -m fast stop`, PostgreSQL down, nothing else changed):
+
+| Probe | Response | Meaning |
+| --- | --- | --- |
+| `/up` | `200` | PHP and the framework are alive — **by design this stays green** |
+| `/health` | `503 {"status":"error","checks":{"database":"error","application_key":"ok","frontend_build":"ok"}}` | the service is not operable, and the body says which dependency |
+| `/login` | `500` | a page that genuinely needs the database |
+| after the database came back | `200`, no reload needed | a connection is opened per request, so the app self-heals |
+
+Gate traffic on the pair: `/up` 200 with `/health` 503 is "the application is fine,
+its database is not", which is an infrastructure problem, not a restart-the-app
+problem. `/health` is registered without the session and CSRF middlewares for
+exactly this reason — inside the `web` group it died in `StartSession` before its
+own controller could report, answering a 500 HTML page to the one caller that needed
+a machine-readable 503. Keep it stateless.
+
 ## 13. Backup
 
 `deploy/backup.sh` takes a compressed `pg_dump` (custom format) of the
@@ -328,6 +345,39 @@ Older releases are pruned to the last three.
   and re-run `php artisan migrate --force` if the live schema is newer.
 - **Crash / host failure:** provision a new host, restore the latest backup
   (§14), redeploy the last known-good ref (§16), and repoint DNS.
+
+## 18. Logs and observability
+
+**Application log.** `config/logging.php` uses the `stack` channel whose only member
+is `single` (`LOG_STACK` overrides the list, `LOG_LEVEL` defaults the threshold to
+`debug`; the shipped production `.env` sets `warning`). Set **`LOG_PATH`** to a file
+outside the release tree, for example:
+
+```
+LOG_PATH=/var/log/toefl-house/laravel.log
+LOG_STACK=daily
+LOG_DAILY_DAYS=30
+```
+
+This is not optional hygiene: `deploy.sh` keeps the four newest release directories
+and prunes the rest, and the default path lives inside the release, so **logs are
+deleted along with the release they came from** — the record of an incident can
+disappear while the incident is open. `LOG_STACK=daily` additionally bounds a single
+file's growth (two requests that each raised one database failure wrote 29 KB on the
+rehearsal deployment; an error-per-request loop fills a disk in hours).
+
+The `emergency` channel intentionally keeps the release-local path: it is Monolog's
+last resort when the configured one fails, so it must not live on the storage that
+just failed.
+
+**Nothing else is emitted.** There is no metrics endpoint, no alert channel, and no
+pager path in this repository, and `config/integrations.php` carries no transports.
+The available observability surface is therefore: `/health` (JSON, per-dependency),
+the log file, PostgreSQL's own statistics, and the browser-level API errors. A
+`500` on any route writes one exception entry with a stack trace and no request
+identifier, so correlated lookups across two requests are not possible today. Adding
+metrics/alert routing is an open item recorded in
+`docs/AUDIT-2026-09-08-RECONCILIATION.md`'s gap register, not a documented feature.
 
 ## Verification gate (run after any change)
 
