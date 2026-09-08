@@ -44,6 +44,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib/retention.sh
 source "$SCRIPT_DIR/lib/retention.sh"
 SCHEMA_PROBE="${SCHEMA_PROBE:-$SCRIPT_DIR/schema-compatibility.sh}"
+# Where the operator installed the FPM pool (a glob, since the PHP version
+# prefix differs per distribution). Read once, used by the pool syntax test and
+# by the storage ownership step, so the two can never disagree.
+PHP_FPM_POOL="${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf}"
 
 log()  { printf '[deploy] %s\n' "$*"; }
 die()  { printf '[deploy][ERROR] %s\n' "$*" >&2; exit 1; }
@@ -130,7 +134,7 @@ if [ -z "$PHP_FPM_BIN" ] && command -v php-fpm >/dev/null 2>&1; then
 fi
 if [ -n "$PHP_FPM_BIN" ]; then
     fpm_pool_checked=0
-    for pool in ${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf}; do
+    for pool in $PHP_FPM_POOL; do
         [ -f "$pool" ] || continue
         "$PHP_FPM_BIN" -t -y "$pool" >/dev/null 2>&1 \
             || die "php-fpm cannot parse the installed pool (${pool}); deploy/php-fpm.conf is the reference"
@@ -138,7 +142,7 @@ if [ -n "$PHP_FPM_BIN" ]; then
     done
     [ "$fpm_pool_checked" = 1 ] \
         && log "php-fpm pool configuration verified" \
-        || log "WARNING: no toefl-house fpm pool found to test (${PHP_FPM_POOL:-/etc/php/*/fpm/pool.d/toefl-house.conf})"
+        || log "WARNING: no toefl-house fpm pool found to test ($PHP_FPM_POOL)"
 else
     log "WARNING: php-fpm binary not available: pool configuration not tested on this host"
 fi
@@ -232,11 +236,26 @@ SCHEMA_AFTER="$(schema_probe --count)" || die "unable to read migration state af
 
 # 7. Runtime directories exist and are owned by the web user (the repo now
 #    tracks them, but ensure ownership/permissions for the FPM user).
-WEB_USER="$(grep -m1 '^user' /etc/php/*/fpm/pool.d/toefl-house.conf 2>/dev/null | awk '{print $3}' || echo www-data)"
+# The FPM pool is one configuration, so it is resolved once (step 0 uses the same
+# override) and the web user is derived from it rather than from a hardcoded
+# /etc/php path that only exists on some distributions.
+FPM_POOL_RESOLVED="$(ls -1 $PHP_FPM_POOL 2>/dev/null | head -1)"
+WEB_USER="${WEB_USER:-${FPM_POOL_RESOLVED:+$(grep -m1 '^user' "$FPM_POOL_RESOLVED" 2>/dev/null | awk '{print $3}')}}"
+WEB_USER="${WEB_USER:-www-data}"
 for d in storage/app storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache; do
     mkdir -p "$RELEASE_DIR/$d"
 done
-chown -R "$WEB_USER":"$WEB_USER" "$RELEASE_DIR/storage" "$RELEASE_DIR/bootstrap/cache"
+
+# Laravel must be able to write storage/ and bootstrap/cache/ as the FPM user.
+# A failed chown is only acceptable when the ownership is already right (a
+# single-user host deploying as the account it serves); anything else must stop
+# the deployment here rather than go live on a runtime that cannot log.
+if ! chown -R "$WEB_USER":"$WEB_USER" "$RELEASE_DIR/storage" "$RELEASE_DIR/bootstrap/cache" 2>/dev/null; then
+    if [ "$(stat -c '%U' "$RELEASE_DIR/storage" 2>/dev/null)" != "$WEB_USER" ]; then
+        die "cannot hand $RELEASE_DIR/storage and bootstrap/cache to ${WEB_USER}: run the deployment as root (or with sudo), or set WEB_USER to the user PHP-FPM serves as"
+    fi
+    log "storage already owned by ${WEB_USER}: chown not required"
+fi
 
 # 8. Production optimization (Laravel-recommended: cached config/routes/views).
 ( cd "$RELEASE_DIR" && "$PHP_BIN" artisan config:cache && "$PHP_BIN" artisan route:cache && "$PHP_BIN" artisan view:cache )

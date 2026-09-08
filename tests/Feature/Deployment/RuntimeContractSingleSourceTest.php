@@ -68,6 +68,23 @@ final class RuntimeContractSingleSourceTest extends TestCase
         $this->assertStringNotContainsString('requires PHP 8.2.27', $doc, 'the prose must not require an exact patch release');
     }
 
+    public function test_the_host_paths_the_deploy_script_guesses_are_overridable_once(): void
+    {
+        $deploy = (string) file_get_contents(base_path('deploy/deploy.sh'));
+
+        // The FPM pool location and the web user are host facts, not repo facts:
+        // each must have exactly one default and one override, and the ownership
+        // step must fail with the remedy in the message instead of a raw chown
+        // error (which is how the Gate A rehearsal died after a clean migration).
+        $this->assertSame(
+            1,
+            substr_count($deploy, '/etc/php/*/fpm/pool.d/toefl-house.conf'),
+            'the pool location must be spelled once, not re-derived per step'
+        );
+        $this->assertStringContainsString('WEB_USER="${WEB_USER:-', $deploy, 'the web user must be overridable like every other host input');
+        $this->assertStringContainsString('set WEB_USER to the user PHP-FPM serves as', $deploy, 'a refused chown must name the remedy');
+    }
+
     public function test_the_enforcer_deploy_script_delegates_to_actually_passes_here(): void
     {
         // Not a text assertion: run the same command deploy.sh step 2b runs, in
