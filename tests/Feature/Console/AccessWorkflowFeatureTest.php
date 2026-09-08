@@ -343,6 +343,9 @@ final class AccessWorkflowFeatureTest extends TestCase
 
         // Approver slots are written once — even on a legal transition,
         // rewriting a signed slot is refused.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update([
                 'approver_one_id' => 'acw-owner-b',
@@ -352,7 +355,9 @@ final class AccessWorkflowFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('expected the boundary to refuse rewriting an approver slot');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('written once', $exception->getMessage());
         }
 
@@ -365,10 +370,15 @@ final class AccessWorkflowFeatureTest extends TestCase
             'acw-sql-execute',
         );
         $this->assertDatabaseHas($requests, ['id' => $requestId, 'lifecycle_state' => 'granted']);
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update(['permission' => 'rewritten', 'updated_at' => now()]);
             $this->fail('expected the boundary to refuse changing an executed request');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('closed', $exception->getMessage());
         }
     }

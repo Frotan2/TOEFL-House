@@ -239,16 +239,26 @@ final class OpeningStateFeatureTest extends TestCase
             DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM opening_entries WHERE id = ?', [$prepared['entries']['paper/wrong-1']]);
             $this->fail('raw SQL entry delete must fail');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE opening_entries SET amount = 4000.00 WHERE id = ?', [$prepared['entries']['paper/wrong-1']]);
             $this->fail('raw SQL entry rewrite must fail');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
         $this->assertDatabaseHas('opening_entries', ['id' => $prepared['entries']['paper/wrong-1'], 'amount' => '5000.00']);

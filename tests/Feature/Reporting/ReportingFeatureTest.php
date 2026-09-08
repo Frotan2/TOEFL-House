@@ -329,6 +329,9 @@ final class ReportingFeatureTest extends TestCase
         // Bypass attempts carry real definition/version/source references and
         // only forge the organization snapshot. Their exact schema guards
         // prove that neither reporting table accepts cross-tenant fund facts.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('metric_projections')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f168',
@@ -346,9 +349,14 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not assign organization-A provenance to an organization-B fund projection');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('fund metric projection organization must match its funding source', $exception->getMessage());
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('report_runs')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f169',
@@ -367,7 +375,9 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not assign organization-A provenance to an organization-B fund run');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('fund report run organization must match its funding source', $exception->getMessage());
         }
 
@@ -383,6 +393,9 @@ final class ReportingFeatureTest extends TestCase
         // A dashboard is an organization-owned projection surface. Even a
         // complete source-B projection cannot be pinned into dashboard A.
         $dashboard = app(MaintainDashboard::class)->create($localAnalyst, 'Local dashboard', 'rep-fund-scope-dashboard');
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('dashboard_pins')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f16a',
@@ -396,7 +409,9 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not pin a platform-global projection into an organization dashboard');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('organization-owned dashboards cannot pin global projections', $exception->getMessage());
         }
         try {
@@ -405,6 +420,9 @@ final class ReportingFeatureTest extends TestCase
         } catch (BusinessRejection $rejection) {
             $this->assertSame('reporting.pin_scope_conflict', $rejection->errorCode());
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('dashboard_pins')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f170',
@@ -418,7 +436,9 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not pin a foreign organization projection');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('dashboard pins require a complete projection matching the dashboard organization', $exception->getMessage());
         }
     }

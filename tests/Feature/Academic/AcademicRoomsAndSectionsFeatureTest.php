@@ -135,6 +135,9 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
             $section['section_id'],
         );
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $maintainClass->scheduleSession(
                 $officer,
@@ -148,7 +151,9 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
                 $section['section_id'],
             );
             $this->fail('overlapping section sessions must be rejected');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->assertSame(2, ClassSession::query()->where('section_id', $section['section_id'])->where('scheduled_on', '2026-09-11')->count());
         }
 

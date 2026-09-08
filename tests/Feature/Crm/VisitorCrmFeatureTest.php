@@ -402,10 +402,15 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertSame('hot', $visitor->fresh()?->rating);
 
         // Branch provenance is immutable once assigned.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('visitors')->where('id', $visitor->id)->update(['origin_branch_id' => RandomIdentifier::new()]);
             $this->fail('branch provenance must be immutable');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('immutable', $exception->getMessage());
         }
 

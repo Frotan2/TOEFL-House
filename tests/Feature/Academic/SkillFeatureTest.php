@@ -101,17 +101,27 @@ final class SkillFeatureTest extends TestCase
             $this->addToAssertionCount(1);
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE skills SET key = ? WHERE id = ?', ['hacked', $ids['speaking_listening']]);
             $this->fail('skill identity is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM skills WHERE id = ?', [$ids['speaking_listening']]);
             $this->fail('skills are never deleted');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }
@@ -152,16 +162,26 @@ final class SkillFeatureTest extends TestCase
             $this->assertSame('academic.assignment_skill_unknown', $rejection->errorCode());
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE teacher_assignment_skills SET skill_id = ? WHERE teacher_assignment_id = ?', [$ids['reading_vocabulary'], $assignment['assignment_id']]);
             $this->fail('assignment skills are append-only');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM teacher_assignment_skills WHERE teacher_assignment_id = ?', [$assignment['assignment_id']]);
             $this->fail('assignment skills cannot be deleted');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }
@@ -200,6 +220,9 @@ final class SkillFeatureTest extends TestCase
             $this->assertSame('academic.session_skill_unknown', $rejection->errorCode());
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('class_sessions')->insert([
                 'id' => '00000000-0000-4000-8000-00000000beef',
@@ -210,7 +233,9 @@ final class SkillFeatureTest extends TestCase
                 'ends_at' => '10:00',
             ]);
             $this->fail('the schema must reject direct inserts of retired-skill sessions');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }

@@ -40,10 +40,15 @@ final class BranchProvenanceFoundationTest extends TestCase
         $this->assertSame($branchA->id, Student::query()->findOrFail($student->id)->originating_branch_id);
 
         // Rewriting provenance is rejected by the schema.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $this->updateOriginatingBranch($student, $branchB->id);
             $this->fail('Rewriting originating_branch_id must be rejected by the schema.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('originating_branch_id is immutable', $e->getMessage());
         }
 
@@ -55,10 +60,15 @@ final class BranchProvenanceFoundationTest extends TestCase
         $branch = $this->makeBranch('f1-self-branch');
         $actor = $this->makeStudent()['person'];
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('branch_scope_links')->insert($this->linkRow($branch->id, $branch->id, $actor->id));
             $this->fail('A self-referential scope link must be rejected.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('check', $e->getMessage());
         }
 
@@ -76,10 +86,15 @@ final class BranchProvenanceFoundationTest extends TestCase
         $this->assertSame(1, DB::table('branch_scope_links')->count());
 
         // A second OPEN link for the same owner is rejected.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('branch_scope_links')->insert($this->linkRow($owner->id, $b->id, $actor->id));
             $this->fail('A second open scope link for one owner branch must be rejected.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('branch_scope_links_one_open_owner', $e->getMessage());
         }
 
@@ -122,33 +137,48 @@ final class BranchProvenanceFoundationTest extends TestCase
 
         // An OPEN/active link must have no effective_to (the one-active rule is
         // the single current authority) — a non-null end is a closed/historical link.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $row = $this->linkRow($owner->id, $affected->id, $actor->id);
             $row['effective_to'] = '2026-09-03';
             DB::table('branch_scope_links')->insert($row);
             $this->fail('An active scope link must have a NULL effective_to.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('branch_scope_links_open_window_check', $e->getMessage());
         }
 
         // A closed link is historical and must have its window end set.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $row = $this->linkRow($owner->id, $affected->id, $actor->id);
             $row['lifecycle_state'] = 'closed';
             DB::table('branch_scope_links')->insert($row);
             $this->fail('A closed scope link must have a non-NULL effective_to.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('branch_scope_links_open_window_check', $e->getMessage());
         }
 
         // A closed link must never invert its window.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $row = $this->linkRow($owner->id, $affected->id, $actor->id);
             $row['lifecycle_state'] = 'closed';
             $row['effective_to'] = '2026-09-02';
             DB::table('branch_scope_links')->insert($row);
             $this->fail('A scope link window cannot be inverted.');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertStringContainsString('branch_scope_links_window_check', $e->getMessage());
         }
 

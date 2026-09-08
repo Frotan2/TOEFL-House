@@ -155,12 +155,17 @@ final class IdentityAdmissionsDirectSqlAttackTest extends TestCase
         ]);
 
         // The approver may not equal the initiator or the reviewer.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE admission_decisions SET lifecycle_state = ?, approver_id = ? WHERE id = ?', [
                 'final', 'idatk-rev-3', 'dddddddd-eeee-4fff-8000-000000000005',
             ]);
             $this->fail('a self-approving chain must be rejected');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->assertSame('applicant', Applicant::query()->findOrFail($applicantId)->lifecycle_state);
         }
     }

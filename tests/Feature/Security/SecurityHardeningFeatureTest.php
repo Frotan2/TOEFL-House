@@ -164,10 +164,15 @@ final class SecurityHardeningFeatureTest extends TestCase
             $this->addToAssertionCount(1);
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM audit_events WHERE id = ?', [$row->id]);
             $this->fail('the audit trail must be append-only');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 
