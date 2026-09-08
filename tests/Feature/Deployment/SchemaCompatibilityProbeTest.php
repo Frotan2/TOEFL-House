@@ -91,6 +91,21 @@ final class SchemaCompatibilityProbeTest extends TestCase
         }
     }
 
+    public function test_it_reports_zero_on_a_database_that_has_never_been_migrated(): void
+    {
+        // The first deployment to a fresh host reads SCHEMA_BEFORE against a
+        // database that has no `migrations` table at all, and template1 is that
+        // case for real: an existing, untouched database the app never migrated.
+        // (A query that merely *references* public.migrations fails at parse
+        // time here, which is how the first version of this probe died.)
+        $count = $this->runProbe(['--count'], ['DB_NAME' => 'template1']);
+        $this->assertSame(0, $count['exit'], $count['stderr']);
+        $this->assertSame('0', trim($count['stdout']));
+
+        $check = $this->runProbe(['--check', base_path()], ['DB_NAME' => 'template1']);
+        $this->assertSame(0, $check['exit'], "a virgin database cannot be ahead of a release: {$check['stdout']} {$check['stderr']}");
+    }
+
     public function test_the_deploy_script_never_goes_through_the_tinker_package(): void
     {
         // The historical defect: deploy.sh read schema state with

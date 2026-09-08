@@ -72,7 +72,20 @@ case "${1:-}" in
     --count)
         # A database without a migrations table has nothing applied yet: that is
         # a real answer (0), not an error.
-        if ! count="$(sql "SELECT CASE WHEN to_regclass('public.migrations') IS NULL THEN 0 ELSE (SELECT count(*) FROM public.migrations) END;")"; then
+        # Two round-trips on purpose: a single query that *references*
+        # public.migrations inside the guarded branch still fails at parse time
+        # ("relation \"public.migrations\" does not exist") on a database that has
+        # never been migrated - which is the first deployment of a fresh host,
+        # exactly when SCHEMA_BEFORE is read.
+        if ! migrations="$(sql "SELECT to_regclass('public.migrations') IS NOT NULL;")"; then
+            exit 2
+        fi
+        if [ "$migrations" != "t" ]; then
+            printf '0\n'
+            exit 0
+        fi
+
+        if ! count="$(sql "SELECT count(*) FROM public.migrations;")"; then
             exit 2
         fi
         case "$count" in
