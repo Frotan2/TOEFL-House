@@ -13,7 +13,10 @@
 #   ./deploy/deploy.sh --rollback         # roll back to the previous release
 #
 # Prerequisites (see docs/operations/production-deployment.md):
-#   * php + composer + node/npm + curl on PATH
+#   * php + composer + node/npm + curl on PATH; their versions are verified by
+#     scripts/runtime/verify-environment.mjs (the machine-checkable form of
+#     docs/RUNTIME_ENVIRONMENT_LOCK.md), which step 2b runs — this script
+#     deliberately holds no version numbers of its own
 #   * PostgreSQL client tools pg_dump + pg_restore (postgresql-client, version >=
 #     the server) — required by deploy/backup.sh and deploy/restore.sh
 #   * nginx (deploy/nginx) and php-fpm (deploy/php-fpm.conf) installed
@@ -37,10 +40,6 @@ PSQL_BIN="${PSQL_BIN:-psql}"
 # the release being inspected has no vendor tree (or is an older release).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCHEMA_PROBE="${SCHEMA_PROBE:-$SCRIPT_DIR/schema-compatibility.sh}"
-EXPECTED_PHP_VERSION="${EXPECTED_PHP_VERSION:-8.2.27}"
-EXPECTED_NODE_VERSION="${EXPECTED_NODE_VERSION:-22.23.1}"
-EXPECTED_NPM_VERSION="${EXPECTED_NPM_VERSION:-10.9.2}"
-EXPECTED_POSTGRES_VERSION="${EXPECTED_POSTGRES_VERSION:-18.4}"
 
 log()  { printf '[deploy] %s\n' "$*"; }
 die()  { printf '[deploy][ERROR] %s\n' "$*" >&2; exit 1; }
@@ -55,6 +54,7 @@ load_db_settings() {
     DB_USER_VAL="$(grep -m1 '^DB_USERNAME=' "$ENV_FILE" | cut -d= -f2-)"
     DB_PASS_VAL="$(grep -m1 '^DB_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
     DB_SSLMODE_VAL="$(grep -m1 '^DB_SSLMODE=' "$ENV_FILE" | cut -d= -f2-)"
+    DB_CONNECTION_VAL="$(grep -m1 '^DB_CONNECTION=' "$ENV_FILE" | cut -d= -f2-)"
 }
 
 # Read live schema state with the first-party psql probe (see
@@ -98,13 +98,15 @@ fi
 REF="${1:?usage: deploy.sh <git-ref> | --rollback}"
 [ -f "$ENV_FILE" ] || die "missing persistent env file at $ENV_FILE (create it from .env.example with APP_ENV=production, APP_DEBUG=false, APP_KEY, and DB credentials)"
 
-# The project release contract is intentionally exact. Do not certify/deploy
-# against a different runtime merely because it happens to satisfy composer ranges.
-command -v "$NPM_BIN" >/dev/null 2>&1 || die "npm not found on PATH"
-ACTUAL_NODE_VERSION="$(node --version 2>/dev/null | sed 's/^v//' || true)"
-ACTUAL_NPM_VERSION="$($NPM_BIN --version 2>/dev/null || true)"
-[ "$ACTUAL_NODE_VERSION" = "$EXPECTED_NODE_VERSION" ] || die "Node.js $EXPECTED_NODE_VERSION is required; found '${ACTUAL_NODE_VERSION:-unavailable}'"
-[ "$ACTUAL_NPM_VERSION" = "$EXPECTED_NPM_VERSION" ] || die "npm $EXPECTED_NPM_VERSION is required; found '${ACTUAL_NPM_VERSION:-unavailable}'"
+# Tool presence fails fast here. Tool *versions* are verified in step 2b by the
+# runtime lock's own enforcer, because that script is the single source of truth:
+# this file used to pin PHP 8.2.27 / Node 22.23.1 / npm 10.9.2 / PostgreSQL 18.4
+# exactly, and that second copy of the contract had drifted away from the runtime
+# the release was actually certified on, refusing valid deployments. Do not put
+# version numbers back here.
+for tool in "$PHP_BIN" "$COMPOSER_BIN" node "$NPM_BIN"; do
+    command -v "$tool" >/dev/null 2>&1 || die "$tool not found on PATH"
+done
 
 RELEASE_ID="$(date -u +%Y%m%d%H%M%S)"
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
@@ -123,13 +125,26 @@ log "source: commit $COMMIT"
 # 2. Dependencies (production only; lock file is authoritative).
 ( cd "$RELEASE_DIR" && "$COMPOSER_BIN" install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader )
 
+# 2b. Runtime contract, enforced by the lock itself (docs/RUNTIME_ENVIRONMENT_LOCK.md).
+#     Ranges, not patch pins. It runs inside the release directory because the
+#     Laravel check reads vendor/autoload.php, and it is pointed at the deployment
+#     database through the persistent env file rather than the ambient shell.
+load_db_settings
+( cd "$RELEASE_DIR" \
+    && DB_CONNECTION="${DB_CONNECTION_VAL:-pgsql}" \
+       DB_HOST="${DB_HOST_VAL:-127.0.0.1}" DB_PORT="${DB_PORT_VAL:-5432}" \
+       DB_DATABASE="${DB_NAME_VAL:-toefl_house}" \
+       DB_USERNAME="${DB_USER_VAL:-postgres}" DB_PASSWORD="${DB_PASS_VAL:-}" \
+       node scripts/runtime/verify-environment.mjs ) \
+    || die "host runtime does not satisfy the environment lock (docs/RUNTIME_ENVIRONMENT_LOCK.md); see the FAIL lines above"
+
 # 3. Build the selected React/TypeScript console root. The build runs in the
 # release directory so public/build is part of the atomic release; no Node
 # process is needed after go-live. A committed lockfile is mandatory for the
 # production path; npm ci refuses to proceed when package.json and the lockfile
 # disagree.
 [ -f "$RELEASE_DIR/package-lock.json" ] || die "missing package-lock.json: refusing a non-reproducible production frontend build"
-( cd "$RELEASE_DIR" && "$NPM_BIN" ci --no-audit --no-fund && "$NPM_BIN" run build )
+( cd "$RELEASE_DIR" && "$NPM_BIN" ci --no-audit --no-fund --engine-strict && "$NPM_BIN" run build )
 
 # 4. Environment: the persistent .env is the single source of deployment env.
 cp "$ENV_FILE" "$RELEASE_DIR/.env"
@@ -158,12 +173,8 @@ case "${DB_HOST_VAL:-127.0.0.1}" in
         ;;
 esac
 for tool in pg_dump pg_restore "$PSQL_BIN"; do
-    command -v "$tool" >/dev/null 2>&1 || die "$tool not found on PATH: install PostgreSQL client tools for the PostgreSQL 18.4 production contract"
+    command -v "$tool" >/dev/null 2>&1 || die "$tool not found on PATH: install PostgreSQL client tools at or above the server version (PostgreSQL 18 contract)"
 done
-
-PGVERSION="$($PSQL_BIN --host="${DB_HOST_VAL:-127.0.0.1}" --port="${DB_PORT_VAL:-5432}" --username="${DB_USER_VAL:-postgres}" --dbname="${DB_NAME_VAL:-toefl_house}" --tuples-only --no-align -c 'SHOW server_version;' 2>/dev/null || true)"
-PGVERSION="$(printf '%s' "$PGVERSION" | tr -d '\r\n')"
-[ "$PGVERSION" = "$EXPECTED_POSTGRES_VERSION" ] || die "PostgreSQL $EXPECTED_POSTGRES_VERSION is required; found '${PGVERSION:-unavailable}'"
 
 PG_EXTENSIONS="$($PSQL_BIN --host="${DB_HOST_VAL:-127.0.0.1}" --port="${DB_PORT_VAL:-5432}" --username="${DB_USER_VAL:-postgres}" --dbname="${DB_NAME_VAL:-toefl_house}" --tuples-only --no-align -c "SELECT name || ':' || COALESCE(installed_version, '') FROM pg_available_extensions WHERE name IN ('pgcrypto','btree_gist') ORDER BY name;" 2>/dev/null || true)"
 PG_EXTENSION_COUNT="$(printf '%s\n' "$PG_EXTENSIONS" | awk 'NF {count++} END {print count+0}')"

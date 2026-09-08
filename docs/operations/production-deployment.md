@@ -10,11 +10,11 @@ the exact value to supply is called out as a `TODO`.
 
 | Component | Requirement | Verified with |
 |---|---|---|
-| PHP | **8.2.27** (CLI + FPM) with `pdo_pgsql`/`pgsql`, `mbstring`, `openssl`, `bcmath`, `intl`, `xml` | 8.2.27 |
-| PostgreSQL | **18.4** with `pgcrypto` and `btree_gist` available | 18.4 |
-| Node.js | **22.23.1** | 22.23.1 |
-| npm | **10.9.2** | 10.9.2 |
-| Web server | nginx (TLS termination) + PHP-FPM | nginx 1.x / php8.2-fpm |
+| PHP | `>=8.2 <8.5` (CLI + FPM) with `pdo_pgsql`/`pgsql`, `mbstring`, `openssl`, `bcmath`, `intl`, `xml` | 8.4.14 |
+| PostgreSQL | `>=18.0 <19.0` with `pgcrypto` and `btree_gist` available | 18.4 |
+| Node.js | `>=22.0 <23.0` (`package.json` engines) | 22.22.3 |
+| npm | `>=10.0` (`package.json` engines, enforced with `--engine-strict`) | 10.9.8 |
+| Web server | nginx (TLS termination) + PHP-FPM | nginx 1.x / php-fpm |
 | OS | Any Linux that ships the above (Debian/Ubuntu reference) | — |
 
 The employee console is a React/TypeScript application bundled by Vite; the
@@ -86,10 +86,17 @@ composer install --no-dev --no-interaction --prefer-dist \
     --no-progress --optimize-autoloader
 ```
 
-The committed `composer.lock` is authoritative (no `composer update`). The
-deployment contract requires PHP 8.2.27 exactly. PHP and Composer are installed
-once on the host (standard package manager or the
-repository's `docs/environment` recovery procedure for a from-scratch build).
+The committed `composer.lock` is authoritative (no `composer update`). Runtime
+versions are **ranges enforced by the environment lock**, not patch pins held by
+the deploy script: step 2b runs `npm run verify:environment`'s script inside the
+release, and `npm ci --engine-strict` enforces the Node/npm range from
+`package.json`. (It used to re-declare a handful of exact patch
+versions of its own; a duplicated contract drifts, and it had started refusing
+releases that were certified on the locked runtime. If a version must be tightened, change
+`docs/RUNTIME_ENVIRONMENT_LOCK.md` and `scripts/runtime/verify-environment.mjs`
+together — never here.) PHP and Composer are installed once on the host
+(standard package manager or the repository's `docs/environment` recovery
+procedure for a from-scratch build).
 
 ## 6. Frontend build
 
@@ -98,7 +105,7 @@ The selected interactive root is the standalone React/TypeScript workspace in
 Vite asset before the release goes live:
 
 ```
-npm ci --no-audit --no-fund
+npm ci --no-audit --no-fund --engine-strict
 npm run build
 ```
 
@@ -247,7 +254,7 @@ green health check):
 
 1. Fresh checkout of `<git-ref>` into `releases/<timestamp>`.
 2. `composer install --no-dev --optimize-autoloader`.
-3. `npm ci --no-audit --no-fund && npm run build` to produce the React/Vite
+3. `npm ci --no-audit --no-fund --engine-strict && npm run build` to produce the React/Vite
    `public/build` assets.
 4. Copy the persistent `.env`; enforce `APP_ENV=production`, `APP_DEBUG=false`,
    non-empty `APP_KEY`.
@@ -287,7 +294,7 @@ Before declaring a deployment healthy, the full gate must be green:
 
 ```
 php artisan migrate:fresh --seed:off   # disposable clean-schema verification
-npm ci --no-audit --no-fund && npm run build
+npm ci --no-audit --no-fund --engine-strict && npm run build
 vendor/bin/phpunit                     # full feature suite
 vendor/bin/phpstan analyse             # static analysis
 vendor/bin/pint --test                 # formatting
