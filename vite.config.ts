@@ -7,6 +7,7 @@ export default defineConfig({
     laravel({
       input: [
         'resources/js/app.tsx',
+        'resources/js/product-theme.css',
         'resources/js/finance.tsx',
         'resources/js/reporting.tsx',
         'resources/js/hr.tsx',
