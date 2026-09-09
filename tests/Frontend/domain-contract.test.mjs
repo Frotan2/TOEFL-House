@@ -53,14 +53,16 @@ assert.match(legacyLayout, /toefl-house-ultimate\.css/, 'legacy layout: unified 
 assert.match(legacyLayout, /toefl-house-operations\.css/, 'legacy layout: operational visual contract missing');
 
 const specialistBlades = {
-  placement: ['placement', 'index.blade.php'],
-  finance: ['finance', 'index.blade.php'],
-  hr: ['hr', 'index.blade.php'],
-  payroll: ['payroll', 'index.blade.php'],
+  placement: ['placement', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-placement\.css']],
+  finance: ['finance', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  hr: ['hr', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  payroll: ['payroll', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
 };
-for (const [domain, [folder, filename]] of Object.entries(specialistBlades)) {
+for (const [domain, [folder, filename, cssContracts]] of Object.entries(specialistBlades)) {
   const file = path.join(viewsRoot, folder, filename);
   assert.ok(fs.existsSync(file), `${domain}: specialist Blade mount is missing`);
+  const source = fs.readFileSync(file, 'utf8');
+  for (const contract of cssContracts) assert.match(source, new RegExp(contract), `${domain}: ${contract} is not loaded`);
 }
 
 const legacyViews = ['library', 'communication', 'documents', 'organization', 'access', 'audit', 'privacy'];
@@ -72,6 +74,13 @@ for (const folder of legacyViews) {
 const placementBlade = fs.readFileSync(path.join(viewsRoot, 'placement', 'index.blade.php'), 'utf8');
 assert.match(placementBlade, /id="placement-console"/, 'placement: console mount missing');
 assert.match(placementBlade, /resources\/js\/placement\.tsx/, 'placement: specialist entrypoint missing');
+
+const routes = fs.readFileSync(path.join(root, 'routes', 'web.php'), 'utf8');
+for (const pathFragment of ['/placement', '/hr', '/library', '/finance', '/communication', '/payroll', '/reporting', '/documents', '/access', '/privacy', '/audit', '/print']) {
+  assert.ok(routes.includes(`prefix('${pathFragment.slice(1)}')`), `web routes: ${pathFragment} prefix is missing`);
+}
+assert.match(routes, /Route::view\('\/workspace', 'workspace'\)->name\('workspace'\)/, 'web routes: canonical workspace route missing');
+assert.match(routes, /Route::get\('\/', fn \(\) => redirect\(\)->route\('workspace'\)\)->name\('home'\)/, 'web routes: home must redirect to canonical workspace');
 
 const lifecycle = fs.readFileSync(
   path.join(root, 'app', 'Modules', 'Academic', 'Placement', 'Domain', 'PlacementProfileLifecycle.php'),
