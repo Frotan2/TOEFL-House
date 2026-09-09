@@ -175,6 +175,7 @@ jobs:
         shell: bash
         run: |
           E2E_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$E2E_PASSWORD"
           {
             echo "BOOTSTRAP_OWNER_NAME=CI E2E Owner"
             echo "BOOTSTRAP_OWNER_BIRTHDATE=1990-01-01"
