@@ -23,8 +23,9 @@ alone.
 
 ## 1. Certification statement
 
-**I certify TOEFL House production-ready at the commit containing this
-document, on the following executed evidence:**
+**I certify TOEFL House production-ready at commit `96925d3` (the commit
+carrying the fix, the pinning tests and this certification), on the following
+executed evidence:**
 
 - locked runtime re-provisioned from zero and machine-checked (8/8);
 - 185/185 migration replay on a virgin PostgreSQL 18.4 database;
