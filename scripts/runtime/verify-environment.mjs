@@ -1,10 +1,9 @@
 /**
  * Runtime environment contract check.
  *
- * Machine-checkable enforcement of supported runtime ranges and database
- * contract. PostgreSQL is the only supported database; application and test
- * configuration must use pgsql. An unused sqlite extension on a CI image does
- * not change that contract.
+ * Machine-checkable enforcement of the supported runtime contract. The locked
+ * exact versions come from docs/RUNTIME_ENVIRONMENT_LOCK.md; keeping the
+ * verifier on ranges would allow unverified patch/minor drift to pass CI.
  *
  * Run: npm run verify:environment
  */
@@ -13,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 const results = [];
 const record = (name, pass, detail) => {
   results.push({ name, pass });
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name.padEnd(46)} ${detail}`);
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name.padEnd(52)} ${detail}`);
 };
 
 function run(cmd, args) {
@@ -29,17 +28,16 @@ const parse = (v) => {
   return m ? { major: +m[1], minor: +(m[2] ?? 0), patch: +(m[3] ?? 0), raw: m[0] } : null;
 };
 
-function inRange(version, min, max) {
-  if (!version) return false;
-  const cmp = (a, b) => a.major - b.major || a.minor - b.minor || a.patch - b.patch;
-  return cmp(version, min) >= 0 && cmp(version, max) < 0;
+function exact(version, expected) {
+  return version?.raw === expected;
 }
 
 const LOCK = {
-  php: { min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
-  composer: { min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
-  node: { min: { major: 22, minor: 0, patch: 0 }, max: { major: 23, minor: 0, patch: 0 } },
-  postgres: { min: { major: 18, minor: 0, patch: 0 }, max: { major: 19, minor: 0, patch: 0 } },
+  php: { exact: '8.4.14', min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
+  composer: { exact: '2.9.2', min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
+  node: { exact: '22.22.3', min: { major: 22, minor: 0, patch: 0 }, max: { major: 23, minor: 0, patch: 0 } },
+  npm: { exact: '10.9.8', min: { major: 10, minor: 0, patch: 0 }, max: { major: 11, minor: 0, patch: 0 } },
+  postgres: { exact: '18.4', min: { major: 18, minor: 0, patch: 0 }, max: { major: 19, minor: 0, patch: 0 } },
 };
 
 const REQUIRED_EXTENSIONS = [
@@ -50,7 +48,8 @@ const REQUIRED_EXTENSIONS = [
 
 const phpRaw = run('php', ['-r', 'echo PHP_VERSION;']);
 const php = parse(phpRaw);
-record('PHP within locked range (>=8.2 <8.5)', inRange(php, LOCK.php.min, LOCK.php.max), phpRaw ?? 'php not found');
+const phpSupported = php !== null && php.major === 8 && php.minor >= 2 && php.minor < 5;
+record('PHP exact locked version', exact(php, LOCK.php.exact), `${phpRaw ?? 'php not found'} (supported=${phpSupported})`);
 
 const extRaw = run('php', ['-r', 'echo implode(",", get_loaded_extensions());']);
 const loaded = new Set((extRaw ?? '').toLowerCase().split(',').map((e) => e.trim()));
@@ -66,11 +65,14 @@ record('Active database contract is PostgreSQL', dbConnection === 'pgsql', `DB_C
 
 const composerRaw = run('composer', ['--version', '--no-ansi']);
 const composer = parse(composerRaw);
-record('Composer within locked range (>=2.5 <3)', inRange(composer, LOCK.composer.min, LOCK.composer.max),
-  composerRaw?.split('\n')[0] ?? 'composer not found');
+record('Composer exact locked version', exact(composer, LOCK.composer.exact), `${composerRaw?.split('\n')[0] ?? 'composer not found'} (supported >=2.5 <3)`);
 
 const node = parse(process.version);
-record('Node within locked range (>=22 <23)', inRange(node, LOCK.node.min, LOCK.node.max), process.version);
+record('Node exact locked version', exact(node, LOCK.node.exact), `${process.version} (supported >=22 <23)`);
+
+const npmRaw = run('npm', ['--version']);
+const npm = parse(npmRaw);
+record('npm exact locked version', exact(npm, LOCK.npm.exact), `${npmRaw ?? 'npm not found'} (supported >=10 <11)`);
 
 const laravel = run('php', ['-r',
   'require "vendor/autoload.php"; echo \\Illuminate\\Foundation\\Application::VERSION;']);
@@ -90,13 +92,13 @@ const pgRaw = run('php', ['-r', `
   } catch (Throwable $e) { echo 'UNREACHABLE'; }
 `]);
 const pg = parse(pgRaw);
-record('PostgreSQL 18.x reachable', inRange(pg, LOCK.postgres.min, LOCK.postgres.max),
-  pgRaw === 'UNREACHABLE' ? 'could not connect (set DB_HOST/DB_PORT/...)' : (pgRaw ?? 'unknown'));
+const pgExact = pg !== null && (pg.raw === LOCK.postgres.exact || pg.raw.startsWith(`${LOCK.postgres.exact}.`));
+record('PostgreSQL exact locked version', pgExact, pgRaw === 'UNREACHABLE' ? 'could not connect (set DB_HOST/DB_PORT/...)' : (pgRaw ?? 'unknown'));
 
 const failed = results.filter((r) => !r.pass).length;
 console.log(`\nENVIRONMENT LOCK: ${results.length - failed}/${results.length} satisfied`);
 if (failed > 0) {
   console.error('\nThe runtime has drifted from the supported environment contract.');
-  console.error('Fix the environment rather than relaxing the runtime ranges.');
+  console.error('Fix the environment or update the lock documents together with a complete verification run.');
 }
 process.exit(failed === 0 ? 0 : 1);
