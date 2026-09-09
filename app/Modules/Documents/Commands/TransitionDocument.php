@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\DB;
 final class TransitionDocument
 {
     public const CAPABILITY = 'documents.verify';
+    public const SUBMIT_CAPABILITY = 'documents.submit';
 
     public function __construct(
         private readonly AccessDecision $access,
@@ -40,7 +41,7 @@ final class TransitionDocument
     /** @return array{document_id: string, version_no: int, lifecycle_state: string, correlation_id: string} */
     public function submit(Actor $actor, Document $document, string $contentHash, string $storageRef, string $idempotencyKey): array
     {
-        $payload = hash('sha256', implode('|', ['documents.submit', $document->id, $contentHash, $actor->actorId]));
+        $payload = hash('sha256', implode('|', ['documents.submit', $document->id, trim($contentHash), trim($storageRef), $actor->actorId]));
 
         try {
             return $this->idempotency->execute('documents.submit', $idempotencyKey, $payload,
@@ -48,11 +49,14 @@ final class TransitionDocument
                     /** @var Document $locked */
                     $locked = Document::query()->whereKey($document->id)->lockForUpdate()->firstOrFail();
                     $scope = PersonBranchScope::resolve($locked->subject_person_id);
-                    $outcome = $this->access->decide($actor, RegisterDocument::CAPABILITY, $scope);
+                    $outcome = $this->access->decide($actor, self::SUBMIT_CAPABILITY, $scope);
                     if (! $outcome->allowed) {
                         throw AuthorizationDenied::forCode('documents.submit_denied', $outcome->reason);
                     }
                     DocumentLifecycle::requireTransition($locked->lifecycle_state, DocumentLifecycle::STATE_SUBMITTED);
+                    if (trim($contentHash) === '' || trim($storageRef) === '') {
+                        throw BusinessRejection::forCode('documents.content_missing', 'a submitted document version requires content hash and storage reference');
+                    }
 
                     /** @var int $maxVersion */
                     $maxVersion = (int) DocumentVersion::query()->where('document_id', $locked->id)->max('version_no');
@@ -61,8 +65,8 @@ final class TransitionDocument
                         'id' => RandomIdentifier::new(),
                         'document_id' => $locked->id,
                         'version_no' => $versionNo,
-                        'content_hash' => $contentHash,
-                        'storage_ref' => $storageRef,
+                        'content_hash' => trim($contentHash),
+                        'storage_ref' => trim($storageRef),
                         'uploaded_by' => $actor->actorId,
                     ]);
 
@@ -86,7 +90,7 @@ final class TransitionDocument
     /** @return array{document_id: string, version_no: int, lifecycle_state: string, correlation_id: string} */
     public function verify(Actor $verifier, Document $document, bool $passes, string $reason, string $idempotencyKey): array
     {
-        $payload = hash('sha256', implode('|', ['documents.verify', $document->id, $passes ? 'pass' : 'fail', $reason, $verifier->actorId]));
+        $payload = hash('sha256', implode('|', ['documents.verify', $document->id, $passes ? 'pass' : 'fail', trim($reason), $verifier->actorId]));
 
         try {
             return $this->idempotency->execute('documents.verify', $idempotencyKey, $payload,
@@ -108,7 +112,7 @@ final class TransitionDocument
                     if (trim((string) $currentVersion->uploaded_by) === $verifier->actorId) {
                         throw BusinessRejection::forCode('documents.verifier_is_uploader', 'the verifier may not be the uploader of the version under review');
                     }
-                    if ($reason === '') {
+                    if (trim($reason) === '') {
                         throw BusinessRejection::forCode('documents.verify_reason_missing', 'verification requires a reason');
                     }
 
@@ -118,7 +122,7 @@ final class TransitionDocument
                         'version_no' => (int) $currentVersion->version_no,
                         'verifier_person_id' => $verifier->actorId,
                         'result' => $passes ? 'pass' : 'fail',
-                        'reason' => $reason,
+                        'reason' => trim($reason),
                     ]);
 
                     $toState = $passes ? DocumentLifecycle::STATE_VERIFIED : DocumentLifecycle::STATE_REJECTED;
@@ -130,7 +134,7 @@ final class TransitionDocument
                         'lifecycle_state' => $toState,
                         'version_no' => (int) $currentVersion->version_no,
                         'result' => $passes ? 'pass' : 'fail',
-                        'reason' => $reason,
+                        'reason' => trim($reason),
                         'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,
                     ]);
 
