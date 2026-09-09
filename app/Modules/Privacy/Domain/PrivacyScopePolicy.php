@@ -7,6 +7,7 @@ namespace App\Modules\Privacy\Domain;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\Department;
+use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\PersonBranchScope;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\BusinessRejection;
@@ -24,6 +25,7 @@ final class PrivacyScopePolicy
             if ($scopeId !== trim($subjectPersonId)) {
                 throw BusinessRejection::forCode('privacy.scope_mismatch', 'subject scope must identify the disclosed subject');
             }
+
             return $subjectScope;
         }
 
@@ -46,7 +48,10 @@ final class PrivacyScopePolicy
 
     private static function resolve(string $scopeType, string $scopeId): StructureScope
     {
-        if ($scopeId === '') throw BusinessRejection::forCode('privacy.scope_required', 'privacy scope id is required');
+        if ($scopeId === '') {
+            throw BusinessRejection::forCode('privacy.scope_required', 'privacy scope id is required');
+        }
+
         try {
             return match ($scopeType) {
                 'organization' => self::organization($scopeId),
@@ -62,29 +67,41 @@ final class PrivacyScopePolicy
 
     private static function organization(string $id): StructureScope
     {
-        $organization = \App\Modules\Organization\Models\Organization::query()->whereKey($id)->firstOrFail();
-        if ($organization->lifecycle_state !== 'active') throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        $organization = Organization::query()->whereKey($id)->firstOrFail();
+        if ($organization->lifecycle_state !== 'active') {
+            throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        }
+
         return StructureScope::organization($organization->id);
     }
 
     private static function campus(string $id): StructureScope
     {
         $campus = Campus::query()->whereKey($id)->firstOrFail();
-        if ($campus->lifecycle_state !== 'active') throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        if ($campus->lifecycle_state !== 'active') {
+            throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        }
+
         return $campus->structureScope();
     }
 
     private static function branch(string $id): StructureScope
     {
         $branch = Branch::query()->whereKey($id)->firstOrFail();
-        if ($branch->lifecycle_state !== 'active') throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        if ($branch->lifecycle_state !== 'active') {
+            throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        }
+
         return $branch->structureScope();
     }
 
     private static function department(string $id): StructureScope
     {
         $department = Department::query()->whereKey($id)->firstOrFail();
-        if ($department->lifecycle_state !== 'active') throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        if ($department->lifecycle_state !== 'active') {
+            throw BusinessRejection::forCode('privacy.scope_inactive', 'privacy scope must be active');
+        }
+
         return $department->structureScope();
     }
 }
