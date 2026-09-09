@@ -20,7 +20,7 @@ concurrency:
 # The locked runtime. Changing these requires updating the lock documents and
 # re-running the full verification chain.
 env:
-  PHP_VERSION: '8.4'
+  PHP_VERSION: '8.4.14'
   NODE_VERSION: '22.22.3'
   POSTGRES_VERSION: '18.4'
 
@@ -66,7 +66,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.4
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -125,3 +125,70 @@ jobs:
 
       - name: Backend test suite
         run: vendor/bin/phpunit --no-coverage
+
+  browser-e2e:
+    name: Browser E2E (real Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: toefl_house_e2e
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5433
+      DB_DATABASE: toefl_house_e2e
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      APP_ENV: production
+      APP_DEBUG: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: npm ci --engine-strict
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan migrate:fresh --force
+      - run: php artisan db:seed --class=StandardFinanceChartSeeder --force
+      - run: npm run build
+      - name: Provision isolated E2E owner credentials
+        run: |
+          echo "BOOTSTRAP_OWNER_NAME=CI E2E Owner" >> "$GITHUB_ENV"
+          echo "BOOTSTRAP_OWNER_BIRTHDATE=1990-01-01" >> "$GITHUB_ENV"
+          echo "BOOTSTRAP_OWNER_USERNAME=ci.e2e.owner" >> "$GITHUB_ENV"
+          echo "BOOTSTRAP_OWNER_PASSWORD=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Bootstrap owner account
+        run: php artisan db:seed --class=FirstRunBootstrapSeeder --force
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium
+      - name: Start application
+        run: |
+          .runtime/bin/php -S 127.0.0.1:8999 -t public public/index.php > /tmp/toefl-house.log 2>&1 &
+          for i in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8999/health >/dev/null && exit 0; sleep 1; done
+          cat /tmp/toefl-house.log
+          exit 1
+      - name: Run browser E2E
+        env:
+          BASE_URL: http://127.0.0.1:8999
+          CHROMIUM_PATH: /usr/bin/chromium
+        run: npm run verify:browser
