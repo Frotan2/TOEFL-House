@@ -1,4 +1,3 @@
-```php
 <?php
 
 declare(strict_types=1);
@@ -195,5 +194,3 @@ printf("ALLOWED FINDINGS: %d\n", $allowed);
 echo "RESULT: ADVISORY REVIEW (historical and compatibility terminology must be judged semantically)\n";
 
 exit(0);
-```
-
