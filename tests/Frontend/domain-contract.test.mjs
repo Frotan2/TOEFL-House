@@ -44,9 +44,7 @@ for (const route of ['/workspace', '/crm?view=front-office', '/students', '/acad
 }
 
 const api = fs.readFileSync(path.join(jsRoot, 'core', 'api.ts'), 'utf8');
-for (const pattern of [/credentials: 'same-origin'/, /X-CSRF-TOKEN/, /Idempotency-Key/, /correlation_id/, /DEFAULT_TIMEOUT_MS\s*=\s*30_000/, /AbortController/]) {
-  assert.match(api, pattern);
-}
+for (const pattern of [/credentials: 'same-origin'/, /X-CSRF-TOKEN/, /Idempotency-Key/, /correlation_id/, /DEFAULT_TIMEOUT_MS\s*=\s*30_000/, /AbortController/]) assert.match(api, pattern);
 const boundary = fs.readFileSync(path.join(jsRoot, 'core', 'error-boundary.tsx'), 'utf8');
 assert.match(boundary, /componentDidCatch/);
 assert.match(boundary, /window\.location\.reload/);
@@ -78,9 +76,21 @@ const payroll = fs.readFileSync(path.join(jsRoot, 'payroll.tsx'), 'utf8');
 assert.match(payroll, /function confirmAction/);
 
 const workspaceBlade = fs.readFileSync(path.join(viewsRoot, 'workspace.blade.php'), 'utf8');
-for (const contract of ['@vite\\(\'resources/js/app\\.tsx\'\)', 'toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-placement\\.css', 'toefl-house-operations\\.css', '<base href="{{ url\(\'/\\'\) }}/">']) assert.match(workspaceBlade, new RegExp(contract));
+for (const contract of [
+  "@vite('resources/js/app.tsx')",
+  'toefl-house-ultimate.css',
+  'toefl-house-route-state.css',
+  'toefl-house-placement.css',
+  'toefl-house-operations.css',
+  '<base href="{{ url(\'/\') }}/">',
+]) assert.ok(workspaceBlade.includes(contract), `workspace Blade contract missing: ${contract}`);
 const legacyLayout = fs.readFileSync(path.join(viewsRoot, 'layouts', 'app.blade.php'), 'utf8');
-for (const contract of ['toefl-house-ultimate\\.css', 'toefl-house-operations\\.css', 'toefl-house-legacy-operations\\.css', '<base href="{{ url\(\'/\\'\) }}/">']) assert.match(legacyLayout, new RegExp(contract));
+for (const contract of [
+  'toefl-house-ultimate.css',
+  'toefl-house-operations.css',
+  'toefl-house-legacy-operations.css',
+  '<base href="{{ url(\'/\') }}/">',
+]) assert.ok(legacyLayout.includes(contract), `legacy layout contract missing: ${contract}`);
 for (const folder of ['library', 'communication', 'documents', 'audit', 'privacy']) assert.ok(fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: legacy boundary missing`);
 
 console.log('PASS  frontend domain, transport, shell, CI and legacy-boundary contracts');
