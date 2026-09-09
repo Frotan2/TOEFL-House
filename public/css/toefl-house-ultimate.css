@@ -1,0 +1,118 @@
+/* TOEFL House — product-wide visual hardening layer.
+ * This file contains no domain logic. It standardizes dense operational UI
+ * across legacy and unified React consoles without creating a second design system.
+ */
+
+:root {
+  --ultimate-radius-xs: 6px;
+  --ultimate-radius-sm: 9px;
+  --ultimate-radius-md: 12px;
+  --ultimate-radius-lg: 16px;
+  --ultimate-divider: #e5ebf2;
+  --ultimate-hover: #f7fafc;
+  --ultimate-selected: #edf5fd;
+  --ultimate-sticky: rgba(255,255,255,.94);
+  --ultimate-danger-soft: #fff2f0;
+  --ultimate-warning-soft: #fff8e8;
+  --ultimate-success-soft: #edf9f2;
+}
+
+html { background: var(--surface-2); }
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* Consistent operational rhythm */
+.workspace { width: 100%; }
+.workspace-header { min-width: 0; }
+.workspace-header > div:first-child { min-width: 0; }
+.page-header-actions, .detail-header-actions, .command-header-actions { flex-shrink: 0; }
+
+/* Controls */
+.button, .text-button, button, select, input, textarea { -webkit-tap-highlight-color: transparent; }
+.button:focus-visible, .text-button:focus-visible, button:focus-visible, a:focus-visible { box-shadow: var(--experience-focus-ring); }
+.button.secondary:hover { border-color: #a9bbcf; background: #f3f7fb; }
+.button.danger { background: var(--danger); border-color: var(--danger); }
+.button.danger:hover { background: #8f2c26; border-color: #8f2c26; }
+
+/* Tab systems behave like stable workspace controls, not decoration. */
+.student-tabs { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--ultimate-radius-md); display: flex; gap: 3px; overflow-x: auto; padding: 4px; scrollbar-width: thin; }
+.student-tabs button { background: transparent; border: 0; border-radius: var(--ultimate-radius-sm); color: var(--ink-600); cursor: pointer; font-weight: 700; min-height: 40px; padding: 7px 13px; white-space: nowrap; }
+.student-tabs button:hover { background: var(--ultimate-hover); color: var(--ink-950); }
+.student-tabs button.active { background: var(--ultimate-selected); color: var(--brand-900); box-shadow: inset 0 0 0 1px #d7e6f4; }
+.student-tabs button span { background: var(--surface-3); border-radius: 999px; color: var(--ink-500); font-size: 10px; margin-left: 5px; padding: 2px 6px; }
+
+/* Dense lists / tables */
+.table-wrap { box-shadow: 0 0 0 1px rgba(15,23,42,.01); }
+.table-wrap table { font-variant-numeric: tabular-nums; }
+.table-wrap tbody tr { transition: background .12s ease; }
+.table-wrap tbody tr:hover td { background: #f8fbfe; }
+.table-wrap tbody tr:focus-within td { background: var(--ultimate-selected); }
+.table-wrap td:first-child strong { color: var(--ink-950); }
+.table-wrap td small, .table-wrap th small { display: block; }
+
+/* Records that require attention should read instantly. */
+.status-chip { align-items: center; display: inline-flex; }
+.status-chip.urgent, .status-chip.failed, .status-chip.rejected, .status-chip.blocked, .status-chip.denied, .status-chip.expired { background: var(--ultimate-danger-soft); border-color: #f0c8c4; color: var(--danger); }
+.status-chip.attention, .status-chip.pending, .status-chip.held, .status-chip.needs_review { background: var(--ultimate-warning-soft); border-color: #edd8a2; color: var(--warning); }
+.status-chip.approved, .status-chip.completed, .status-chip.active, .status-chip.ready, .status-chip.verified { background: var(--ultimate-success-soft); border-color: #c7e8d4; color: var(--success); }
+
+/* Search/filter bars */
+.directory-filter, .search-label { color: var(--ink-700); font-size: 12px; font-weight: 750; }
+.directory-filter input { margin-top: 7px; }
+.directory-filter:focus-within { color: var(--brand-800); }
+
+/* Detail surfaces */
+.detail-header-actions, .inline-actions, .action-strip { justify-content: flex-end; }
+.detail-facts dt { color: var(--ink-500); font-size: 10px; font-weight: 800; letter-spacing: .045em; text-transform: uppercase; }
+.detail-facts dd { overflow-wrap: anywhere; }
+.source-note { color: var(--ink-500); font-size: 10px; line-height: 1.45; }
+
+/* Workflow command zone: primary action visually dominates, secondary actions recede. */
+.action-form { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--ultimate-radius-md); margin-top: 16px; padding: 16px; }
+.action-form .button { min-width: 120px; }
+.action-form .button:not(.secondary):not(.danger) { box-shadow: 0 6px 14px rgba(31,79,134,.10); }
+
+/* Loading / empty / error are product states, not afterthoughts. */
+.empty { color: var(--ink-500); margin: 0; padding: 18px 2px; }
+.alert, .notice, .success-banner, .error-banner { box-shadow: 0 1px 2px rgba(15,23,42,.025); }
+
+/* Placement — evidence chain remains visually distinct from decision authority. */
+#placement-detail-title ~ .lede { max-width: 820px; }
+#placement-detail-title { max-width: 900px; }
+
+/* Finance — monetary facts use a denser, highly scannable treatment. */
+#finance-main .summary-grid .panel, #payroll-main .summary-grid .panel { position: relative; overflow: hidden; }
+#finance-main .summary-grid .panel::after, #payroll-main .summary-grid .panel::after { background: linear-gradient(90deg, transparent, rgba(49,114,187,.08)); content: ''; inset: 0; pointer-events: none; position: absolute; }
+#finance-main .finance-detail, #payroll-main .finance-detail { border-top: 3px solid var(--brand-700); }
+
+/* Management — command center should feel higher signal than CRUD consoles. */
+.command-center .metric { font-variant-numeric: tabular-nums; }
+.command-center .command-metrics .panel { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.command-center .command-metrics .panel:hover { border-color: #bfd0e2; box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+
+/* Academic Setup — completion state gets a clear visual hierarchy. */
+.academic-setup .setup-check.ready { background: var(--ultimate-success-soft); border-color: #c7e8d4; }
+.academic-setup .setup-check.blocked { background: var(--ultimate-warning-soft); border-color: #edd8a2; }
+.academic-setup .setup-step.active { box-shadow: inset 3px 0 0 var(--brand-600), 0 4px 14px rgba(15,23,42,.04); }
+
+/* Mobile: controls become full-width only when wrapping would otherwise damage hierarchy. */
+@media (max-width:680px) {
+  .workspace-header, .workspace-context-bar { align-items: flex-start; flex-direction: column; }
+  .page-header-actions, .detail-header-actions, .command-header-actions { width: 100%; }
+  .page-header-actions .button, .detail-header-actions .button, .command-header-actions .button { flex: 1; }
+  .student-tabs { width: 100%; }
+  .action-form .compact-grid, .action-form .form-grid { grid-template-columns: 1fr; }
+  .action-form .inline-actions { justify-content: stretch; }
+  .action-form .inline-actions .button { flex: 1 1 160px; }
+  .table-wrap { margin-inline: -4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .001ms !important; }
+}
+
+@media print {
+  .app-header, .app-sidebar, .sidebar-backdrop, .command-palette-backdrop, .page-header-actions, .detail-header-actions, .button, .text-button, .student-tabs { display: none !important; }
+  .workspace, body[data-sidebar="collapsed"] .workspace { margin: 0 !important; max-width: none !important; padding: 0 !important; }
+  .panel, .search, .table-wrap { box-shadow: none !important; break-inside: avoid; }
+  a { color: inherit !important; text-decoration: none !important; }
+}
