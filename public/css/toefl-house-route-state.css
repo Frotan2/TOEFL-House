@@ -1,0 +1,83 @@
+/* Route-aware active state for every canonical employee console. */
+
+body:has(#react-console[data-view="placement"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="hr"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="finance"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="payroll"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="library"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="communication"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="documents"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="organization"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="access"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="privacy"]) .sidebar-nav a.active,
+body:has(#react-console[data-view="audit"]) .sidebar-nav a.active {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-600);
+  font-weight: 650;
+}
+
+body:has(#react-console[data-view="placement"]) .sidebar-nav a[href="/placement"],
+body:has(#react-console[data-view="hr"]) .sidebar-nav a[href="/hr"],
+body:has(#react-console[data-view="finance"]) .sidebar-nav a[href="/finance"],
+body:has(#react-console[data-view="payroll"]) .sidebar-nav a[href="/payroll"],
+body:has(#react-console[data-view="library"]) .sidebar-nav a[href="/library"],
+body:has(#react-console[data-view="communication"]) .sidebar-nav a[href="/communication"],
+body:has(#react-console[data-view="documents"]) .sidebar-nav a[href="/documents"],
+body:has(#react-console[data-view="organization"]) .sidebar-nav a[href="/organization"],
+body:has(#react-console[data-view="identity"]) .sidebar-nav a[href="/identity"],
+body:has(#react-console[data-view="access"]) .sidebar-nav a[href="/access"],
+body:has(#react-console[data-view="privacy"]) .sidebar-nav a[href="/privacy"],
+body:has(#react-console[data-view="audit"]) .sidebar-nav a[href="/audit"] {
+  background: #edf5fd;
+  border-color: #d8e6f2;
+  color: var(--brand-900);
+  font-weight: 800;
+}
+
+body:has(#placement-console) .sidebar-nav a.active,
+body:has(#hr-console) .sidebar-nav a.active,
+body:has(#payroll-console) .sidebar-nav a.active,
+body:has(#finance-console) .sidebar-nav a.active,
+body:has(#reporting-console) .sidebar-nav a.active,
+body:has(#access-console) .sidebar-nav a.active,
+body:has(#organization-console) .sidebar-nav a.active,
+body:has(#identity-console) .sidebar-nav a.active,
+body:has(#documents-console) .sidebar-nav a.active,
+body:has(#library-console) .sidebar-nav a.active,
+body:has(#communication-console) .sidebar-nav a.active,
+body:has(#privacy-console) .sidebar-nav a.active,
+body:has(#audit-console) .sidebar-nav a.active {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-600);
+  font-weight: 650;
+}
+
+body:has(#placement-console) .sidebar-nav a[href="/placement"],
+body:has(#hr-console) .sidebar-nav a[href="/hr"],
+body:has(#payroll-console) .sidebar-nav a[href="/payroll"],
+body:has(#finance-console) .sidebar-nav a[href="/finance"],
+body:has(#reporting-console) .sidebar-nav a[href="/reporting"],
+body:has(#access-console) .sidebar-nav a[href="/access"],
+body:has(#organization-console) .sidebar-nav a[href="/organization"],
+body:has(#identity-console) .sidebar-nav a[href="/identity"],
+body:has(#documents-console) .sidebar-nav a[href="/documents"],
+body:has(#library-console) .sidebar-nav a[href="/library"],
+body:has(#communication-console) .sidebar-nav a[href="/communication"],
+body:has(#privacy-console) .sidebar-nav a[href="/privacy"],
+body:has(#audit-console) .sidebar-nav a[href="/audit"] {
+  background: #edf5fd;
+  border-color: #d8e6f2;
+  color: var(--brand-900);
+  font-weight: 800;
+}
+
+/* High-signal distinction by operating domain without introducing a palette of competing colors. */
+#placement-detail-title, #payroll-main h1, #finance-main h1 { text-wrap: balance; }
+#placement-main .source-note, #payroll-main .source-note, #finance-main .source-note { max-width: 360px; }
+
+@media (max-width:680px) {
+  .student-tabs { scroll-snap-type: x proximity; }
+  .student-tabs button { scroll-snap-align: start; }
+}
