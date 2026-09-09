@@ -1,96 +1,76 @@
 # TOEFL House Documentation — Start Here
 
-**STATUS: CURRENT CANONICAL INDEX — NORMATIVE**
+**STATUS: CURRENT CANONICAL INDEX — NORMATIVE**  
+**Authority branch:** `main`  
+**Last reconciled:** 2026-09-09
 
-This is the single human/AI entry point to the TOEFL House engineering knowledge system. Read the canonical set before consulting history.
+This is the single human/AI entry point to the TOEFL House engineering knowledge system. Read the canonical set before consulting historical evidence.
 
-## Authority chain
+## Mandatory authority chain
 
-1. [`MASTER_ENGINEERING_CONTRACT.md`](MASTER_ENGINEERING_CONTRACT.md) — permanent constitution.
-2. [`01-ULTIMATE-GOAL.md`](01-ULTIMATE-GOAL.md) — North Star / final destination.
-3. [`02-TARGET-ARCHITECTURE.md`](02-TARGET-ARCHITECTURE.md) — accepted architecture.
-4. [`03-DOMAIN-CAPABILITY-MODEL.md`](03-DOMAIN-CAPABILITY-MODEL.md) — business/domain ownership and capability state.
-5. [`04-DATA-AUTHORITY-PROVENANCE.md`](04-DATA-AUTHORITY-PROVENANCE.md) — source of truth and provenance.
-6. [`05-SECURITY-RBAC-GOVERNANCE.md`](05-SECURITY-RBAC-GOVERNANCE.md) — authorization, scope, delegation and SoD.
-7. [`06-ACADEMIC-SYSTEM.md`](06-ACADEMIC-SYSTEM.md) — academic lifecycle.
-8. [`07-FINANCE-PAYROLL-COMMERCIAL.md`](07-FINANCE-PAYROLL-COMMERCIAL.md) — financial and settlement truth.
-9. [`08-PEOPLE-HR-CRM-OPERATIONS.md`](08-PEOPLE-HR-CRM-OPERATIONS.md) — people, HR, CRM, workspace and communication.
-10. [`09-REPORTING-INTEGRATION-PROJECTIONS.md`](09-REPORTING-INTEGRATION-PROJECTIONS.md) — projections, reporting, events and integration.
-11. [`10-FRONTEND-API-UX.md`](10-FRONTEND-API-UX.md) — frontend/API boundary and UX policy.
-12. [`11-PRIVACY-AUDIT-DOCUMENTS.md`](11-PRIVACY-AUDIT-DOCUMENTS.md) — privacy, document and audit governance.
-13. [`12-OPERATIONS-DEPLOYMENT-DR.md`](12-OPERATIONS-DEPLOYMENT-DR.md) — operations, deployment and recovery.
-14. [`13-TESTING-QUALITY-RELEASE.md`](13-TESTING-QUALITY-RELEASE.md) — QA and release gates.
-15. [`14-CURRENT-STATE-ROADMAP.md`](14-CURRENT-STATE-ROADMAP.md) — current implementation, target gaps and priorities.
-16. [`15-REQUIREMENT-TRACEABILITY.md`](15-REQUIREMENT-TRACEABILITY.md) — requirement traceability.
-17. [`16-DECISION-REGISTER.md`](16-DECISION-REGISTER.md) — decision authority index.
-18. [`CODEBASE_HYGIENE_AND_STANDARDS.md`](CODEBASE_HYGIENE_AND_STANDARDS.md) — repository coding, cleanup, compatibility, naming, comment, testing and runtime-readiness standard.
-19. [`CANONICAL_TERMINOLOGY.md`](CANONICAL_TERMINOLOGY.md) — canonical domain vocabulary and semantic distinctions.
-20. [`RUNTIME_VERIFICATION_HANDOFF.md`](RUNTIME_VERIFICATION_HANDOFF.md) — pre-runtime state, blockers, verification order and handoff evidence template.
-21. [`ai/00-AI-ENTRYPOINT.md`](ai/00-AI-ENTRYPOINT.md) — mandatory AI engineering entry point.
+1. `MASTER_ENGINEERING_CONTRACT.md` — permanent engineering constitution.
+2. `01-ULTIMATE-GOAL.md` — North Star.
+3. `02-TARGET-ARCHITECTURE.md` — accepted architecture.
+4. `03-DOMAIN-CAPABILITY-MODEL.md` — domain ownership and capability model.
+5. `04-DATA-AUTHORITY-PROVENANCE.md` — source-of-truth and provenance doctrine.
+6. `05-SECURITY-RBAC-GOVERNANCE.md` — authorization, scope, delegation and SoD.
+7. `06-ACADEMIC-SYSTEM.md` — academic lifecycle authority.
+8. `07-FINANCE-PAYROLL-COMMERCIAL.md` — financial authority.
+9. `08-PEOPLE-HR-CRM-OPERATIONS.md` — people, HR, CRM, operations.
+10. `09-REPORTING-INTEGRATION-PROJECTIONS.md` — reporting, projections, events and integrations.
+11. `10-FRONTEND-API-UX.md` — frontend/API/UX boundary.
+12. `11-PRIVACY-AUDIT-DOCUMENTS.md` — privacy, documents and audit governance.
+13. `12-OPERATIONS-DEPLOYMENT-DR.md` — deployment and recovery.
+14. `13-TESTING-QUALITY-RELEASE.md` — verification and release gates.
+15. `14-CURRENT-STATE-ROADMAP.md` — **current domain/state register**.
+16. `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` — **current parity contract**.
+17. `15-REQUIREMENT-TRACEABILITY.md` — requirement traceability.
+18. `16-DECISION-REGISTER.md` — decision authority index.
+19. `CODEBASE_HYGIENE_AND_STANDARDS.md` — codebase hygiene and compatibility rules.
+20. `CANONICAL_TERMINOLOGY.md` — vocabulary authority.
+21. `RUNTIME_ENVIRONMENT_LOCK.md` — runtime version authority.
+22. `RUNTIME_VERIFICATION_HANDOFF.md` — runtime evidence/handoff record.
+23. `TESTING_STRATEGY_LOCK.md` and `TEST_SUITE_ARCHITECTURE.md` — test architecture.
+24. `ai/00-AI-ENTRYPOINT.md` — mandatory AI entry point.
+25. `ai/09-NEXT-AGENT-MANDATORY-HANDOFF.md` — **blocking operating contract for the next agent**.
 
-## Runtime, testing and operations documents
+## Non-negotiable state model
 
-- [`RUNTIME_ENVIRONMENT_LOCK.md`](RUNTIME_ENVIRONMENT_LOCK.md) — **the authoritative runtime specification** (locked versions, required extensions, verification chain, provisioner). Machine-checked by `npm run verify:environment`.
-- [`RUNTIME_VERIFICATION_HANDOFF.md`](RUNTIME_VERIFICATION_HANDOFF.md) (also in the authority chain above) — the session-by-session runtime evidence record (Parts I–L), ending in the 2026-09-09 final certification.
-- [`RUNTIME_ENVIRONMENT.md`](RUNTIME_ENVIRONMENT.md) — superseded 8.2-era build narrative, retained as the from-source fallback for the lock.
-- [`TESTING_STRATEGY_LOCK.md`](TESTING_STRATEGY_LOCK.md) — mandatory test-isolation strategy (enforced by an architecture test).
-- [`TEST_SUITE_ARCHITECTURE.md`](TEST_SUITE_ARCHITECTURE.md) — what each test layer proves and must not replace.
-- [`DATABASE_SCHEMA_CONSOLIDATION.md`](DATABASE_SCHEMA_CONSOLIDATION.md) — migration-chain integrity and the runtime-gated baseline decision.
-- [`operations/production-deployment.md`](operations/production-deployment.md) — the operator deployment/DR manual (nginx + PHP-FPM, `deploy/` scripts, first-install bootstrap, health, backup/restore, rollback doctrine).
-- [`reference/current-state-compliance-evidence.md`](reference/current-state-compliance-evidence.md) — supporting evidence snapshot (2026-09-07), not primary authority.
-- The root-level [`../SETUP.md`](../SETUP.md) — supported setup/verification procedure (Windows launcher, clean-environment provisioner, all verification commands).
+**CURRENT STATE** = what the repository implements now.  
+**TARGET STATE** = approved intended product/architecture state.  
+**RELEASE STATE** = what the current authoritative commit has actually proven through the release gates.
 
-## Authority chain for implementation work
+Documentation alone never promotes a capability to RELEASE STATE.
 
-For implementation/cleanup work, apply the canonical architecture and data/security decisions first, then the repository-wide hygiene and terminology standards. The hygiene and terminology standards never override a domain, security, database, or release decision.
+## Current release warning
 
-## Three-state rule
+An older `AUDIT-2026-09-09-FINAL-CERTIFICATION.md` certifies a different historical execution line and commit. It must not be used to certify later `main` commits.
 
-**CURRENT STATE** = what exists now.
+At the time of this reconciliation, Verification run **#442 / `34366532471`** is the current active evidence line for commit `2ed406e6ae07c1dd24f38cc88432457a460519e8`; frontend has passed, while the remaining jobs require their actual final conclusions. A superseded or in-progress run never counts as release certification.
 
-**TARGET STATE** = what the approved product/architecture intends to become.
+## Current domain state
 
-**RELEASE STATE** = what has been runtime-proven and certified safe to release.
+- **Covered/strong:** Organization, Identity.
+- **Implementation complete but current runtime certification pending:** Library & Resources.
+- **Partial:** Access/RBAC, Applicants & Students, CRM/Front Office, Academic, Placement, Teachers, HR, Finance, Payroll/settlement, Documents, Privacy, Audit, Communication, Reporting, Management/Work.
+- **Backend-only/operator:** Integration transport, workers/queues/scheduling, projections/materialization internals, database/migration machinery, accounting authority, audit/outbox internals, concurrency/idempotency enforcement.
 
-Never treat a target capability as implemented merely because it is documented. Never treat implementation as release-certified without runtime evidence.
+The authoritative workflow-by-workflow matrix is `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` and the current planning register is `14-CURRENT-STATE-ROADMAP.md`.
 
-## Terminology rule
+## Domain execution rule
 
-Use `CANONICAL_TERMINOLOGY.md` for current domain names. New synonyms for an existing concept require an explicit semantic distinction or an approved external-compatibility reason. Historical wording may remain only when needed to preserve historical truth.
+**ONE DOMAIN AT A TIME.** Do not advance to the next material domain until the current one passes its applicable implementation, authority, database, security/scope, API, frontend, UX, testing, browser/runtime, audit/provenance and documentation gates.
 
-## Runtime handoff rule
+For every domain, use:
 
-`RUNTIME_VERIFICATION_HANDOFF.md` is the canonical starting point for the next runtime-verification agent. It records the evidence boundary and must be updated with real command/output evidence rather than inferred success.
+`Requirement → Authority → Lifecycle → DB → Command → Authorization → Scope → API → React → UX → Audit → Idempotency → Concurrency → Tests → E2E → Documentation`
 
-## Where to go next
+Endpoint count is not parity.
 
-- Humans: read the numbered canonical documents in order, then `CODEBASE_HYGIENE_AND_STANDARDS.md` and `CANONICAL_TERMINOLOGY.md`, then consult `history/` only for provenance.
-- AI agents: start with `ai/00-AI-ENTRYPOINT.md`; when beginning runtime work, read `RUNTIME_VERIFICATION_HANDOFF.md` before executing or changing runtime-sensitive code.
-- Operators: use `12-OPERATIONS-DEPLOYMENT-DR.md` and `SETUP.md` for the actual deployment procedure.
-- Auditors: use `13-TESTING-QUALITY-RELEASE.md`, `15-REQUIREMENT-TRACEABILITY.md`, `16-DECISION-REGISTER.md`, `CANONICAL_TERMINOLOGY.md`, and the evidence sources they point to.
+## Historical evidence
 
-## Audit and reconciliation records (non-normative)
+`history/` and dated audit files preserve provenance. They must remain identifiable as historical evidence. They do not silently override the current canonical documents.
 
-- [`AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](AUDIT-2026-09-09-FINAL-CERTIFICATION.md) —
-  **the current release authority.** Final principal-architect certification:
-  locked runtime re-provisioned, full CI-equivalent gate chain re-executed,
-  986-test suite green, and all three real-HTTP business journeys converged
-  and executed green from a true first boot (including the fixed first-run
-  genesis structure, finding FC-1).
-- [`AUDIT-2026-09-08-RECONCILIATION.md`](AUDIT-2026-09-08-RECONCILIATION.md) — the
-  branch reconciliation of the `01a0814a` certification line with the `01a080c8`
-  verified line, the corrections applied to it, and the fresh verification record
-  (all gates re-run, plus live browser E2E and a running-instance readiness check).
-  **Read this before treating any audit verdict as release authority.**
-- [`AUDIT-2026-09-08-GATE-EVIDENCE.md`](AUDIT-2026-09-08-GATE-EVIDENCE.md) —
-  the gate-by-gate evidence record behind the 2026-09-08 reconciliation
-  (deployment rehearsal, DR drill, volume fixtures; cited by the 2026-09-09
-  certification as carried-forward evidence).
-- `AUDIT-2026-09-08-PRODUCTION-READINESS.md` and the root-level
-  `FINAL-ENGINEERING-REPORT.md` / `AUDIT-SUMMARY.md` — the superseded certification
-  from `arena/01a0814a-toefl-house`, retained verbatim with inline `[R.n]`
-  corrections so the original claim and its refutation stay readable together.
+## Operations
 
-## Historical archive
-
-`history/` is evidence only. Historical sources have been consolidated into four volumes so that engineers do not need to reconstruct project history from dozens of overlapping files.
+Use `12-OPERATIONS-DEPLOYMENT-DR.md`, `RUNTIME_ENVIRONMENT_LOCK.md`, `RUNTIME_VERIFICATION_HANDOFF.md`, and the root `SETUP.md` for actual runtime/deployment operations.
