@@ -86,7 +86,9 @@ SQL);
     {
         DB::unprepared(<<<'SQL'
 DROP TRIGGER IF EXISTS custody_history_guard ON custodies;
-DROP FUNCTION IF EXISTS resource_custody_history_guard();
+CREATE TRIGGER custody_history_guard
+BEFORE INSERT OR UPDATE OR DELETE ON custodies
+FOR EACH ROW EXECUTE FUNCTION resource_custody_history_guard();
 SQL);
     }
 };
