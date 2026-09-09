@@ -1,0 +1,5 @@
+.error-boundary{min-height:60vh;display:grid;place-items:center;padding:48px 24px;background:var(--experience-bg,#f7f9fc)}
+.error-boundary-card{width:min(720px,100%);padding:32px}
+.error-boundary-card h1{margin:6px 0 10px;font-size:30px;letter-spacing:-.035em}
+.error-boundary-actions{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 14px}
+@media (max-width:620px){.error-boundary{padding:28px 16px}.error-boundary-card{padding:22px}.error-boundary-card h1{font-size:24px}.error-boundary-actions{flex-direction:column}.error-boundary-actions .button{width:100%}}
