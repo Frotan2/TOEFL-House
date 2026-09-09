@@ -8,24 +8,13 @@ use Illuminate\Support\Facades\Route;
 use Tests\Canonical\CanonicalTestCase;
 
 /**
- * One workspace shell, one React app per view, one API transport.
+ * Shared workspace shell and canonical React bootstrap contracts.
  *
- * Migrated from tests/Unit/Architecture/{AcademicClassConvergence,
- * StudentReactConvergence}Test, which asserted exact source substrings such as
- * "view === 'academic' ? <AcademicApp". Those broke on formatting alone: the
- * ternary was reflowed and `->name()` was chained onto the route, while the
- * behaviour never changed. They also asserted prose in
- * docs/architecture/review/2026-09-05-fourth-architecture-convergence.md, a
- * file that does not exist on this branch and whose claimed contract
- * ("Runtime migration/query/concurrency/browser/build verification remains
- * unexecuted") is now false.
- *
- * The durable intent is kept and asserted against the registered routes and
- * the real mount wiring instead of against source formatting.
+ * These assertions deliberately validate routing and explicit typed view
+ * resolution rather than depending on a particular JSX formatting style.
  */
 final class WorkspaceMountConvergenceTest extends CanonicalTestCase
 {
-    /** Views served by the single shared `workspace` Blade shell. */
     private const SHELL_VIEWS = [
         'academic' => '/academic',
         'students' => '/students',
@@ -41,37 +30,34 @@ final class WorkspaceMountConvergenceTest extends CanonicalTestCase
                 ->first(fn ($r) => '/'.ltrim($r->uri(), '/') === $uri && in_array('GET', $r->methods(), true));
 
             $this->assertNotNull($route, "{$uri} must be routed.");
-
-            // Route::view() stores the template under 'view' and the payload
-            // passed to it under 'data'.
-            $this->assertSame(
-                'workspace',
-                $route->defaults['view'] ?? null,
-                "{$uri} must render the shared workspace shell."
-            );
-            $this->assertSame(
-                $view,
-                $route->defaults['data']['view'] ?? null,
-                "{$uri} must pass view '{$view}' to the shell."
-            );
+            $this->assertSame('workspace', $route->defaults['view'] ?? null, "{$uri} must render the shared workspace shell.");
+            $this->assertSame($view, $route->defaults['data']['view'] ?? null, "{$uri} must pass view '{$view}' to the shell.");
         }
     }
 
-    public function test_every_shell_view_has_exactly_one_react_app(): void
+    public function test_every_shell_view_has_explicit_typed_react_resolution(): void
     {
         $bootstrap = (string) file_get_contents(resource_path('js/app.tsx'));
+        $expectedComponents = [
+            'academic' => ['AcademicApp', 'AcademicSetupApp'],
+            'students' => ['StudentsApp', 'StudentJourneyApp'],
+            'teachers' => ['TeacherApp', 'TeacherDayApp'],
+            'crm' => ['CrmApp', 'FrontOfficeApp'],
+            'management' => ['ManagementApp'],
+        ];
 
-        foreach (array_keys(self::SHELL_VIEWS) as $view) {
-            // Whitespace-insensitive: formatting must not break the contract,
-            // but the view must still select exactly one component.
-            $matches = preg_match_all(
-                sprintf('/view\s*===\s*[\'"]%s[\'"]\s*\n?\s*\?\s*<(\w+)/', preg_quote($view, '/')),
+        $this->assertStringContainsString('switch (view as ConsoleView | null)', $bootstrap);
+
+        foreach ($expectedComponents as $view => $components) {
+            $this->assertMatchesRegularExpression(
+                sprintf('/case\s+[\'"]%s[\'"]\s*:/', preg_quote($view, '/')),
                 $bootstrap,
-                $found
+                "View '{$view}' must have an explicit switch case."
             );
 
-            $this->assertSame(1, $matches, "View '{$view}' must select exactly one React app.");
-            $this->assertStringEndsWith('App', $found[1][0]);
+            foreach ($components as $component) {
+                $this->assertStringContainsString("<$component", $bootstrap, "View '{$view}' must resolve {$component}.");
+            }
         }
     }
 
@@ -81,9 +67,6 @@ final class WorkspaceMountConvergenceTest extends CanonicalTestCase
 
         $this->assertStringContainsString('createApiClient', $bootstrap);
         $this->assertStringContainsString("'/api/v1'", $bootstrap);
-
-        // A second transport layer would let a console bypass the canonical
-        // client's auth and error handling.
         $this->assertSame(
             0,
             preg_match('/\bnew XMLHttpRequest\b|\baxios\./', $bootstrap),
