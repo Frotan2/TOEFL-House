@@ -80,7 +80,7 @@ button, a, input, select, textarea { touch-action: manipulation; }
 .nested-panel:hover { box-shadow: 0 5px 16px rgba(15,23,42,.045); }
 #reporting-main .table-wrap tbody tr { cursor: default; }
 
-/* Command center: prioritize action density without turning the landing page into a decorative dashboard. */
+/* Command center: operational density without decorative KPI overload. */
 .command-center .command-header { align-items: flex-start; }
 .command-header-actions { align-items: center; display: flex; gap: 10px; }
 .scope-badge { background: var(--surface-3); border: 1px solid var(--line); border-radius: 999px; color: var(--ink-700); font-size: 12px; font-weight: 700; padding: 8px 11px; white-space: nowrap; }
