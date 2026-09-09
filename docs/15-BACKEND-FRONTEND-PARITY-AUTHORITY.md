@@ -37,7 +37,7 @@ Blade is a transport/legacy boundary. New operational work belongs in React work
 | HR | employment lifecycle, leave, contracts, scales | HR workspace | Partial | Surface full contract/leave/employment lifecycle controls |
 | Finance | obligations, payments, periods, GL, allocations, journals, reversals, discounts, reconciliations, funds, credits, installments, gate exceptions, coverage, refunds, corrections, settlements, expenses, cash drawers, scholarships, statements/completeness | Finance workspace | Partial | Complete approval, reversal/correction, cash, scholarship, settlement and GL control actions |
 | Payroll | periods, calculate/approve/resolve-held, clearance, settlement | Payroll workspace | Partial | Verify action parity and approval exceptions |
-| Library & Resources | books, circulation, loss, assets, custody, disposal request/approve/execute, work orders | Library workspace | Partial | Surface disposal approval/execution and evidence lifecycle |
+| Library & Resources | books, circulation, loss, assets, custody, staged disposal request/dual approval/execution, facilities work lifecycle | Library workspace | Covered | Preserve server-owned lifecycle, scope, evidence and irreversible-action controls |
 | Documents | documents, versions, classification, verification, retention rules/decisions | Legacy/partial document UI | Partial/Missing | Converge operational document lifecycle into React |
 | Privacy | consent/disclosure/privacy controls | Legacy/partial privacy UI | Partial | Keep policy authority server-side; modernize operational controls |
 | Audit | audit events and evidence | Legacy/partial audit UI | Partial | Provide scoped search/filter/read-only evidence view without moving audit authority client-side |
@@ -46,11 +46,13 @@ Blade is a transport/legacy boundary. New operational work belongs in React work
 | Management / Work | management search, work items, queue membership, transitions, notifications | Workspace/management | Partial | Surface queue membership and complete work lifecycle |
 | Integrations | endpoints, deliveries, inbound events, retry jobs, scheduling | No normal business UI | Backend-only / Operator-only | Keep infrastructure server-side; add operator observability only when required |
 
-## 4. Confirmed concrete backend-to-frontend gap
+## 4. Resolved concrete Library & Resources gap
 
-The Resources API exposes `POST /resources/disposals/{requestId}/approve` and `POST /resources/disposals/{requestId}/execute`. The Library React workspace already renders disposal requests but only offers the initial disposal request action. Approval and execution therefore form a real UI parity gap.
+The Resources API exposes `POST /resources/disposals/{requestId}/approve` and `POST /resources/disposals/{requestId}/execute`. The Library React workspace now surfaces the complete staged disposal workflow alongside request creation.
 
-These actions must be rendered conditionally from server state and remain protected by backend scope/authorization and irreversible-action confirmation.
+The workspace explicitly collects and submits the disposal execution date, gates execution on server-reported approved/ready state, and uses irreversible-action confirmation for execution. Borrower and custodian actors are explicit user selections rather than implicit first-record defaults. Server-side scope, authorization, lifecycle, evidence, idempotency and audit remain authoritative.
+
+The staged approval model intentionally remains server-driven: the backend records distinct approver sessions, and the frontend must not attempt to recreate or bypass that rule.
 
 ## 5. Backend-only capabilities
 
