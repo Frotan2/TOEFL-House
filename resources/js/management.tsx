@@ -81,9 +81,9 @@ export function ManagementApp({ getJson, csrfToken }: ManagementAppProps) {
       else failures.push('management');
       if (employeeResult.status === 'fulfilled') setEmployee(employeeResult.value.data);
       else failures.push('work queue');
-      if (academicResult.status === 'fulfilled') setAcademic(academicResult.value.data);
+      if (academicResult.status === 'fulfilled') setAcademic(academicResult.value);
       else failures.push('academic readiness');
-      if (organizationResult.status === 'fulfilled') setOrganization(organizationResult.value.data);
+      if (organizationResult.status === 'fulfilled') setOrganization(organizationResult.value);
       else failures.push('organization readiness');
       if (managementResult.status === 'rejected' && employeeResult.status === 'rejected') {
         setError('The command center could not resolve an authorized management scope.');
