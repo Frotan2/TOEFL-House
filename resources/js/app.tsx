@@ -2,11 +2,13 @@ import { createRoot } from 'react-dom/client';
 import './app.css';
 import './experience-home.css';
 import './academic-setup.css';
+import './student-journey.css';
 import { AcademicApp } from './academic';
 import { AcademicSetupApp } from './academic-setup';
 import { TeacherApp } from './teacher';
 import { CrmApp } from './crm';
 import { ManagementApp } from './management';
+import { StudentJourneyApp } from './student-journey';
 import { StudentsApp } from './students';
 import { WorkspaceApp } from './workspace';
 import { IdentityApp } from './identity';
@@ -18,21 +20,25 @@ if (root) {
   const api = createApiClient({ apiBase: root.getAttribute('data-api-base') ?? '/api/v1', csrfToken });
   const common = { ...api, csrfToken };
   const view = root.getAttribute('data-view');
-  const academicSetupRequested = view === 'academic' && new URLSearchParams(window.location.search).get('view') === 'setup';
+  const query = new URLSearchParams(window.location.search);
+  const academicSetupRequested = view === 'academic' && query.get('view') === 'setup';
+  const studentJourneyRequested = view === 'students' && query.get('view') === 'journey' && root.getAttribute('data-student-id') !== null && root.getAttribute('data-student-id') !== '';
   const content = academicSetupRequested
     ? <AcademicSetupApp {...common} />
-    : view === 'academic'
-      ? <AcademicApp {...common} />
-      : view === 'teachers'
-        ? <TeacherApp {...common} />
-        : view === 'crm'
-          ? <CrmApp {...common} />
-          : view === 'management'
-            ? <ManagementApp {...common} />
-            : view === 'identity'
-              ? <IdentityApp {...common} />
-              : view === 'students'
-                ? <StudentsApp {...common} studentsView={root.getAttribute('data-students-view') ?? 'directory'} studentId={root.getAttribute('data-student-id') ?? ''} />
-                : <WorkspaceApp {...common} />;
+    : studentJourneyRequested
+      ? <StudentJourneyApp {...common} studentId={root.getAttribute('data-student-id') ?? ''} />
+      : view === 'academic'
+        ? <AcademicApp {...common} />
+        : view === 'teachers'
+          ? <TeacherApp {...common} />
+          : view === 'crm'
+            ? <CrmApp {...common} />
+            : view === 'management'
+              ? <ManagementApp {...common} />
+              : view === 'identity'
+                ? <IdentityApp {...common} />
+                : view === 'students'
+                  ? <StudentsApp {...common} studentsView={root.getAttribute('data-students-view') ?? 'directory'} studentId={root.getAttribute('data-student-id') ?? ''} />
+                  : <WorkspaceApp {...common} />;
   createRoot(root).render(content);
 }
