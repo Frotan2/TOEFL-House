@@ -79,6 +79,24 @@ The UI must expose source-owned facts without recreating financial truth. Curren
 ### Reports
 Every displayed number retains metric identity, period semantics, scope, evidence completeness and reproducibility context.
 
+### Administration / Settings
+Settings are a control plane organized by domain ownership, not a monolithic form. The target arrangement is:
+
+- Organization / campuses / branches
+- Academic configuration / setup
+- Identity / users
+- Access roles / scopes
+- Finance and payroll policies
+- CRM and communication policies
+- Documents / retention / templates
+- Privacy / consent
+- Business rules / workflow policies
+- Audit / governance
+- Print and document output policies
+
+### Output / Printing
+Printing is treated as an operational output layer. The product should converge on a Print Center covering ID cards, enrollment documents, receipts, certificates, transcripts and payroll outputs. Each output should preserve template version, organization/branch context, locale, paper format, approval state and audit metadata.
+
 ## Convergence rules from standalone review frontend
 
 Adopt:
