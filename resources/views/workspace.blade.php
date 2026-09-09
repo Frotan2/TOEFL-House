@@ -7,6 +7,7 @@
     <title>{{ ($view ?? 'workspace') === 'crm' ? 'CRM — The TOEFL House' : (($view ?? 'workspace') === 'management' ? 'Management Workspace — The TOEFL House' : (($view ?? 'workspace') === 'students' ? 'Students & Admissions — The TOEFL House' : (($view ?? 'workspace') === 'academic' ? 'Academic Classes — The TOEFL House' : (($view ?? 'workspace') === 'teachers' ? 'Teacher & Faculty — The TOEFL House' : (($view ?? 'workspace') === 'reporting' ? 'Reporting & Dashboards — The TOEFL House' : 'Employee Workspace — The TOEFL House'))))) }}</title>
     @vite('resources/js/product-theme.css')
     <link rel="stylesheet" href="{{ asset('css/toefl-house-ultimate.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/toefl-house-route-state.css') }}">
     @if (($view ?? 'workspace') === 'reporting')
         @vite('resources/js/reporting.tsx')
     @else
