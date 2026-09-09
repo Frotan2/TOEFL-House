@@ -1,4 +1,4 @@
-import { ReactNode, SVGProps, useEffect, useState } from 'react';
+import { ReactNode, SVGProps, useEffect, useMemo, useRef, useState } from 'react';
 
 type AppShellProps = {
   current?: string;
@@ -58,10 +58,44 @@ function NavigationLinks({ current, compact = false, onNavigate }: { current: st
   </>;
 }
 
+function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    setQuery('');
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [open]);
+  const results = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return navigation;
+    return navigation.filter((item) => `${item.label} ${item.group}`.toLowerCase().includes(term));
+  }, [query]);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+  if (!open) return null;
+  return <div className="command-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="command-palette" role="dialog" aria-modal="true" aria-label="Navigate TOEFL House">
+      <div className="command-palette-header"><Icon name="search" /><input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Jump to a workspace…" aria-label="Search workspaces" /><span className="command-palette-key">Esc</span></div>
+      <div className="command-palette-list">
+        {results.length === 0 ? <p className="command-palette-empty">No matching workspace.</p> : results.map((item) => <a key={item.key} className="command-palette-item" href={item.href} onClick={onClose}><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.group}</small></span><Icon name="chevron" /></a>)}
+      </div>
+      <div className="command-palette-footer"><span>Navigate by keyword</span><span>Use Ctrl/⌘ + K from anywhere</span></div>
+    </div>
+  </div>;
+}
+
 export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
   const resolvedCsrfToken = csrfToken ?? document.getElementById('react-console')?.getAttribute('data-csrf-token') ?? '';
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('toefl-house.sidebar.collapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem('toefl-house.sidebar.collapsed', collapsed ? '1' : '0');
@@ -71,6 +105,17 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
     document.body.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
     return () => { delete document.body.dataset.sidebar; };
   }, [collapsed]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((value) => !value);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return <>
     <a className="skip-link" href="#workspace-main">Skip to main content</a>
@@ -83,6 +128,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
         </a>
         <div className="topbar-context"><span className="context-dot" aria-hidden="true" /> <span>Authorized workspace</span></div>
         <div className="app-header-actions">
+          <button className="header-utility" type="button" onClick={() => setPaletteOpen(true)} title="Open command palette"><Icon name="search" />Navigate <span className="command-palette-key">⌘/Ctrl K</span></button>
           <a className="header-utility" href="/workspace#work-queue"><Icon name="tasks" />My work</a>
           <a className="header-utility" href="/management?view=administration"><Icon name="settings" />Administration</a>
           <button className="sidebar-toggle" type="button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'} title={collapsed ? 'Expand navigation' : 'Collapse navigation'}><Icon name="menu" /></button>
@@ -107,6 +153,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
       </aside>
       {mobileOpen && <button className="sidebar-backdrop" type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}
     </div>
+    <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
   </>;
 }
 
