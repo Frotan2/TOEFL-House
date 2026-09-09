@@ -27,7 +27,6 @@ type AcademicSnapshot = {
   classes: Array<{ id: string; branch_id: string; program_version_level_id: string | null; period_id: string; lifecycle_state: string; sections: Array<{ id: string; name: string; lifecycle_state: string }> }>;
   sessions: Array<{ id: string; class_id: string; scheduled_on: string; starts_at: string; ends_at: string; room: { id: string; name: string; code: string } | null; section: { id: string; name: string } | null; skill_id?: string | null }>;
   enrollments: Array<{ id: string; student_id: string; class_id: string; lifecycle_state: string }>;
-  students: Array<{ id: string; student_code: string; name: string; branch_id: string }>;
   levels: Array<{ id: string; title: string }>;
   skills: Array<{ id: string; name: string }>;
 };
@@ -83,19 +82,20 @@ export function TeacherDayApp({ getJson, csrfToken }: TeacherDayProps) {
     return academic.sessions
       .filter((session) => session.scheduled_on === date && assignedClassIds.has(session.class_id))
       .map((session) => {
-        const classRow = academic.classes.find((item) => item.id === session.class_id)!;
+        const classRow = academic.classes.find((item) => item.id === session.class_id);
+        if (!classRow) return null;
         const rosterCount = academic.enrollments.filter((item) => item.class_id === session.class_id && ['active', 'frozen'].includes(item.lifecycle_state)).length;
         const level = academic.levels.find((item) => item.id === classRow.program_version_level_id)?.title ?? classRow.program_version_level_id ?? 'Level unavailable';
         const skill = academic.skills.find((item) => item.id === session.skill_id)?.name ?? 'Skill not specified';
         return { ...session, classRow, level, skill, rosterCount };
       })
+      .filter((item): item is DaySession => item !== null)
       .sort((a, b) => parseMinutes(a.starts_at) - parseMinutes(b.starts_at));
   }, [academic, assignedClassIds, date]);
 
   const nowMinutes = date === localDateKey() ? new Date().getHours() * 60 + new Date().getMinutes() : -1;
   const currentIndex = sessions.findIndex((session) => nowMinutes >= parseMinutes(session.starts_at) && nowMinutes < parseMinutes(session.ends_at));
   const totalMinutes = sessions.reduce((sum, session) => sum + Math.max(0, parseMinutes(session.ends_at) - parseMinutes(session.starts_at)), 0);
-  const branches = new Set(profile ? profile.assignments.map((item) => item.class_id) : []);
   const readinessWarnings = [
     !profile ? 'No teacher profile is attached to the signed-in identity.' : null,
     profile && profile.effective_state !== 'active' ? `Teacher profile is ${humanize(profile.effective_state)}; delivery authority may be unavailable.` : null,
