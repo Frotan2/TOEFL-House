@@ -12,12 +12,15 @@ use App\Support\Errors\BusinessRejection;
 
 /**
  * Scheduled integration retry sweep (architecture 16): consumes committed
- * delivery facts, retries every due delivery through the shared delivery
- * core under the operating actor's authorization, each delivery in its
- * own transaction so partial failure never rolls back siblings.
+ * delivery facts, retries due work through the shared delivery core, and
+ * bounds each scheduler invocation so a growing queue cannot create an
+ * unbounded-running job. Each delivery is processed independently.
  */
 final class IntegrationRetrySweepJob implements JobHandler
 {
+    private const DEFAULT_BATCH = 100;
+    private const MAX_BATCH = 500;
+
     public function __construct(private readonly DeliveryProcessor $processor) {}
 
     /**
@@ -30,6 +33,10 @@ final class IntegrationRetrySweepJob implements JobHandler
         if ($runBy === '') {
             throw BusinessRejection::forCode('integrations.retry_operator_required', 'a scheduled retry sweep requires a durable authenticated run_by actor');
         }
+
+        $batch = (int) ($context['batch'] ?? self::DEFAULT_BATCH);
+        $batch = max(1, min(self::MAX_BATCH, $batch));
+
         $operator = new Actor($runBy, 'Integration Sweep');
         $due = IntegrationDelivery::query()
             ->where(function ($state): void {
@@ -41,6 +48,7 @@ final class IntegrationRetrySweepJob implements JobHandler
             })
             ->where(fn ($query) => $query->whereNull('next_run_at')->orWhere('next_run_at', '<=', now()))
             ->orderBy('created_at')
+            ->limit($batch)
             ->pluck('id');
 
         $summary = ['considered' => $due->count(), 'delivered' => 0, 'retry_scheduled' => 0, 'dead_letter' => 0, 'skipped' => 0];
