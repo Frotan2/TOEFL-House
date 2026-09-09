@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const jsRoot = path.join(root, 'resources', 'js');
+const viewsRoot = path.join(root, 'resources', 'views');
 
 const domainEntrypoints = {
   students: 'students.tsx',
@@ -40,12 +41,37 @@ assert.match(ui, /event\.key === 'Enter'/, 'shell: Enter activation missing');
 assert.match(ui, /event\.key === 'Escape'/, 'shell: Escape dismissal missing');
 assert.match(ui, /aria-selected/, 'shell: active command palette option must be exposed semantically');
 
-const blade = fs.readFileSync(path.join(root, 'resources', 'views', 'workspace.blade.php'), 'utf8');
+const blade = fs.readFileSync(path.join(viewsRoot, 'workspace.blade.php'), 'utf8');
 assert.match(blade, /@vite\('resources\/js\/app\.tsx'\)/, 'workspace blade: canonical app entrypoint missing');
 assert.match(blade, /toefl-house-ultimate\.css/, 'workspace blade: global visual contract missing');
 assert.match(blade, /toefl-house-route-state\.css/, 'workspace blade: route-aware navigation contract missing');
 assert.match(blade, /toefl-house-placement\.css/, 'workspace blade: Placement visual contract missing');
 assert.match(blade, /toefl-house-operations\.css/, 'workspace blade: operational visual contract missing');
+
+const legacyLayout = fs.readFileSync(path.join(viewsRoot, 'layouts', 'app.blade.php'), 'utf8');
+assert.match(legacyLayout, /toefl-house-ultimate\.css/, 'legacy layout: unified visual contract missing');
+assert.match(legacyLayout, /toefl-house-operations\.css/, 'legacy layout: operational visual contract missing');
+
+const specialistBlades = {
+  placement: ['placement', 'index.blade.php'],
+  finance: ['finance', 'index.blade.php'],
+  hr: ['hr', 'index.blade.php'],
+  payroll: ['payroll', 'index.blade.php'],
+};
+for (const [domain, [folder, filename]] of Object.entries(specialistBlades)) {
+  const file = path.join(viewsRoot, folder, filename);
+  assert.ok(fs.existsSync(file), `${domain}: specialist Blade mount is missing`);
+}
+
+const legacyViews = ['library', 'communication', 'documents', 'organization', 'access', 'audit', 'privacy'];
+for (const folder of legacyViews) {
+  const file = path.join(viewsRoot, folder, 'index.blade.php');
+  assert.ok(fs.existsSync(file), `${folder}: legacy domain Blade mount is missing`);
+}
+
+const placementBlade = fs.readFileSync(path.join(viewsRoot, 'placement', 'index.blade.php'), 'utf8');
+assert.match(placementBlade, /id="placement-console"/, 'placement: console mount missing');
+assert.match(placementBlade, /resources\/js\/placement\.tsx/, 'placement: specialist entrypoint missing');
 
 const lifecycle = fs.readFileSync(
   path.join(root, 'app', 'Modules', 'Academic', 'Placement', 'Domain', 'PlacementProfileLifecycle.php'),
