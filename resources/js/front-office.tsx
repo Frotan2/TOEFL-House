@@ -60,9 +60,9 @@ export function FrontOfficeApp({ getJson, csrfToken }: ApiClient & { csrfToken: 
   const classCount = academic?.classes?.length ?? 0;
   const sessionCount = academic?.sessions?.length ?? 0;
 
-  if (loading) return <><AppShell current="crm" csrfToken={csrfToken} /><PageStatus>Loading the authorized Front Office brief…</PageStatus></>;
+  if (loading) return <><AppShell current="front-office" csrfToken={csrfToken} /><PageStatus>Loading the authorized Front Office brief…</PageStatus></>;
   return <>
-    <AppShell current="crm" csrfToken={csrfToken} />
+    <AppShell current="front-office" csrfToken={csrfToken} />
     <main id="workspace-main" className="workspace" aria-labelledby="front-office-title">
       <header className="workspace-header">
         <div><p className="eyebrow">Front Office · Reception desk</p><h1 id="front-office-title">The next action should be obvious.</h1><p className="lede">One operator view over CRM, admissions, and academic availability. Source systems remain authoritative.</p></div>
