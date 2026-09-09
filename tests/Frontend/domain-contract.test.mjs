@@ -22,13 +22,16 @@ const domainEntrypoints = {
 for (const [domain, filename] of Object.entries(domainEntrypoints)) {
   const file = path.join(jsRoot, filename);
   assert.ok(fs.existsSync(file), `${domain}: missing canonical entrypoint ${filename}`);
-
   const source = fs.readFileSync(file, 'utf8');
   assert.match(source, /createApiClient/, `${domain}: must use the canonical API client`);
   assert.match(source, /AppShell/, `${domain}: must use the unified shell`);
   assert.doesNotMatch(source, /localStorage\.(?:getItem|setItem).*?(?:token|jwt|access_token)/is, `${domain}: browser token persistence is forbidden`);
   assert.doesNotMatch(source, /Authorization\s*[:=]\s*[`'"].*?(?:Bearer|JWT)/i, `${domain}: direct bearer-token transport is forbidden`);
 }
+
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+assert.equal(packageJson.engines?.node, '22.22.3', 'package: Node engine must match the verified runtime lock');
+assert.equal(packageJson.engines?.npm, '10.9.8', 'package: npm engine must match the verified runtime lock');
 
 const app = fs.readFileSync(path.join(jsRoot, 'app.tsx'), 'utf8');
 assert.match(app, /react-console/, 'app.tsx: canonical React console mount must remain present');
@@ -100,12 +103,17 @@ const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'verifi
 assert.match(workflow, /permissions:\s*\n\s*contents: read/, 'CI: workflow must use least-privilege contents permission');
 assert.match(workflow, /concurrency:\s*\n\s*group:/, 'CI: duplicate verification runs must be cancelable');
 assert.match(workflow, /cancel-in-progress: true/, 'CI: superseded verification must be canceled');
+assert.match(workflow, /PHP_VERSION: '8\.4\.14'/, 'CI: PHP must match the verified runtime lock');
+assert.match(workflow, /COMPOSER_VERSION: '2\.9\.2'/, 'CI: Composer must match the verified runtime lock');
 assert.match(workflow, /NODE_VERSION: '22\.22\.3'/, 'CI: Node must match the verified runtime lock');
+assert.match(workflow, /NPM_VERSION: '10\.9\.8'/, 'CI: npm must match the verified runtime lock');
+assert.match(workflow, /POSTGRES_VERSION: '18\.4'/, 'CI: PostgreSQL must match the verified runtime lock');
+assert.match(workflow, /tools: composer:\$\{\{ env\.COMPOSER_VERSION \}\}/, 'CI: Composer must be explicitly pinned in PHP jobs');
 assert.match(workflow, /npm ci --engine-strict/, 'CI: npm must enforce package engine constraints');
 assert.match(workflow, /timeout-minutes:/, 'CI: jobs must have bounded execution time');
 assert.match(workflow, /E2E_USERNAME=ci\.e2e\.owner/, 'CI: isolated bootstrap username must be passed to browser E2E');
 assert.match(workflow, /E2E_PASSWORD=\$E2E_PASSWORD/, 'CI: isolated bootstrap password must be passed to browser E2E');
-assert.match(workflow, /image: postgres:18\.4/, 'CI: browser/backend database version must be pinned');
+assert.match(workflow, /image: postgres:18\.4/, 'CI: database version must be pinned');
 
 const retrySweep = fs.readFileSync(path.join(root, 'app', 'Modules', 'Integrations', 'Jobs', 'IntegrationRetrySweepJob.php'), 'utf8');
 assert.match(retrySweep, /DEFAULT_BATCH = 100/, 'integrations: retry sweep default batch missing');
