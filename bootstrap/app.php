@@ -21,27 +21,22 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: static function (): void {
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/reporting-api.php'));
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/hr-api.php'));
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/payroll-api.php'));
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/identity-api.php'));
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/access-api.php'));
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/organization-api.php'));
-            Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
-                ->group(base_path('routes/resources-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/reporting-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/hr-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/payroll-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/identity-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/access-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/organization-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/resources-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/privacy-api.php'));
+            Route::prefix('api/v1')->middleware(['api', 'employee'])->group(base_path('routes/audit-api.php'));
+
+            // Canonical React governance read surfaces. Legacy controller
+            // routes redirect here so Blade cannot become a second read model.
+            Route::middleware('employee')->group(function (): void {
+                Route::view('/governance/privacy', 'workspace', ['view' => 'privacy'])->name('governance.privacy');
+                Route::view('/governance/audit', 'workspace', ['view' => 'audit'])->name('governance.audit');
+            });
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -52,24 +47,15 @@ return Application::configure(basePath: dirname(__DIR__))
             ShareErrorsFromSession::class,
             ValidateCsrfToken::class,
         ]);
-
         $middleware->append(SecurityHeaders::class);
-        $middleware->alias([
-            'employee' => EnsureEmployeeSession::class,
-        ]);
+        $middleware->alias(['employee' => EnsureEmployeeSession::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(
-            fn (Request $request, Throwable $e) => $request->expectsJson() || str_starts_with($request->path(), 'api/'),
-        );
-
+        $exceptions->shouldRenderJsonWhen(fn (Request $request, Throwable $e) => $request->expectsJson() || str_starts_with($request->path(), 'api/'));
         $exceptions->renderable(function (DomainError $error, Request $request) {
             $payload = [
-                'error' => $error->errorCode(),
-                'category' => $error->category(),
-                'message' => $error->getMessage(),
-                'correlation_id' => $error->correlationId(),
-                'retryable' => $error->retryable(),
+                'error' => $error->errorCode(), 'category' => $error->category(), 'message' => $error->getMessage(),
+                'correlation_id' => $error->correlationId(), 'retryable' => $error->retryable(),
             ];
             $status = match ($error->category()) {
                 DomainError::CATEGORY_VALIDATION => 422,
@@ -79,25 +65,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 DomainError::CATEGORY_INTEGRATION_UNKNOWN => 502,
                 default => 500,
             };
-
-            if ($request->expectsJson() || str_starts_with($request->path(), 'api/')) {
-                return response()->json($payload, $status);
-            }
-
+            if ($request->expectsJson() || str_starts_with($request->path(), 'api/')) return response()->json($payload, $status);
             $hasReferer = $request->headers->get('referer') !== null;
             if (! $hasReferer) {
                 $target = $request->user() !== null ? route('home') : route('login');
-
-                return redirect($target)
-                    ->withInput()
-                    ->with('error_code', $error->errorCode())
-                    ->with('error', $error->getMessage());
+                return redirect($target)->withInput()->with('error_code', $error->errorCode())->with('error', $error->getMessage());
             }
-
-            return redirect()
-                ->back()
-                ->withInput()
-                ->with('error_code', $error->errorCode())
-                ->with('error', $error->getMessage());
+            return redirect()->back()->withInput()->with('error_code', $error->errorCode())->with('error', $error->getMessage());
         });
     })->create();
