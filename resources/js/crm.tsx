@@ -31,7 +31,7 @@ type CrmTimelineItem = { kind: string; id: string; at: string | null; time_basis
 type CrmTimelineResponse = { timeline: CrmTimelineItem[] };
 type CrmCatalogItem = { id: string; key: string; name: string; category?: string | null; channel?: string | null; source_id?: string | null };
 type CrmBranch = { id: string; name: string; lifecycle_state: string };
-type CrmBranchesResponse = { branches: CrmBranch[]; default_branch_id: string | null };
+type CrmBranchesResponse = { branches: CrmBranch[]; allow_unassigned: boolean };
 
 type CrmFormState = { full_name: string; phone: string; email: string; preferred_channel: string; visitor_type: string; origin_branch_id: string; source_id: string; campaign_id: string; interest: string; notes: string };
 const emptyCrmForm: CrmFormState = { full_name: '', phone: '', email: '', preferred_channel: 'phone', visitor_type: 'walk_in', origin_branch_id: '', source_id: '', campaign_id: '', interest: '', notes: '' };
@@ -45,7 +45,6 @@ export function CrmApp({ getJson, postJson, csrfToken }: CrmAppProps) {
   const [sources, setSources] = useState<CrmCatalogItem[]>([]);
   const [campaigns, setCampaigns] = useState<CrmCatalogItem[]>([]);
   const [branches, setBranches] = useState<CrmBranch[]>([]);
-  const [defaultBranchId, setDefaultBranchId] = useState<string | null>(null);
   const [branchesLoaded, setBranchesLoaded] = useState(false);
   const [selected, setSelected] = useState<CrmVisitor | null>(null);
   const [timeline, setTimeline] = useState<CrmTimelineItem[]>([]);
@@ -82,8 +81,7 @@ export function CrmApp({ getJson, postJson, csrfToken }: CrmAppProps) {
     void getJson<{ campaigns: CrmCatalogItem[] }>('/crm/campaigns').then((response) => setCampaigns(response.campaigns)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'CRM campaigns could not be loaded.'));
     void getJson<CrmBranchesResponse>('/crm/branches').then((response) => {
       setBranches(response.branches);
-      setDefaultBranchId(response.default_branch_id);
-      setForm((current) => current.origin_branch_id === '' ? { ...current, origin_branch_id: response.default_branch_id ?? '' } : current);
+      setForm((current) => current.origin_branch_id === '' ? { ...current, origin_branch_id: response.branches[0]?.id ?? '' } : current);
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Authorized CRM branches could not be loaded.')).finally(() => setBranchesLoaded(true));
   }, []);
 
@@ -99,7 +97,7 @@ export function CrmApp({ getJson, postJson, csrfToken }: CrmAppProps) {
     event.preventDefault(); setSaving(true); setError(null); setMessage(null);
     const body = { ...form, origin_branch_id: form.origin_branch_id || undefined, source_id: form.source_id || undefined, campaign_id: form.campaign_id || undefined };
     const slot = `capture-${JSON.stringify(body)}`;
-    void postJson('/crm/visitors', body, requestKey(slot)).then(() => { clearRequestKey(slot); setForm({ ...emptyCrmForm, origin_branch_id: defaultBranchId ?? '' }); setMessage('Visitor captured in the CRM source of truth.'); loadVisitors(); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The visitor could not be captured.')).finally(() => setSaving(false));
+    void postJson('/crm/visitors', body, requestKey(slot)).then(() => { clearRequestKey(slot); setForm({ ...emptyCrmForm, origin_branch_id: branches[0]?.id ?? '' }); setMessage('Visitor captured in the CRM source of truth.'); loadVisitors(); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The visitor could not be captured.')).finally(() => setSaving(false));
   };
   const linkPerson = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); if (selected === null || personId.trim() === '') return;
@@ -143,7 +141,7 @@ export function CrmApp({ getJson, postJson, csrfToken }: CrmAppProps) {
           <form className="panel crm-capture" onSubmit={capture}>
             <div className="section-heading"><div><p className="eyebrow">Capture</p><h2>New visitor</h2></div><span className="source-note">Writes go to CRM through the versioned API.</span></div>
             {branchesLoaded && branches.length === 0 && <p className="form-help" role="status">No authorized active branch is available. Capture is disabled because CRM records require canonical branch provenance.</p>}
-            {branchesLoaded && defaultBranchId !== null && <p className="form-help" role="status">New visitors default to your authorized home branch. You can change the branch when the capture belongs elsewhere.</p>}
+            {branchesLoaded && branches.length > 0 && <p className="form-help" role="status">The form defaults to an authorized branch. Change it only when the lead originated elsewhere.</p>}
             <div className="form-grid">
               <label>Full name<input required maxLength={160} value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} /></label>
               <label>Phone<input maxLength={40} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
