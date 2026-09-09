@@ -45,6 +45,18 @@ function requestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+function asNetworkError(reason: unknown): ApiError | unknown {
+  if (reason instanceof ApiError) return reason;
+  if (reason instanceof TypeError) {
+    return new ApiError(0, {
+      error: 'network_error',
+      message: 'The service could not be reached. Check your connection and retry.',
+      retryable: true,
+    }, 'Network request failed');
+  }
+  return reason;
+}
+
 async function readResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type') ?? '';
   if (contentType.toLowerCase().includes('application/json')) {
@@ -54,8 +66,14 @@ async function readResponse<T>(response: Response): Promise<T> {
   }
 
   const text = await response.text();
-  if (response.redirected && response.url.endsWith('/login')) {
-    throw new ApiError(401, { error: 'authentication_required', message: 'Your session has expired. Please sign in again.' }, 'Authentication required');
+  if (response.redirected) {
+    try {
+      if (new URL(response.url).pathname === '/login') {
+        throw new ApiError(401, { error: 'authentication_required', message: 'Your session has expired. Please sign in again.' }, 'Authentication required');
+      }
+    } catch (reason: unknown) {
+      if (reason instanceof ApiError) throw reason;
+    }
   }
   if (!response.ok) throw new ApiError(response.status, {}, text.trim() || `Request failed with ${response.status}`);
   throw new ApiError(response.status, {}, text.trim() || `Request returned a non-JSON response (${response.status})`);
@@ -74,7 +92,7 @@ async function request<T>(url: string, init: RequestInit, timeoutMs: number): Pr
         retryable: true,
       }, 'Request timed out');
     }
-    throw reason;
+    throw asNetworkError(reason);
   } finally {
     window.clearTimeout(timeout);
   }
