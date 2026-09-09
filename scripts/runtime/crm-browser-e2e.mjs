@@ -58,6 +58,24 @@ const setFormControl = async (page, submitText, selector, value) => {
   if (!updated) throw new Error(`Control ${selector} in form ${submitText} was not found`);
 };
 
+const setFormControlByLabel = async (page, submitText, labelText, value) => {
+  const updated = await page.evaluate(({ needle, wantedLabel, nextValue }) => {
+    const form = [...document.querySelectorAll('.crm-detail form')]
+      .find((node) => (node.querySelector('button[type="submit"]')?.textContent || '').includes(needle));
+    const label = [...(form?.querySelectorAll('label') || [])]
+      .find((node) => (node.firstChild?.textContent || '').trim() === wantedLabel);
+    const element = label?.querySelector('input, textarea, select');
+    if (!element) return false;
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
+    if (!setter) return false;
+    setter.call(element, nextValue);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }, { needle: submitText, wantedLabel: labelText, nextValue: value });
+  if (!updated) throw new Error(`Label ${labelText} in form ${submitText} was not found`);
+};
+
 const submitFormByButton = async (page, text) => {
   const submitted = await page.evaluate((needle) => {
     const form = [...document.querySelectorAll('form')]
@@ -163,7 +181,7 @@ try {
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const isoLocal = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   await setFormControl(page, 'Schedule follow-up', 'input[type="datetime-local"]', isoLocal);
-  await setFormControl(page, 'Schedule follow-up', 'input[type="text"]', `Browser E2E follow-up ${uniqueSuffix}`);
+  await setFormControlByLabel(page, 'Schedule follow-up', 'Title', `Browser E2E follow-up ${uniqueSuffix}`);
   await submitFormByButton(page, 'Schedule follow-up');
   await waitForNotice(page, 'Follow-up scheduled in the CRM source of truth.');
   record('Follow-up is scheduled through the canonical CRM path', true, 'follow-up acknowledgement received');
