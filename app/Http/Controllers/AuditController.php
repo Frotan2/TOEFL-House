@@ -6,7 +6,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 
-/** Legacy transport kept only for compatibility; canonical audit reads live in React/API. */
+/** Legacy transport only; canonical audit reads live in the React/API surface. */
 final class AuditController extends Controller
 {
     public function index(): RedirectResponse
