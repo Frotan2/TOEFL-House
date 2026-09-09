@@ -6,7 +6,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Identity\Models\Person;
-use App\Modules\Organization\Models\Branch;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\ConsentPurpose;
 use App\Modules\Privacy\Models\ConsentRevocation;
