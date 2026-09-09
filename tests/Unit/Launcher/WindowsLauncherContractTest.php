@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  *
  * Regression this guards against: the launcher hard-coded a single fully
  * qualified Windows PHP URL under /downloads/releases/. PHP's Windows feed
- * only keeps the newest patch of each branch there; once a newer 8.2.x ships,
+ * only keeps the newest patch of each branch there; once a newer 8.4.x ships,
  * the pinned patch is moved to /downloads/releases/archives/ and the old URL
  * returns HTTP 404, so a fresh clone could not boot. The launcher now derives
  * every PHP artifact from one PHP_VERSION constant and downloads with a
@@ -56,26 +56,36 @@ final class WindowsLauncherContractTest extends TestCase
         }
     }
 
-    public function test_pins_a_single_php_8_2_version(): void
+    public function test_pins_a_single_php_8_4_version(): void
     {
         $this->assertArrayHasKey('PHP_VERSION', $this->vars, 'the launcher must define PHP_VERSION.');
         $this->assertMatchesRegularExpression(
-            '/^8\.2\.\d+$/',
+            '/^8\.4\.\d+$/',
             $this->vars['PHP_VERSION'],
-            'the project runs on PHP 8.2.x; the pin must stay on the 8.2 minor line.',
+            'the project runs on PHP 8.4.x; the pin must stay on the 8.4 minor line.',
+        );
+        // Regression guard: the retired 8.2-era launcher shipped the VS16
+        // artifact name. The ENTIRE PHP 8.4 Windows series is built with the
+        // VS17 toolchain, so a vs16 token anywhere in the launcher would 404
+        // the download. The token must stay gone, not merely be absent from
+        // the two derived-name variables.
+        $this->assertStringNotContainsString(
+            'vs16',
+            $this->bat,
+            'PHP 8.4 Windows builds are VS17; the retired vs16 toolchain token must not appear anywhere in the launcher.',
         );
     }
 
     public function test_php_archive_name_is_derived_from_the_version_not_literal(): void
     {
         $this->assertArrayHasKey('PHP_ZIP', $this->vars);
-        // Must be built from the version variable - not a hard-coded php-8.2.xx literal.
+        // Must be built from the version variable - not a hard-coded php-8.4.xx literal.
         $this->assertStringContainsString('%PHP_VERSION%', $this->vars['PHP_ZIP'], 'PHP_ZIP must derive from PHP_VERSION.');
-        $this->assertStringNotContainsString('php-8.2.', $this->vars['PHP_ZIP'], 'PHP_ZIP must not hard-code the patch version.');
+        $this->assertStringNotContainsString('php-8.4.', $this->vars['PHP_ZIP'], 'PHP_ZIP must not hard-code the patch version.');
 
         // Simulate cmd expansion.
         $zip = str_replace('%PHP_VERSION%', $this->vars['PHP_VERSION'], $this->vars['PHP_ZIP']);
-        $this->assertSame("php-{$this->vars['PHP_VERSION']}-Win32-vs16-x64.zip", $zip);
+        $this->assertSame("php-{$this->vars['PHP_VERSION']}-Win32-vs17-x64.zip", $zip);
     }
 
     public function test_php_downloads_cover_both_releases_and_permanent_archive(): void
@@ -98,7 +108,7 @@ final class WindowsLauncherContractTest extends TestCase
             $this->vars['PHP_ARCHIVE_ZIP_URL'],
         );
         $this->assertStringEndsWith(
-            "/downloads/releases/archives/php-{$this->vars['PHP_VERSION']}-Win32-vs16-x64.zip",
+            "/downloads/releases/archives/php-{$this->vars['PHP_VERSION']}-Win32-vs17-x64.zip",
             $archiveExpanded,
         );
     }

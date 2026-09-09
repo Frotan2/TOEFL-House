@@ -161,8 +161,8 @@ if exist "%RT%\downloads\php.zip" (
 ) else (
   echo php.zip not cached in .runtime\downloads
 )
-echo --- fetching official SBOM manifest for php-8.2.27-Win32-vs16-x64.zip (read-only):
-powershell -NoProfile -Command "try { $c = (Invoke-WebRequest -UseBasicParsing -Uri 'https://downloads.php.net/~windows/releases/archives/php-8.2.27-Win32-vs16-x64.zip.cdx.json' -TimeoutSec 40).Content; Set-Content -Path '%D%\cdx.json' -Value $c -Encoding utf8; Write-Output ('manifest fetched, bytes: ' + $c.Length) } catch { Write-Output ('manifest fetch failed: ' + $_.Exception.Message) }"
+echo --- fetching official SBOM manifest for php-8.4.14-Win32-vs17-x64.zip (read-only):
+powershell -NoProfile -Command "try { $c = (Invoke-WebRequest -UseBasicParsing -Uri 'https://downloads.php.net/~windows/releases/archives/php-8.4.14-Win32-vs17-x64.zip.cdx.json' -TimeoutSec 40).Content; Set-Content -Path '%D%\cdx.json' -Value $c -Encoding utf8; Write-Output ('manifest fetched, bytes: ' + $c.Length) } catch { Write-Output ('manifest fetch failed: ' + $_.Exception.Message) }"
 echo --- manifest content (look for the file name and its SHA-256):
 type "%D%\cdx.json" 2>nul
 

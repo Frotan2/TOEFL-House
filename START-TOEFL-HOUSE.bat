@@ -13,9 +13,9 @@ REM
 REM What this file does (every step fails loudly and says exactly what is
 REM missing; nothing here fails silently):
 REM   1.  Verifies prerequisites (Windows 10 1803+, built-in curl.exe)
-REM   2.  Prepares runtimes into .runtime\ : PHP 8.2.x (pinned at the version
+REM   2.  Prepares runtimes into .runtime\ : PHP 8.4.x (pinned at the version
 REM       in PHP_VERSION, derived artifacts in one place), Composer, Node
-REM       (pinned at NODE_VERSION, build-only), PostgreSQL 18.3 - downloaded
+REM       (pinned at NODE_VERSION, build-only), PostgreSQL 18.4 - downloaded
 REM       once from official URLs and reused on every later run. The PHP
 REM       download tries /releases/ first and falls back to
 REM       /releases/archives/ (where older patches live permanently), so a
@@ -70,20 +70,24 @@ REM letters as local paths. It ships on Windows 10 1803+, the same baseline as
 REM the built-in curl.exe.
 set "TAR=%SystemRoot%\System32\tar.exe"
 
-REM PHP 8.2.x is the pinned runtime (x64, thread-safe, VS16 build). The
+REM PHP 8.4.x is the pinned runtime (x64, thread-safe, VS17 build - the entire
+REM PHP 8.4 Windows series ships as VS17, compiled with Visual Studio 2022; it
+REM needs the Microsoft Visual C++ 2015-2022 Redistributable x64, reported by
+REM the :php_diagnose block below when missing). The
 REM archive name, its extracted folder and both download URLs are derived
 REM from PHP_VERSION so the pin lives in exactly one place.
-set "PHP_VERSION=8.2.27"
-set "PHP_ZIP=php-%PHP_VERSION%-Win32-vs16-x64.zip"
+set "PHP_VERSION=8.4.14"
+set "PHP_ZIP=php-%PHP_VERSION%-Win32-vs17-x64.zip"
 REM Windows builds only keep the newest patch of each branch under /releases/;
-REM older patches (including a pinned one once a newer 8.2.x ships) are moved
+REM older patches (including a pinned one once a newer 8.4.x ships) are moved
 REM permanently under /releases/archives/. Try the current-release URL first
 REM (fast while the patch is brand new) and transparently fall back to the
 REM archive URL, which never 404s - so this keeps working after patch bumps.
 set "PHP_ZIP_URL=https://windows.php.net/downloads/releases/%PHP_ZIP%"
 set "PHP_ARCHIVE_ZIP_URL=https://windows.php.net/downloads/releases/archives/%PHP_ZIP%"
-set "PG_VERSION_TAG=18.3-1"
-set "PG_ZIP_URL=https://get.enterprisedb.com/postgresql/postgresql-18.3-1-windows-x64-binaries.zip"
+set "PG_VERSION_TAG=18.4-1"
+REM The URL is derived from PG_VERSION_TAG so the pin lives in exactly one place.
+set "PG_ZIP_URL=https://get.enterprisedb.com/postgresql/postgresql-%PG_VERSION_TAG%-windows-x64-binaries.zip"
 REM Composer is fetched as the official, PERMANENT versioned PHAR (not the
 REM composer-setup.php bootstrapper). The bootstrapper runs its own embedded
 REM HTTP/TLS client with bundled signature keys, which crashed php.exe with a
@@ -91,7 +95,7 @@ REM native STATUS_ACCESS_VIOLATION (exit 0xC0000005 / -1073741819) on this
 REM runtime even though every extension loaded fine. The versioned PHAR is a
 REM fixed download URL, is the standard CI method, and is verified by running
 REM `composer.phar --version`. Pinned to a stable release (min PHP 7.2.5).
-set "COMPOSER_VERSION=2.10.3"
+set "COMPOSER_VERSION=2.9.2"
 set "COMPOSER_PHAR_URL=https://getcomposer.org/download/%COMPOSER_VERSION%/composer.phar"
 REM Tailscale Windows packages are MSIs that live ONLY on the official package
 REM host pkgs.tailscale.com and are ALWAYS version-pinned: the file name is
@@ -723,6 +727,12 @@ echo       names the missing DLL / wrong extension_dir / architecture mismatch) 
 echo   Most common causes: extension_dir is not the absolute "%PHP_DIR%\ext",
 echo   a dependency DLL such as libpq.dll is not on this process PATH, or the
 echo   PHP architecture/thread-safety does not match the extension DLLs.
+echo   Toolchain note: the pinned PHP 8.4.x Windows build is VS17 ^(compiled
+echo   with Visual Studio 2022^) and requires the Microsoft Visual C++
+echo   2015-2022 Redistributable ^(x64^): %SystemRoot%\System32\vcruntime140.dll
+echo   and vcruntime140_1.dll must be present ^(DIAG-PHP-CRASH.bat section 6
+echo   reports them^). A native 0xC0000005 crash right at startup on a machine
+echo   where those DLLs are absent points at the missing redistributable.
 echo  -----------------------------------------------------------------------
 echo.
 exit /b 0

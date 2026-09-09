@@ -233,6 +233,32 @@ major version, and configure with:
 --without-sqlite3 --without-pdo-sqlite
 ```
 
+### Windows desktop (one-click launcher, same locked versions)
+
+`START-TOEFL-HOUSE.bat` provisions the **same locked runtime** on a Windows
+desktop from official, version-pinned artifacts (the launcher contract is
+enforced by `tests/Unit/Launcher/WindowsLauncherContractTest.php`):
+
+| Component | Locked desktop artifact |
+|---|---|
+| PHP | **8.4.14** — `php-8.4.14-Win32-vs17-x64.zip` (x64, thread-safe, **VS17** toolchain), `windows.php.net/downloads/releases/` with a permanent `/releases/archives/` fallback |
+| Composer | **2.9.2** — official versioned `composer.phar` from `getcomposer.org/download/2.9.2/composer.phar` |
+| PostgreSQL | **18.4** — EDB `postgresql-18.4-1-windows-x64-binaries.zip` |
+| Node (build-only) | **22.22.3** — official `node-v22.22.3-win-x64.zip` from `nodejs.org/dist/v22.22.3/` |
+
+These desktop artifact pins are deployment implementation details of the §1
+lock and must remain consistent with the dependency lockfiles (SETUP.md §1).
+Notes:
+
+- The **entire PHP 8.4 Windows series ships as VS17** (Visual Studio 2022
+  toolchain). The legacy 8.2-era launcher used the VS16 artifact name; a vs16
+  token would 404 against the 8.4 series and is rejected by the launcher
+  contract test. VS17 builds need the Microsoft Visual C++ 2015-2022
+  Redistributable (x64).
+- 8.4.14 already lives under `/releases/archives/` (newer 8.4 patches hold
+  `/releases/`); the launcher's releases → archives fallback covers this, so
+  fresh clones keep booting.
+
 ---
 
 ## 7. Known Platform Constraints
