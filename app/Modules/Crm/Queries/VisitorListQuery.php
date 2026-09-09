@@ -6,12 +6,15 @@ namespace App\Modules\Crm\Queries;
 
 use App\Modules\Crm\Domain\VisitorStatus;
 use App\Modules\Crm\Models\Visitor;
+use App\Support\Errors\BusinessRejection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Read model for the visitor pipeline. Filters are pure read-model concerns;
  * authorization is enforced by the controller/command boundary around it.
+ * Unknown provenance is never treated as a wildcard: branchless legacy rows
+ * are excluded from directory results and cannot be expanded into a detail.
  */
 final class VisitorListQuery
 {
@@ -43,20 +46,14 @@ final class VisitorListQuery
         if (isset($filters['campaign_id']) && $filters['campaign_id'] !== '') {
             $query->where('campaign_id', $filters['campaign_id']);
         }
-        // Null provenance is intentionally never a wildcard. The caller must
-        // provide a concrete authorized branch set; an explicit organization
-        // read may opt into the reportable unassigned queue, and an explicit
-        // branch filter always narrows the result rather than being ignored.
+        // Unknown/NULL provenance is never a wildcard. The controller proves
+        // branch access before calling this query; the query itself keeps the
+        // read model fail-closed so a legacy branchless record cannot leak from
+        // an organization-scoped unassigned queue.
         if (isset($filters['branch_id']) && $filters['branch_id'] !== '') {
             $query->where('origin_branch_id', $filters['branch_id']);
         } elseif (isset($filters['branch_ids']) && is_array($filters['branch_ids'])) {
-            if (($filters['include_unassigned'] ?? false) === true) {
-                $query->where(fn (Builder $q): Builder => $q
-                    ->whereIn('origin_branch_id', $filters['branch_ids'])
-                    ->orWhereNull('origin_branch_id'));
-            } else {
-                $query->whereIn('origin_branch_id', $filters['branch_ids']);
-            }
+            $query->whereIn('origin_branch_id', $filters['branch_ids']);
         } else {
             $query->whereNotNull('origin_branch_id');
         }
@@ -88,6 +85,9 @@ final class VisitorListQuery
     /** @return array<string, mixed> */
     public function detail(Visitor $visitor): array
     {
+        if (trim((string) ($visitor->origin_branch_id ?? '')) === '') {
+            throw BusinessRejection::forCode('crm.visitor_provenance_unknown', 'visitor provenance is unknown and cannot be exposed through the CRM read API');
+        }
         $visitor->loadMissing(['source', 'campaign', 'assignee', 'originBranch:id,name', 'conversion', 'conversionHandoffs']);
 
         return $this->present($visitor);
@@ -125,8 +125,6 @@ final class VisitorListQuery
             'preferred_channel' => $visitor->preferred_channel,
             'visitor_type' => $visitor->visitor_type,
             'status' => $visitor->status,
-            // `created_at` remains row metadata. Only captured_at with its
-            // database basis is a capture-event clock for CRM reporting.
             'captured_at' => $visitor->capture_time_basis === 'database_insert'
                 ? $visitor->captured_at?->toISOString()
                 : null,
