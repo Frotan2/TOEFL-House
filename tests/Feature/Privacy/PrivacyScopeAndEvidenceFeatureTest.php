@@ -8,6 +8,7 @@ use App\Modules\Privacy\Commands\RecordDisclosure;
 use App\Modules\Privacy\Models\ConsentRevocation;
 use App\Modules\Privacy\Models\Disclosure;
 use App\Support\Errors\BusinessRejection;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
@@ -36,19 +37,47 @@ final class PrivacyScopeAndEvidenceFeatureTest extends TestCase
         );
     }
 
-    public function test_disclosure_and_revocation_evidence_are_model_immutable(): void
+    public function test_privacy_evidence_has_database_append_only_triggers(): void
+    {
+        $triggerNames = collect(DB::select(
+            "SELECT tgname FROM pg_trigger WHERE tgrelid IN ('disclosures'::regclass, 'consent_revocations'::regclass) AND NOT tgisinternal"
+        ))->pluck('tgname')->all();
+
+        $this->assertContains('disclosures_append_only_trigger', $triggerNames);
+        $this->assertContains('consent_revocations_append_only_trigger', $triggerNames);
+    }
+
+    public function test_disclosure_cannot_be_rewritten_or_deleted_through_model(): void
     {
         $disclosure = new Disclosure(['id' => 'disclosure-existing']);
         $disclosure->exists = true;
+
+        try {
+            $disclosure->save();
+            $this->fail('expected disclosure mutation to be rejected');
+        } catch (BusinessRejection $exception) {
+            $this->assertSame('privacy.disclosure_immutable', $exception->getCode());
+        }
+
         $this->expectException(BusinessRejection::class);
-        $disclosure->save();
+        $this->expectExceptionMessage('append-only');
+        $disclosure->delete();
     }
 
-    public function test_revocation_evidence_cannot_be_rewritten(): void
+    public function test_revocation_cannot_be_rewritten_or_deleted_through_model(): void
     {
         $revocation = new ConsentRevocation(['id' => 'revocation-existing']);
         $revocation->exists = true;
+
+        try {
+            $revocation->save();
+            $this->fail('expected revocation mutation to be rejected');
+        } catch (BusinessRejection $exception) {
+            $this->assertSame('privacy.revocation_immutable', $exception->getCode());
+        }
+
         $this->expectException(BusinessRejection::class);
-        $revocation->save();
+        $this->expectExceptionMessage('append-only');
+        $revocation->forceDelete();
     }
 }
