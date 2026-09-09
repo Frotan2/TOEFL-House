@@ -36,10 +36,10 @@ containsAll(controller, [
   "'student_guardian'",
   "finance_obligation",
   "finance_payment",
-  "new RegisterApplicant",
-  "new ReopenApplicant",
-  "new DecideAdmission",
-  "new EnrollAdmittedApplicant",
+  "app(RegisterApplicant::class)",
+  "app(ReopenApplicant::class)",
+  "app(DecideAdmission::class)",
+  "app(EnrollAdmittedApplicant::class)",
 ], 'Students server authority contract');
 
 containsAll(students, [
