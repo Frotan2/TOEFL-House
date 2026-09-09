@@ -52,9 +52,9 @@ containsAll(library, [
 containsAll(apiRoutes, [
   "use App\\Http\\Controllers\\Api\\PlacementApiController;",
   "Route::prefix('placement')->name('api.placement.')",
-  "'/attempts'",
-  "'/attempts/{attemptId}/submit'",
-  "'/attempts/{attemptId}/cancel'",
+  "Route::post('/attempts', [PlacementApiController::class, 'startAttempt'])",
+  "Route::post('/attempts/{attemptId}/submit', [PlacementApiController::class, 'submitDigital'])",
+  "Route::post('/attempts/{attemptId}/cancel', [PlacementApiController::class, 'cancelAttempt'])",
 ], 'Placement API route contract');
 
 containsAll(placement, [
