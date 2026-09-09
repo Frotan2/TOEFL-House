@@ -4,6 +4,7 @@ import './experience-home.css';
 import './academic-setup.css';
 import './student-journey.css';
 import './teacher-day.css';
+import './command-palette.css';
 import { AcademicApp } from './academic';
 import { AcademicSetupApp } from './academic-setup';
 import { TeacherApp } from './teacher';
