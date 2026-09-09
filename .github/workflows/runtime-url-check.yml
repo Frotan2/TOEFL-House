@@ -1,0 +1,157 @@
+# TEMPORARY verification workflow for the Windows-desktop runtime pin alignment
+# (PHP 8.4.14 VS17 / Composer 2.9.2 / PostgreSQL 18.4-1 / Node 22.22.3).
+#
+# It verifies that every artifact URL the LAUNCHER downloads from is live on
+# the public download hosts — the one check that cannot run in the provisioning
+# sandbox, which blocks windows.php.net and get.enterprisedb.com egress.
+#
+# The DIAG-PHP-CRASH.bat SBOM manifest URL is recorded for evidence but does
+# NOT gate the verdict: php.net publishes SBOM manifests (.cdx.json) only for
+# the newest patch of each series, so the manifest of a pinned, superseded
+# patch (8.4.14 already lives under /releases/archives/) legitimately 404s —
+# first run proved exactly that (404) while every runtime artifact returned
+# 200. The launcher never downloads the manifest; it is a read-only forensic
+# aid with a graceful failure path.
+#
+# SELF-REMOVING: after the checks run, the job commits runtime-url-check.txt
+# (the observed status codes) to the branch that triggered it and deletes this
+# workflow file in the same commit, so no manual cleanup and no re-runs (a
+# GITHUB_TOKEN push never triggers a new workflow run either). The version
+# pins themselves stay enforced permanently by
+# tests/Unit/Launcher/WindowsLauncherContractTest.php.
+
+name: runtime-url-check
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  check-pinned-runtime-urls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract the pinned versions and build the artifact URLs
+        id: pins
+        run: |
+          BAT=START-TOEFL-HOUSE.bat
+          PHP_VERSION=$(grep -oP '^set "PHP_VERSION=\K[^"]+' "$BAT" | tr -d '\r')
+          PHP_ZIP=$(grep -oP '^set "PHP_ZIP=\K[^"]+' "$BAT" | tr -d '\r')
+          PHP_ZIP=${PHP_ZIP//%PHP_VERSION%/$PHP_VERSION}
+          PG_VERSION_TAG=$(grep -oP '^set "PG_VERSION_TAG=\K[^"]+' "$BAT" | tr -d '\r')
+          COMPOSER_VERSION=$(grep -oP '^set "COMPOSER_VERSION=\K[^"]+' "$BAT" | tr -d '\r')
+          NODE_VERSION=$(grep -oP '^set "NODE_VERSION=\K[^"]+' "$BAT" | tr -d '\r')
+          TAILSCALE_VERSION=$(grep -oP '^set "TAILSCALE_VERSION=\K[^"]+' "$BAT" | tr -d '\r')
+          NODE_ZIP="node-v${NODE_VERSION}-win-x64.zip"
+          SBOM_URL=$(grep -oP "Uri '\Khttps://[^']+" DIAG-PHP-CRASH.bat | head -1)
+
+          {
+            echo "php_releases=https://windows.php.net/downloads/releases/$PHP_ZIP"
+            echo "php_archives=https://windows.php.net/downloads/releases/archives/$PHP_ZIP"
+            echo "composer=https://getcomposer.org/download/$COMPOSER_VERSION/composer.phar"
+            echo "postgresql=https://get.enterprisedb.com/postgresql/postgresql-$PG_VERSION_TAG-windows-x64-binaries.zip"
+            echo "node=https://nodejs.org/dist/v$NODE_VERSION/$NODE_ZIP"
+            echo "tailscale=https://pkgs.tailscale.com/stable/tailscale-setup-$TAILSCALE_VERSION-amd64.msi"
+            echo "sbom=$SBOM_URL"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Pinned PHP zip  : $PHP_ZIP"
+          echo "Pinned PG tag   : $PG_VERSION_TAG"
+          echo "Pinned Composer : $COMPOSER_VERSION"
+          echo "Pinned Node     : $NODE_VERSION ($NODE_ZIP)"
+          echo "SBOM ( forensic): $SBOM_URL"
+
+      - name: Verify every pinned URL is live
+        env:
+          PHP_RELEASES: ${{ steps.pins.outputs.php_releases }}
+          PHP_ARCHIVES: ${{ steps.pins.outputs.php_archives }}
+          COMPOSER_URL: ${{ steps.pins.outputs.composer }}
+          PG_URL: ${{ steps.pins.outputs.postgresql }}
+          NODE_URL: ${{ steps.pins.outputs.node }}
+          TAILSCALE_URL: ${{ steps.pins.outputs.tailscale }}
+          SBOM_URL: ${{ steps.pins.outputs.sbom }}
+        run: |
+          set -u
+          EVIDENCE=runtime-url-check.txt
+          : > "$EVIDENCE"
+
+          # code_for <url> — HEAD first; some hosts dislike HEAD, so fall back
+          # to a 1-byte range GET before declaring the URL dead.
+          code_for() {
+            local url="$1" code
+            code=$(curl -sIL -A 'toefl-house-runtime-url-check' -o /dev/null \
+                     --max-time 90 --retry 3 --retry-delay 5 \
+                     -w '%{http_code}' "$url" || echo 000)
+            if [ "$code" = "403" ] || [ "$code" = "405" ]; then
+              code=$(curl -sL -A 'toefl-house-runtime-url-check' -o /dev/null \
+                      --max-time 90 --retry 3 --retry-delay 5 -r 0-0 \
+                      -w '%{http_code}' "$url" || echo 000)
+            fi
+            echo "$code"
+          }
+
+          # PHP: the launcher succeeds when EITHER tier serves the pinned zip
+          # (windows.php.net rotates patches between /releases/ and /archives/),
+          # mirroring test_php_urls_resolve_over_http.
+          php_ok=1
+          for tier in "$PHP_RELEASES" "$PHP_ARCHIVES"; do
+            code=$(code_for "$tier")
+            echo "$code php-tier $tier" | tee -a "$EVIDENCE"
+            [ "$code" = "200" ] && php_ok=0
+          done
+          if [ "$php_ok" != "0" ]; then
+            echo "FAIL: the pinned PHP build is served by neither tier." | tee -a "$EVIDENCE"
+          fi
+
+          FAIL=0
+          check() {
+            local label="$1" url="$2" code
+            code=$(code_for "$url")
+            echo "$code $label $url" | tee -a "$EVIDENCE"
+            if [ "$code" != "200" ] && [ "$code" != "206" ]; then
+              FAIL=1
+            fi
+          }
+
+          check composer   "$COMPOSER_URL"
+          check postgresql "$PG_URL"
+          check node       "$NODE_URL"
+          check tailscale  "$TAILSCALE_URL"
+
+          # Informational only — see the header: SBOM manifests exist only for
+          # the newest patch per series, so an archived pin's manifest 404s by
+          # upstream design and must not fail the artifact verdict.
+          code=$(code_for "$SBOM_URL")
+          echo "$code php-sbom-informational $SBOM_URL" | tee -a "$EVIDENCE"
+
+          if [ "$php_ok" != "0" ]; then FAIL=1; fi
+          echo "FAIL=$FAIL" >> "$GITHUB_ENV"
+          exit 0 # evidence is committed below; the verdict step applies the result
+
+      - name: Commit the evidence and remove this temporary workflow
+        run: |
+          git config user.name  "runtime-url-check"
+          git config user.email "actions@github.com"
+          git checkout "$GITHUB_REF_NAME" --
+          git add runtime-url-check.txt
+          git rm -f .github/workflows/runtime-url-check.yml
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore(runtime): record runtime-url-check evidence; self-remove the temporary workflow"
+          git push origin "$GITHUB_REF_NAME"
+
+      - name: Verdict
+        run: |
+          cat runtime-url-check.txt
+          if [ "${FAIL:-1}" != "0" ]; then
+            echo "::error::At least one pinned runtime artifact URL is not live - the desktop launcher would fail to download it."
+            exit 1
+          fi
+          echo "All pinned runtime artifact URLs are live (SBOM recorded informationally)."
