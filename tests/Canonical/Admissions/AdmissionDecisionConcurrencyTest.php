@@ -8,7 +8,6 @@ use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\AdmissionDecision;
 use App\Modules\Admissions\Models\Applicant;
-use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +37,7 @@ final class AdmissionDecisionConcurrencyTest extends CanonicalTestCase
         return Applicant::query()->findOrFail($registered['applicant_id']);
     }
 
-    public function test_application_command_rejects_a_second_in_flight_decision_chain(): void
+    public function test_second_in_flight_decision_is_rejected_by_the_database_guard(): void
     {
         $applicant = $this->applicant();
         $clerk = $this->admissionsClerk('canon-adm-concurrency-clerk');
