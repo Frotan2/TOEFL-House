@@ -19,15 +19,17 @@ Do not move to the next domain because the UI looks complete, endpoints exist, u
 - `docs/MASTER_ENGINEERING_CONTRACT.md` is the project constitution.
 - `docs/15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` is the current user-facing parity contract.
 - `docs/14-CURRENT-STATE-ROADMAP.md` is the current planning/status register.
+- `docs/DOMAIN-REASSESSMENT-2026-09-09.md` is the latest second-pass domain assessment.
 - `docs/RUNTIME_ENVIRONMENT_LOCK.md` is the runtime version authority.
 - `docs/RUNTIME_VERIFICATION_HANDOFF.md` and the latest Verification workflow run are runtime evidence; claims must come from actual evidence, not prose.
+- `docs/CURRENT-RELEASE-STATUS.md` is the current release-state summary.
 - Historical audit/certification documents are evidence only unless explicitly declared current by the canonical index.
 
-## 3. Current release-state warning
+## 3. Current release-state rule
 
-The repository contains an older 2026-09-09 certification document that states production readiness at commit `96925d3`. That claim must **not** be treated as current release certification for the present `main` head.
+Historical certification claims are never inherited by later commits.
 
-The latest active verification chain is the authoritative state for release gating. At handoff creation, Verification run **#442 / run `34366532471`** is still the active verification line. Frontend has passed; Static, Backend and Browser E2E remain subject to their actual final conclusions. No agent may infer their result.
+The next agent **must inspect the current `main` HEAD and the latest non-superseded Verification run before making any release statement**. Do not copy a run number or commit SHA from this document because every new push creates a new evidence boundary.
 
 ## 4. Current domain re-evaluation
 
@@ -35,7 +37,10 @@ The latest active verification chain is the authoritative state for release gati
 
 - Organization / scope
 - Identity
-- Library & Resources
+
+### Active domain
+
+- Library & Resources — **IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED** until current release evidence passes.
 
 ### Partial / still requiring domain-by-domain closure
 
@@ -87,7 +92,7 @@ However, the domain is not release-certified until the current Verification line
 
 For the selected domain, produce a workflow inventory first. For every workflow, record:
 
-`Requirement → Authority → State machine → DB invariants → Command/service → Authorization → Scope → API → React surface → UX states → Audit/provenance → Idempotency → Concurrency → Tests → Browser/E2E → Documentation`
+`Requirement → State machine → Authority → DB invariants → Command/service → Authorization → Scope → API → React surface → UX states → Audit/provenance → Idempotency → Concurrency → Tests → Browser/E2E → Documentation`
 
 Classify each workflow as:
 
@@ -101,17 +106,17 @@ Endpoint count is not a parity metric.
 
 ## 7. Security and scope must be adversarially checked
 
-For every domain, explicitly test:
+For every domain, explicitly test as applicable:
 
 - organization isolation
 - campus isolation
 - branch isolation
-- class/record ownership where applicable
+- class/record ownership
 - own-scope vs cross-scope access
 - manager cross-branch denial
 - campus-scoped manager access
 - owner/global access
-- teacher/employee own-record restrictions where applicable
+- teacher/employee own-record restrictions
 - unauthorized mutation
 - invalid lifecycle transition
 - approval self-approval and separation-of-duties violations
@@ -124,7 +129,7 @@ A UI hiding a button is never a security control.
 
 React is an operational client of authoritative backend behavior.
 
-Use the canonical transport at `resources/js/core/api.ts`.
+Use `resources/js/core/api.ts` as the canonical transport.
 Do not create duplicate API clients.
 Do not copy server business rules into React.
 Do not fabricate local lifecycle state that can become authoritative.
@@ -159,10 +164,12 @@ At minimum review:
 - `docs/README.md`
 - `docs/14-CURRENT-STATE-ROADMAP.md`
 - `docs/15-BACKEND-FRONTEND-PARITY-AUTHORITY.md`
+- `docs/DOMAIN-REASSESSMENT-2026-09-09.md`
+- `docs/CURRENT-RELEASE-STATUS.md`
 - `docs/16-DECISION-REGISTER.md` when a governed decision changed
 - the relevant domain specification
-- relevant AI governance/handoff documents
-- runtime handoff/evidence documents when runtime state changed
+- `docs/RUNTIME_VERIFICATION_HANDOFF.md` and `docs/RUNTIME_ENVIRONMENT_LOCK.md` when runtime state changed
+- relevant AI governance documents
 
 Never leave a known stale `CURRENT`, `COMPLETE`, `CERTIFIED`, or `PRODUCTION-READY` claim in a canonical document.
 
