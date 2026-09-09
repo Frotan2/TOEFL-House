@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import './app.css';
+import './experience-home.css';
 import { AcademicApp } from './academic';
 import { TeacherApp } from './teacher';
 import { CrmApp } from './crm';
