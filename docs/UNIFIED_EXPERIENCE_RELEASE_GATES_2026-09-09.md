@@ -21,7 +21,7 @@ This document is the completion contract for the unified employee experience. A 
 - Frontend mount regression suite passes for every legacy console and the canonical `app.tsx` entrypoint.
 - No route introduced by this productization increment throws during initial render.
 - No missing import, invalid hook usage, or blank mount remains.
-- Shared product theme is registered as a Vite build input and loaded at the common Laravel console boundary.
+- Shared product theme is registered as a Vite build input and loaded through the common console boundary.
 
 **Required result:** PASS.
 
@@ -44,7 +44,7 @@ For every task-first workspace:
 
 The browser must never infer success from a local state mutation when the server command has failed or been rejected.
 
-**Required result:** PASS for Home/My Work, Students & Admissions, Academic Operations, People & Faculty, Front Office/CRM, Finance, Reports and Command Center.
+**Required result:** PASS across Home/My Work, Students & Admissions, Academic Operations, Placement, People & Faculty, Front Office/CRM, HR/Payroll, Finance/Funding, Reporting and Command Center.
 
 ## Gate E — Scope/persona acceptance
 
@@ -62,19 +62,22 @@ For each persona verify positive access, negative access, empty state, denied-co
 
 **Required result:** PASS.
 
-## Gate F — Responsive/accessibility acceptance
+## Gate F — Responsive/accessibility/design-system acceptance
 
 Inspect desktop, tablet and mobile widths with keyboard-only navigation for:
 
 - persistent shell and collapsed navigation;
 - mobile drawer and backdrop;
 - command palette;
-- tables and long identifiers;
+- navigation taxonomy and active states;
+- dashboards, tabs, tables and long identifiers;
 - forms and validation errors;
 - status/empty/loading states;
 - primary task visibility without horizontal overflow;
 - visible focus indication and logical reading order;
-- reduced-motion behavior where animation is used.
+- reduced-motion behavior;
+- semantic state colors with non-color labels;
+- print-oriented output surfaces.
 
 **Required result:** PASS.
 
@@ -89,14 +92,14 @@ Implemented in the current productization branch:
 - Student Journey;
 - Teacher Day;
 - Front Office / Reception Desk;
-- shared design primitives;
-- expanded enterprise navigation taxonomy;
-- institutional product theme with semantic state tokens;
-- common Laravel console theme boundary;
+- expanded enterprise navigation taxonomy across work, people, operations, governance and control;
+- institutional navy/gold product theme with semantic status tokens;
+- shared theme registered in Vite and loaded at the Laravel console boundary;
+- responsive, reduced-motion, focus, dense-data and print styling contract;
 - canonical app-entrypoint mount regression coverage;
-- architecture, design-system and release-gate documentation.
+- formal unified architecture, design-system and release-gate documentation.
 
-The remaining release decision is evidence-based: GitHub Verification and manual persona/responsive acceptance must complete successfully before the PR is marked ready or merged.
+The remaining release decision is evidence-based: GitHub Verification and manual persona/responsive acceptance must complete successfully before the PR is marked ready or merged. Domain-specific UI expansion must consume authoritative server read projections and must not invent client-side truth where a source projection is absent.
 
 ## Non-negotiable rule
 
