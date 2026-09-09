@@ -21,6 +21,7 @@ This document is the completion contract for the unified employee experience. A 
 - Frontend mount regression suite passes for every legacy console and the canonical `app.tsx` entrypoint.
 - No route introduced by this productization increment throws during initial render.
 - No missing import, invalid hook usage, or blank mount remains.
+- Shared product theme is registered as a Vite build input and loaded at the common Laravel console boundary.
 
 **Required result:** PASS.
 
@@ -89,8 +90,11 @@ Implemented in the current productization branch:
 - Teacher Day;
 - Front Office / Reception Desk;
 - shared design primitives;
+- expanded enterprise navigation taxonomy;
+- institutional product theme with semantic state tokens;
+- common Laravel console theme boundary;
 - canonical app-entrypoint mount regression coverage;
-- architecture and release-gate documentation.
+- architecture, design-system and release-gate documentation.
 
 The remaining release decision is evidence-based: GitHub Verification and manual persona/responsive acceptance must complete successfully before the PR is marked ready or merged.
 
