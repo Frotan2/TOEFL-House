@@ -48,6 +48,14 @@ const navigationPaths = [
 ];
 for (const route of navigationPaths) assert.match(ui, new RegExp(`href=[\"']${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\"']`), `shell: navigation route ${route} is missing`);
 
+const hr = fs.readFileSync(path.join(jsRoot, 'hr.tsx'), 'utf8');
+assert.match(hr, /function confirmAction/, 'HR: lifecycle confirmation helper missing');
+assert.match(hr, /action === 'terminate'/, 'HR: termination must be classified as irreversible');
+assert.match(hr, /humanize\(action\).*?confirmAction/s, 'HR: employment lifecycle transition must confirm before command');
+assert.match(hr, /event\.key === 'ArrowRight' \|\| event\.key === 'ArrowDown'/, 'HR: tab keyboard traversal missing');
+assert.match(hr, /event\.key === 'ArrowLeft' \|\| event\.key === 'ArrowUp'/, 'HR: reverse tab keyboard traversal missing');
+assert.match(hr, /aria-controls/, 'HR: tabs must reference their tabpanels');
+
 const blade = fs.readFileSync(path.join(viewsRoot, 'workspace.blade.php'), 'utf8');
 assert.match(blade, /@vite\('resources\/js\/app\.tsx'\)/, 'workspace blade: canonical app entrypoint missing');
 assert.match(blade, /toefl-house-ultimate\.css/, 'workspace blade: global visual contract missing');
@@ -61,14 +69,14 @@ assert.match(legacyLayout, /toefl-house-operations\.css/, 'legacy layout: operat
 assert.match(legacyLayout, /toefl-house-legacy-operations\.css/, 'legacy layout: legacy operations contract missing');
 
 const specialistBlades = {
-  placement: ['placement', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-placement\.css']],
-  finance: ['finance', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
-  hr: ['hr', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
-  payroll: ['payroll', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
-  reporting: ['reporting', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
-  organization: ['organization', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
-  identity: ['identity', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
-  access: ['access', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  placement: ['placement', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-placement\\.css']],
+  finance: ['finance', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
+  hr: ['hr', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
+  payroll: ['payroll', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
+  reporting: ['reporting', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
+  organization: ['organization', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
+  identity: ['identity', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
+  access: ['access', 'index.blade.php', ['toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-operations\\.css']],
 };
 for (const [domain, [folder, filename, cssContracts]] of Object.entries(specialistBlades)) {
   const file = path.join(viewsRoot, folder, filename);
