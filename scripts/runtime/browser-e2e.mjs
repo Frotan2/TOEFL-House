@@ -117,6 +117,12 @@ try {
       `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`);
   }
 
+  const projectionCalls = apiCalls.filter(({ url }) => url.includes('/notifications') || url.includes('/work-items'));
+  const hasNotificationsProjection = projectionCalls.some(({ url }) => url.includes('/notifications'));
+  const hasWorkProjection = projectionCalls.some(({ url }) => url.includes('/work-items'));
+  record('Workspace reaches canonical communication and work projections', hasNotificationsProjection && hasWorkProjection,
+    `notifications=${hasNotificationsProjection} workItems=${hasWorkProjection}`);
+
   const badCalls = apiCalls.filter((call) => call.status >= 400);
   record('Frontend uses canonical API successfully', apiCalls.length > 0 && badCalls.length === 0,
     `${apiCalls.length} API calls observed; ${badCalls.length} failed`);
