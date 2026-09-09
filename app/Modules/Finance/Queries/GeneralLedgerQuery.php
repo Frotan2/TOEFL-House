@@ -4,19 +4,20 @@ declare(strict_types=1);
 
 namespace App\Modules\Finance\Queries;
 
-use App\Modules\Finance\Models\Journal;
 use App\Modules\Finance\Models\Discount;
 use App\Modules\Finance\Models\EmploymentSettlement;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\FinancialCorrection;
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Finance\Models\FundAllocation;
+use App\Modules\Finance\Models\Journal;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PayrollLiabilityFact;
 use App\Modules\Finance\Models\Refund;
-use App\Support\MoneyAmount;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -218,10 +219,12 @@ final class GeneralLedgerQuery
             $credit = (string) $row->credit;
             if ($row->type === 'revenue') {
                 $revenue = bcadd($revenue, bcsub($credit, $debit, 2), 2);
+
                 continue;
             }
             if ($row->type === 'expense') {
                 $expense = bcadd($expense, bcsub($debit, $credit, 2), 2);
+
                 continue;
             }
             $balance = $row->type === 'asset' ? bcsub($debit, $credit, 2) : bcsub($credit, $debit, 2);
@@ -262,28 +265,28 @@ final class GeneralLedgerQuery
     public function completeness(?string $periodId = null): array
     {
         $hasPeriod = $periodId !== null && $periodId !== '';
-        $scoped = static fn (\Illuminate\Database\Eloquent\Builder $query, string $column = 'period_id'): \Illuminate\Database\Eloquent\Builder => $hasPeriod ? $query->where($column, $periodId) : $query;
+        $scoped = static fn (Builder $query, string $column = 'period_id'): Builder => $hasPeriod ? $query->where($column, $periodId) : $query;
 
         $providers = [
-            'obligation' => fn (): \Illuminate\Support\Collection => $scoped(Obligation::query())->pluck('id'),
-            'payment' => fn (): \Illuminate\Support\Collection => $scoped(Payment::query())->pluck('id'),
-            'discount' => fn (): \Illuminate\Support\Collection => $scoped(Discount::query()->where('lifecycle_state', 'approved'))->pluck('id'),
-            'refund' => fn (): \Illuminate\Support\Collection => $scoped(Refund::query()->where('lifecycle_state', 'recorded'))->pluck('id'),
-            'fund_allocation' => fn (): \Illuminate\Support\Collection => $scoped(
+            'obligation' => fn (): Collection => $scoped(Obligation::query())->pluck('id'),
+            'payment' => fn (): Collection => $scoped(Payment::query())->pluck('id'),
+            'discount' => fn (): Collection => $scoped(Discount::query()->where('lifecycle_state', 'approved'))->pluck('id'),
+            'refund' => fn (): Collection => $scoped(Refund::query()->where('lifecycle_state', 'recorded'))->pluck('id'),
+            'fund_allocation' => fn (): Collection => $scoped(
                 FundAllocation::query()
                     ->join('obligation_lines', 'obligation_lines.id', '=', 'fund_allocations.obligation_line_id')
                     ->join('obligations', 'obligations.id', '=', 'obligation_lines.obligation_id'),
                 'obligations.period_id',
             )->pluck('fund_allocations.id'),
-            'payroll_liability' => fn (): \Illuminate\Support\Collection => $scoped(PayrollLiabilityFact::query())->pluck('id'),
-            'expense' => fn (): \Illuminate\Support\Collection => $scoped(Expense::query()->where('lifecycle_state', 'approved'))->pluck('id'),
-            'correction' => fn (): \Illuminate\Support\Collection => $scoped(
+            'payroll_liability' => fn (): Collection => $scoped(PayrollLiabilityFact::query())->pluck('id'),
+            'expense' => fn (): Collection => $scoped(Expense::query()->where('lifecycle_state', 'approved'))->pluck('id'),
+            'correction' => fn (): Collection => $scoped(
                 FinancialCorrection::query()->where('lifecycle_state', 'recorded')->whereIn('correction_type', [
                     FinancialCorrection::TYPE_OBLIGATION_ADJUSTMENT,
                     FinancialCorrection::TYPE_FUND_ALLOCATION_REVERSAL,
                 ]),
             )->pluck('id'),
-            'employment_settlement' => fn (): \Illuminate\Support\Collection => $scoped(EmploymentSettlement::query())->pluck('id'),
+            'employment_settlement' => fn (): Collection => $scoped(EmploymentSettlement::query())->pluck('id'),
         ];
 
         // Key journalized facts by (source_type, source_id) so a ledger entry is

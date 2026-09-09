@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Catalog asset with custody history; disposal (approved) closes it.
+ *
  * @property string $id
  * @property string $code
  * @property string $lifecycle_state

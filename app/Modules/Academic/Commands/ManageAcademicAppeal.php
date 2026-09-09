@@ -59,9 +59,12 @@ final class ManageAcademicAppeal
         try {
             return $this->idempotency->execute('academic.appeal.file', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($filer, $studentId, $subjectType, $subjectId, $reason): array {
-                    // Capability presence first (no existence probing by
-                    // unauthorized actors), then subject-branch scope.
-                    $this->requireCapability($filer, null);
+                    // Every appeal verb is checked in the contested subject's
+                    // branch scope (WP-ACAD-SCOPE): file() verifies the
+                    // subject row first, then requires capability at the
+                    // branch the verified subject belongs to. A branchless
+                    // precheck would be a null-scope decision, which is
+                    // reserved for governance rows only.
                     if (! in_array($subjectType, ['assessment_result', 'progression_decision', 'placement_profile'], true)) {
                         throw BusinessRejection::forCode('academic.appeal_subject_unknown', sprintf('unknown appeal subject %s', $subjectType));
                     }
@@ -109,8 +112,6 @@ final class ManageAcademicAppeal
         try {
             return $this->idempotency->execute('academic.appeal.assign', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($actor, $appeal, $reviewerPersonId): array {
-                    $this->requireCapability($actor, null);
-
                     /** @var AcademicAppeal $locked */
                     $locked = AcademicAppeal::query()->whereKey($appeal->id)->lockForUpdate()->firstOrFail();
                     AppealLifecycle::requireTransition($locked->lifecycle_state, AppealLifecycle::STATE_ASSIGNED);
@@ -186,8 +187,6 @@ final class ManageAcademicAppeal
         try {
             return $this->idempotency->execute('academic.appeal.'.$verb, $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($actor, $appeal, $toState, $verb, $outcome, $outcomeEvidence): array {
-                    $this->requireCapability($actor, null);
-
                     /** @var AcademicAppeal $locked */
                     $locked = AcademicAppeal::query()->whereKey($appeal->id)->lockForUpdate()->firstOrFail();
                     AppealLifecycle::requireTransition($locked->lifecycle_state, $toState);

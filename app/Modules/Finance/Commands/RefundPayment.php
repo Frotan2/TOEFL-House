@@ -9,11 +9,12 @@ use App\Modules\Audit\AuditRecorder;
 use App\Modules\Finance\Domain\FinanceLifecycle;
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Finance\Models\Payment;
-use App\Modules\Finance\Queries\FinancialBalanceQuery;
 use App\Modules\Finance\Models\Refund;
+use App\Modules\Finance\Queries\FinancialBalanceQuery;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -173,7 +174,7 @@ final class RefundPayment
         }
     }
 
-    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, string $capability, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

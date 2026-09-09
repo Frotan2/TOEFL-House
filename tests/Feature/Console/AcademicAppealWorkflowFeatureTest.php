@@ -30,6 +30,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -45,6 +46,7 @@ use Tests\TestCase;
 final class AcademicAppealWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -65,10 +67,18 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'boundary rules', 'afw-ver');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'afw-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'afw-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        // The version carries two levels so an A1 advance has an A2 target;
+        // advancing past the last level is a completion, not a progression.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicappealworkflowfe', 1, 'Level', 'A1', 'canon-academicappealworkflowfe-lvl');
+        app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicappealworkflowfe-2', 2, 'Level 2', 'A2', 'canon-academicappealworkflowfe-lvl2');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicappealworkflowfe-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicappealworkflowfe-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'afw-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'afw-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('afw-teacher-1', []);
+        $this->buildActiveTeacher('afw-teacher-1', null, 'academic8a8');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'afw-teacher-1', new CarbonImmutable('2026-09-01'), null, 'afw-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'afw-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'afw-cls-act');
@@ -97,14 +107,14 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         $progressionReviewer = $this->grantedActor('afw-prog-2', ['academic.progression_review']);
         $progressionApprover = $this->grantedActor('afw-prog-3', ['academic.progression_approve']);
         $progression = app(DecideProgression::class);
-        $decision = $progression->propose($proposer, $this->studentId, $this->classId, 'advance', 'meets the boundary rules', 'afw-prog-prop-1');
+        $decision = $progression->propose($proposer, $this->studentId, $this->classId, 'advance', 'meets the boundary rules', 'afw-prog-prop-1', null, 'assessed evidence on file');
         $progression->review($progressionReviewer, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'afw-prog-rev-1');
         $progression->approve($progressionApprover, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'afw-prog-app-1');
         $this->progressionId = $decision['decision_id'];
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -138,7 +148,7 @@ final class AcademicAppealWorkflowFeatureTest extends TestCase
         $personId = 'afw-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('afw-clerk-2'), $personId, 'IELTS Preparation', 'afw-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('afw-clerk-2'), $personId, 'IELTS Preparation', 'afw-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 

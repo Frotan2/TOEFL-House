@@ -33,7 +33,7 @@ final class CrmConsoleFeatureTest extends TestCase
 
         $this->get('/crm')
             ->assertOk()
-            ->assertSee('data-view="crm"')
+            ->assertSee('data-view="crm"', false)
             ->assertSee('react-console');
     }
 

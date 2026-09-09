@@ -18,6 +18,7 @@ use App\Modules\Finance\Models\FinancialGateException;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -169,6 +170,7 @@ final class RevokeFinancialCoverage
             FinancialCoverageCommitment::SOURCE_FINANCIAL_CREDIT => FinancialCredit::query()->whereKey($sourceId),
             FinancialCoverageCommitment::SOURCE_INSTALLMENT_PLAN => EnrollmentInstallmentPlan::query()->whereKey($sourceId),
             FinancialCoverageCommitment::SOURCE_GATE_EXCEPTION => FinancialGateException::query()->whereKey($sourceId),
+            default => throw BusinessRejection::forCode('finance.coverage_source_type_unknown', 'the coverage-source type is not supported'),
         };
         if ($lock) {
             $query->lockForUpdate();
@@ -243,7 +245,7 @@ final class RevokeFinancialCoverage
     }
 
     /**
-     * @param list<Branch> $branches
+     * @param  list<Branch>  $branches
      * @return array{branch_id: string|null, organization_id: string|null, branch_ids: list<string>, organization_ids: list<string>}
      */
     private function auditProvenance(array $branches): array
@@ -266,7 +268,7 @@ final class RevokeFinancialCoverage
         ];
     }
 
-    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, string $capability, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

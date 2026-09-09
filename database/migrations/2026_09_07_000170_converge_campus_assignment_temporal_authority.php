@@ -64,6 +64,6 @@ return new class extends Migration
     {
         // Reopening the ambiguity would make historical tenant provenance
         // nondeterministic; this convergence is deliberately forward-only.
-        throw new \RuntimeException('Campus-assignment temporal authority is one-way; do not permit overlapping branch attribution history.');
+        throw new RuntimeException('Campus-assignment temporal authority is one-way; do not permit overlapping branch attribution history.');
     }
 };

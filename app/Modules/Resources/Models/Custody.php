@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Custodial period of one asset to one custodian; one open custody per asset, history retained.
+ *
  * @property string $id
  * @property string $asset_id
  * @property string $custodian_person_id

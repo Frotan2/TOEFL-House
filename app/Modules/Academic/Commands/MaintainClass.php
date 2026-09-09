@@ -18,9 +18,9 @@ use App\Modules\Academic\Models\ProgramVersion;
 use App\Modules\Academic\Models\ProgramVersionLevel;
 use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Audit\AttemptedOperation;
+use App\Modules\Audit\AuditRecorder;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Scheduling\Domain\SchedulingConstraints;
-use App\Modules\Audit\AuditRecorder;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Errors\AuthorizationDenied;
@@ -417,5 +417,4 @@ final class MaintainClass
     {
         return $this->teacherAssignments->handoverAssignment($actor, $assignment, $successorTeacherPersonId, $handoverOn, $reason, $idempotencyKey);
     }
-
 }

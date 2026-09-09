@@ -28,6 +28,7 @@ use App\Modules\Finance\Models\FundingSource;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\ObligationLine;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Organization\Models\Organization;
 use App\Modules\Payroll\Commands\MaintainPayrollPeriod;
 use App\Modules\Reporting\Commands\ComputeProjection;
 use App\Modules\Reporting\Commands\DefineMetric;
@@ -37,19 +38,22 @@ use App\Modules\Reporting\Commands\RunReport;
 use App\Modules\Reporting\Models\Dashboard;
 use App\Modules\Reporting\Models\MetricDefinition;
 use App\Modules\Reporting\Models\MetricVersion;
-use App\Modules\Organization\Models\Organization;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
 final class ReportingFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsSessions;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $financialPeriodKey = '2026-12';
@@ -106,6 +110,10 @@ final class ReportingFeatureTest extends TestCase
 
         // Reconciliation is evidence about a particular complete projection,
         // not a free-form direct-SQL variance record.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('metric_reconciliations')->insert([
                 'id' => '00000000-0000-4000-8000-00000000r001',
@@ -121,7 +129,9 @@ final class ReportingFeatureTest extends TestCase
                 'reconciled_by' => $analyst->actorId,
             ]);
             $this->fail('a reconciliation without its compared projection must be rejected');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('metric reconciliation requires the compared current projection', $exception->getMessage());
         }
 
@@ -322,6 +332,9 @@ final class ReportingFeatureTest extends TestCase
         // Bypass attempts carry real definition/version/source references and
         // only forge the organization snapshot. Their exact schema guards
         // prove that neither reporting table accepts cross-tenant fund facts.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('metric_projections')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f168',
@@ -339,9 +352,14 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not assign organization-A provenance to an organization-B fund projection');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('fund metric projection organization must match its funding source', $exception->getMessage());
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('report_runs')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f169',
@@ -353,14 +371,19 @@ final class ReportingFeatureTest extends TestCase
                 'filters' => json_encode([]),
                 'result' => '0.0000',
                 'completeness' => 'complete',
-                'meta' => json_encode([]),
+                // The completeness guard demands a calculation-metadata object
+                // on every new run, so the forged row must carry one before
+                // the provenance guard can be exercised.
+                'meta' => json_encode(['calculation' => 'forged cross-tenant run']),
                 'reproducibility_hash' => hash('sha256', 'forged foreign fund run'),
                 'executed_by' => 'direct-sql-attacker',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not assign organization-A provenance to an organization-B fund run');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('fund report run organization must match its funding source', $exception->getMessage());
         }
 
@@ -376,6 +399,9 @@ final class ReportingFeatureTest extends TestCase
         // A dashboard is an organization-owned projection surface. Even a
         // complete source-B projection cannot be pinned into dashboard A.
         $dashboard = app(MaintainDashboard::class)->create($localAnalyst, 'Local dashboard', 'rep-fund-scope-dashboard');
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('dashboard_pins')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f16a',
@@ -389,15 +415,23 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not pin a platform-global projection into an organization dashboard');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('organization-owned dashboards cannot pin global projections', $exception->getMessage());
         }
         try {
             app(MaintainDashboard::class)->pin($localAnalyst, Dashboard::query()->findOrFail($dashboard['dashboard_id']), 'fund_utilization', $this->financialPeriodKey, 'fund', $fund['fund_id'], 'rep-fund-scope-pin-command');
             $this->fail('an organization-A dashboard must not pin an organization-B fund projection');
-        } catch (BusinessRejection $rejection) {
-            $this->assertSame('reporting.pin_scope_conflict', $rejection->errorCode());
+        } catch (AuthorizationDenied $denial) {
+            // Pins resolve their target through the same scope authority as
+            // report execution, so a foreign fund is refused at authorization
+            // before any projection conflict can be considered.
+            $this->assertSame('reporting.scope_denied', $denial->errorCode());
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('dashboard_pins')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f170',
@@ -411,7 +445,9 @@ final class ReportingFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('raw SQL must not pin a foreign organization projection');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('dashboard pins require a complete projection matching the dashboard organization', $exception->getMessage());
         }
     }
@@ -422,7 +458,7 @@ final class ReportingFeatureTest extends TestCase
         $period = app(MaintainFinancialPeriod::class)->open($clerk, $this->financialPeriodKey, '2026-12-01', '2026-12-31', 'rep-fin-per-1');
 
         $this->personWithAuthority('rep-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), 'rep-person-1', 'Program', 'rep-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), 'rep-person-1', 'Program', 'rep-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('rep-adm-clerk'), $this->admissionsReviewer('rep-adm-rev'), $this->admissionsApprover('rep-adm-appr'), $applicant, true, 'meets policy', 'ev/rep', 'rep-adm-1');
@@ -447,19 +483,28 @@ final class ReportingFeatureTest extends TestCase
         $officer = $this->academicOfficer('rep-acad-officer');
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'Reporting Program', 'rep-prog-1');
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'v1', 'rep-prog-2');
-        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Reporting Term', new CarbonImmutable('2026-12-01'), new CarbonImmutable('2027-03-18'), 'rep-period-1');
+        // The canonical academic fixture term starts in the past (2026-09-01):
+        // teacher assignments are dated from the term start and must be
+        // current *today* for the class to activate, and sessions must fall
+        // inside the published period.
+        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Reporting Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'rep-period-1');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'rep-period-2');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-reportingfeaturetest', 1, 'Level', 'A1', 'canon-reportingfeaturetest-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-reportingfeaturetest-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-reportingfeaturetest-offering');
         $this->academicPeriodId = $period['period_id'];
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'rep-class-1');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'rep-class-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('rep-teacher-1', []);
-        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'rep-teacher-1', new CarbonImmutable('2026-12-05'), null, 'rep-class-2');
+        $this->buildActiveTeacher('rep-teacher-1', null, 'reportin454');
+        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'rep-teacher-1', new CarbonImmutable('2026-09-01'), null, 'rep-class-2');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'rep-class-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'rep-class-4');
 
         foreach (['rep-person-2', 'rep-person-3'] as $i => $personId) {
             $this->personWithAuthority($personId, []);
-            $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), $personId, 'Program', 'rep-reg-'.($i + 2));
+            $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('rep-adm-clerk'), $personId, 'Program', 'rep-reg-'.($i + 2), null, $this->bootstrapBranchId());
             /** @var Applicant $applicant */
             $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
             $this->runAdmissionDecision($this->admissionsClerk('rep-adm-clerk'), $this->admissionsReviewer('rep-adm-rev'), $this->admissionsApprover('rep-adm-appr'), $applicant, true, 'meets policy', 'ev/rep'.$i, 'rep-adm-'.($i + 2));
@@ -468,13 +513,19 @@ final class ReportingFeatureTest extends TestCase
             app(MaintainEnrollment::class)->activate($officer, Enrollment::query()->findOrFail($seat['enrollment_id']), 'rep-enr-a-'.($i + 1));
         }
 
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($this->classId), new CarbonImmutable('2026-12-10'), '09:00', '11:00', 'rep-sess-1');
+        // Sessions require explicit skill authority the assigned teacher can
+        // deliver (registration, branch authorization, availability, and
+        // assignment attribution), exactly as the canonical Academic suites
+        // schedule them.
+        $skillId = $this->makeClassSchedulable($officer, $this->classId, $this->bootstrapBranchId(), 'rep-sched');
+        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($this->classId), CarbonImmutable::today()->addDays(3), '09:00', '10:30', 'rep-sess-1', $skillId);
         $enrollmentIds = Enrollment::query()->where('class_id', $this->classId)->where('lifecycle_state', 'active')->pluck('id');
         $statuses = ['present', 'absent'];
+        $attendanceRecorder = $this->grantedActor('rep-att-recorder', ['academic.attendance']);
         foreach ($enrollmentIds as $i => $enrollmentId) {
             /** @var Enrollment $enrollment */
             $enrollment = Enrollment::query()->findOrFail($enrollmentId);
-            app(RecordAttendance::class)->record($officer, ClassSession::query()->findOrFail($session['session_id']), $enrollment, $statuses[$i], 'rep-att-'.$i);
+            app(RecordAttendance::class)->record($attendanceRecorder, ClassSession::query()->findOrFail($session['session_id']), $enrollment, $statuses[$i], 'rep-att-'.$i);
         }
     }
 }

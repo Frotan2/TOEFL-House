@@ -6,14 +6,18 @@ namespace Tests\Feature\Console;
 
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Models\AcademicPeriod;
+use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Program;
+use App\Modules\Academic\Queries\GradesheetQuery;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Models\UserAccount;
+use App\Support\Errors\AuthorizationDenied;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -23,10 +27,16 @@ use Tests\TestCase;
  * post-end read tier (in-term viewing continues, post-term denied)
  * and governed refusals. The assessment/attendance/class authorities
  * are untouched: the viewer rule never grants mutation authority.
+ *
+ * The gradesheet page is part of the React Classes workspace (the GET
+ * route is a shell redirect), so the read tier is verified against the
+ * certified GradesheetQuery with the same production actors and its
+ * denial audit — the viewer law itself, not a Blade label.
  */
 final class TeacherAssignmentLifecycleConsoleTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private string $versionId;
 
@@ -34,24 +44,40 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
 
     private string $pastPeriodId;
 
+    private string $pastPeriodStart;
+
+    private string $branchId;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $officer = $this->academicOfficer();
-        $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'IELTS Preparation', 'tal-prog');
-        $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'assignment rules', 'tal-ver');
+        $this->branchId = $this->bootstrapBranchId();
+        $officer = $this->academicOfficer('tal-officer-setup');
+        $structure = app(MaintainAcademicStructure::class);
+        $program = $structure->defineProgram($officer, 'IELTS Preparation', 'tal-prog');
+        $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'assignment rules', 'tal-ver');
         $this->versionId = $version['version_id'];
-        $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'tal-period');
-        app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'tal-period-pub');
+        // Every class references an open offering for its branch, level, and
+        // period (academic.class_offering_required); the ended-term arc needs
+        // its own period and offering, and its end must lie before today so
+        // the post-term read denial is reachable without time travel.
+        $level = $structure->defineLevel($officer, $this->versionId, 'tal-foundation', 1, 'Foundation', 'A2', 'tal-lvl');
+        $period = $structure->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'tal-period');
+        $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'tal-period-pub');
         $this->periodId = $period['period_id'];
-        $past = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Spring 2020', new CarbonImmutable('2020-01-06'), new CarbonImmutable('2020-05-29'), 'tal-past');
-        app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($past['period_id']), 'published', 'tal-past-pub');
+        $past = $structure->definePeriod($officer, 'Spring Term', new CarbonImmutable('2026-01-05'), new CarbonImmutable('2026-06-30'), 'tal-past');
+        $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($past['period_id']), 'published', 'tal-past-pub');
         $this->pastPeriodId = $past['period_id'];
+        $this->pastPeriodStart = '2026-01-05';
+        $structure->declareBranchAvailability($officer, $this->branchId, $level['level_id'], $this->periodId, 'tal-avail');
+        $structure->openOffering($officer, $this->branchId, $level['level_id'], $this->periodId, 4, 'tal-offering');
+        $structure->declareBranchAvailability($officer, $this->branchId, $level['level_id'], $this->pastPeriodId, 'tal-avail-past');
+        $structure->openOffering($officer, $this->branchId, $level['level_id'], $this->pastPeriodId, 4, 'tal-offering-past');
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -86,6 +112,51 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
     }
 
     /**
+     * The read tier of the assignment law: an actor either opens the class
+     * gradesheet through the certified query or is refused with the governed
+     * denial code and a denial audit row.
+     */
+    private function assertGradesheetReadable(string $personId, string $classId): array
+    {
+        $gradesheet = app(GradesheetQuery::class)->forClass($this->teacherActor($personId), ClassModel::query()->findOrFail($classId));
+
+        return $gradesheet['teachers'];
+    }
+
+    private function assertGradesheetDenied(string $personId, string $classId): void
+    {
+        try {
+            app(GradesheetQuery::class)->forClass($this->teacherActor($personId), ClassModel::query()->findOrFail($classId));
+            $this->fail('expected the gradesheet viewer rule to deny '.$personId);
+        } catch (AuthorizationDenied $denial) {
+            $this->assertSame('academic.gradesheet_denied', $denial->errorCode());
+        }
+        $this->assertDatabaseHas($this->prefix().'audit_events', [
+            'actor_id' => $personId,
+            'operation' => 'academic.gradesheet.view.denied',
+            'target_type' => 'class',
+            'target_id' => $classId,
+        ]);
+    }
+
+    /** @return array{0: list<string>, 1: list<string>} */
+    private function teacherRowsByPerson(array $teachers, string $personId): array
+    {
+        $ids = [];
+        $dates = [];
+        foreach ($teachers as $row) {
+            // Branch/person provenance columns are fixed-width char; the
+            // driver returns them space-padded, so compare trimmed.
+            if (trim((string) $row['teacher_person_id']) === $personId) {
+                $ids[] = trim((string) $row['assignment_id']);
+                $dates[] = ['from' => trim((string) $row['effective_from']), 'to' => $row['effective_to'] !== null ? trim((string) $row['effective_to']) : null];
+            }
+        }
+
+        return [$ids, $dates];
+    }
+
+    /**
      * Define a class over HTTP and drive it to active with the given
      * teacher, returning class and assignment ids.
      *
@@ -98,12 +169,13 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
             'program_version_id' => $this->versionId,
             'period_id' => $periodId,
             'capacity' => 2,
+            'branch_id' => $this->branchId,
         ])->assertRedirect('/academic');
         /** @var string $classId */
         $classId = DB::table($this->prefix().'classes')->whereNotIn('id', $knownIds)->value('id');
         $this->assertNotNull($classId);
 
-        $this->personWithAuthority($teacherPersonId, []);
+        $this->buildActiveTeacher($teacherPersonId, $this->branchId, $teacherPersonId);
         $knownAssignments = DB::table($this->prefix().'teacher_assignments')->pluck('id')->all();
         $this->post('/academic/teacher-assignments', [
             'class_id' => $classId,
@@ -123,8 +195,6 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
     public function test_end_extend_and_handover_with_read_continuity(): void
     {
         $this->makeEmployee('tal-mgmt-1', ['academic.schedule'], 'assignment-manager');
-        $this->makeEmployee('tal-teacher-a1', [], 'teacher-a');
-        $this->makeEmployee('tal-teacher-b1', [], 'teacher-b');
 
         $this->signIn('assignment-manager');
         $setup = $this->activeClass('arc', 'tal-teacher-a1', $this->periodId);
@@ -133,13 +203,12 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
         $this->signOut();
 
         // The open-assigned teacher opens the gradesheet by identity.
-        $this->signIn('teacher-a');
-        $this->get('/academic/gradesheets/'.$classId)->assertOk()->assertSee('Class gradesheet');
-        $this->signOut();
+        $this->assertGradesheetReadable('tal-teacher-a1', $classId);
 
         // Handover ends the open row and opens the successor in one
         // audited step; the audit links both rows. The class stays
         // active throughout.
+        $this->buildActiveTeacher('tal-teacher-b1', $this->branchId, 'tal-teacher-b1');
         $this->signIn('assignment-manager');
         $this->post('/academic/teacher-assignments/'.$assignmentId.'/handover', [
             'successor_teacher_person_id' => 'tal-teacher-b1',
@@ -164,41 +233,60 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
         $this->signOut();
 
         // Ended but in-term, the outgoing teacher keeps read access;
-        // the open successor reads by identity.
-        $this->signIn('teacher-a');
-        $this->get('/academic/gradesheets/'.$classId)->assertOk()->assertSee('Class gradesheet');
-        $this->signOut();
-        $this->signIn('teacher-b');
-        $this->get('/academic/gradesheets/'.$classId)->assertOk()->assertSee('Class gradesheet');
-        $this->signOut();
+        // the open successor reads by identity. The gradesheet shows
+        // the handover lineage: the outgoing row is dated, the
+        // successor row is open.
+        $this->assertGradesheetReadable('tal-teacher-b1', $classId);
+        [$outgoingIds, $outgoingDates] = $this->teacherRowsByPerson($this->assertGradesheetReadable('tal-teacher-a1', $classId), 'tal-teacher-a1');
+        $this->assertSame([$assignmentId], $outgoingIds);
+        $this->assertContains(['from' => '2026-09-01', 'to' => '2026-09-05'], $outgoingDates);
 
-        // Management ends the successor outright, then extends the
-        // dated row with a new reason.
+        // Management ends the successor outright on an explicit date
+        // with a reason; the row stays as dated history.
         $this->signIn('assignment-manager');
         $this->post('/academic/teacher-assignments/'.$successorId.'/end', [
             'effective_to' => '2026-09-10',
             'reason' => 'cover finished',
         ])->assertRedirect('/academic');
         $this->assertDatabaseHas($this->prefix().'teacher_assignments', [
-            'id' => $successorId, 'effective_to' => '2026-09-10',
+            'id' => $successorId, 'effective_to' => '2026-09-10', 'lifecycle_state' => 'ended',
         ]);
-        $this->post('/academic/teacher-assignments/'.$successorId.'/extend', [
+
+        // A dated assignment that is still open (a fixed-term cover)
+        // is extended with a new reason: the end date moves later.
+        $this->buildActiveTeacher('tal-teacher-c1', $this->branchId, 'tal-teacher-c1');
+        $knownAssignments = DB::table($this->prefix().'teacher_assignments')->pluck('id')->all();
+        $this->post('/academic/teacher-assignments', [
+            'class_id' => $classId,
+            'teacher_person_id' => 'tal-teacher-c1',
+            'effective_from' => '2026-09-10',
+            'effective_to' => '2026-09-15',
+        ])->assertRedirect('/academic');
+        $coverId = DB::table($this->prefix().'teacher_assignments')->whereNotIn('id', $knownAssignments)->value('id');
+        $this->assertNotNull($coverId);
+        $this->assertDatabaseHas($this->prefix().'teacher_assignments', [
+            'id' => $coverId, 'effective_to' => '2026-09-15',
+        ]);
+        $this->post('/academic/teacher-assignments/'.$coverId.'/extend', [
             'effective_to' => '2026-10-01',
             'reason' => 'cover extended by management',
         ])->assertRedirect('/academic');
         $this->assertDatabaseHas($this->prefix().'teacher_assignments', [
-            'id' => $successorId, 'effective_to' => '2026-10-01',
+            'id' => $coverId, 'effective_to' => '2026-10-01',
         ]);
         $this->signOut();
 
-        // Both ended teachers still read in-term; the gradesheet shows
-        // the handover lineage.
-        $this->signIn('teacher-a');
-        $this->get('/academic/gradesheets/'.$classId)->assertOk()->assertSee('(ended)');
-        $this->signOut();
-        $this->signIn('teacher-b');
-        $this->get('/academic/gradesheets/'.$classId)->assertOk()->assertSee('(ended)');
-        $this->signOut();
+        // All three ended-or-cover teachers still read in-term; the
+        // gradesheet shows the full assignment lineage with the dates
+        // each row actually carried.
+        $this->assertGradesheetReadable('tal-teacher-a1', $classId);
+        [$successorIds, $successorDates] = $this->teacherRowsByPerson($this->assertGradesheetReadable('tal-teacher-b1', $classId), 'tal-teacher-b1');
+        $this->assertSame([$successorId], $successorIds);
+        $this->assertContains(['from' => '2026-09-05', 'to' => '2026-09-10'], $successorDates);
+        $this->assertGradesheetReadable('tal-teacher-c1', $classId);
+        [$coverIds, $coverDates] = $this->teacherRowsByPerson($this->assertGradesheetReadable('tal-teacher-a1', $classId), 'tal-teacher-c1');
+        $this->assertSame([$coverId], $coverIds);
+        $this->assertContains(['from' => '2026-09-10', 'to' => '2026-10-01'], $coverDates);
     }
 
     public function test_assignment_lifecycle_refusals_are_governed(): void
@@ -231,19 +319,20 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
             ->assertRedirect('/academic')
             ->assertSessionHas('error_code', 'academic.assignment_not_open');
 
-        // …and an extension must move the date later.
+        // …and an ended assignment cannot be extended at all: only an
+        // open dated row has an end date to move.
         $this->post('/academic/teacher-assignments/'.$assignmentId.'/extend', [
             'effective_to' => '2026-09-04',
-            'reason' => 'non-later extension attempt',
+            'reason' => 'extension of an ended assignment',
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
-            ->assertSessionHas('error_code', 'academic.assignment_period');
+            ->assertSessionHas('error_code', 'academic.assignment_not_extendable');
         $this->assertDatabaseHas($this->prefix().'teacher_assignments', [
             'id' => $assignmentId, 'effective_to' => '2026-09-04',
         ]);
 
         // An open assignment cannot be extended; it has no end date.
-        $this->personWithAuthority('tal-teacher-d2', []);
+        $this->buildActiveTeacher('tal-teacher-d2', $this->branchId, 'tal-teacher-d2');
         $knownAssignments = DB::table($this->prefix().'teacher_assignments')->pluck('id')->all();
         $this->post('/academic/teacher-assignments', [
             'class_id' => $setup['class_id'],
@@ -265,7 +354,7 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
             'reason' => 'handover to the dated teacher',
         ])->assertRedirect('/academic');
 
-        $this->personWithAuthority('tal-teacher-e2', []);
+        $this->buildActiveTeacher('tal-teacher-e2', $this->branchId, 'tal-teacher-e2');
         $knownAssignments = DB::table($this->prefix().'teacher_assignments')->pluck('id')->all();
         $this->post('/academic/teacher-assignments', [
             'class_id' => $setup['class_id'],
@@ -299,26 +388,19 @@ final class TeacherAssignmentLifecycleConsoleTest extends TestCase
     public function test_ended_assignment_loses_read_access_after_term_end(): void
     {
         $this->makeEmployee('tal-mgmt-3', ['academic.schedule'], 'past-manager');
-        $this->makeEmployee('tal-teacher-f3', [], 'past-teacher');
+        $this->buildActiveTeacher('tal-teacher-f3', $this->branchId, 'tal-teacher-f3');
 
         $this->signIn('past-manager');
-        $setup = $this->activeClass('past', 'tal-teacher-f3', $this->pastPeriodId, '2020-01-06');
+        $setup = $this->activeClass('past', 'tal-teacher-f3', $this->pastPeriodId, $this->pastPeriodStart);
         $this->post('/academic/teacher-assignments/'.$setup['assignment_id'].'/end', [
-            'effective_to' => '2020-03-01',
+            'effective_to' => '2026-03-01',
             'reason' => 'term cover finished',
         ])->assertRedirect('/academic');
         $this->signOut();
 
-        $this->signIn('past-teacher');
-        $this->get('/academic')->assertOk()->assertSee('No classes are open to you');
-        $this->get('/academic/gradesheets/'.$setup['class_id'])
-            ->assertRedirect('/')
-            ->assertSessionHas('error_code', 'academic.gradesheet_denied');
-        $this->assertDatabaseHas($this->prefix().'audit_events', [
-            'actor_id' => 'tal-teacher-f3',
-            'operation' => 'academic.gradesheet.view.denied',
-            'target_type' => 'class',
-            'target_id' => $setup['class_id'],
-        ]);
+        // The term has ended, so the viewer rule refuses the gradesheet
+        // even though the teacher was once assigned; the denial is
+        // audited exactly like a command denial.
+        $this->assertGradesheetDenied('tal-teacher-f3', $setup['class_id']);
     }
 }

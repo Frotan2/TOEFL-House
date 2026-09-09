@@ -37,7 +37,7 @@ return new class extends Migration
         $now = now();
         foreach (self::CHART as $account) {
             DB::statement(
-                "INSERT INTO accounts (id, code, name, type, created_at, updated_at) ".
+                'INSERT INTO accounts (id, code, name, type, created_at, updated_at) '.
                 'VALUES (gen_random_uuid(), ?, ?, ?, ?, ?) ON CONFLICT (code) DO NOTHING',
                 [$account['code'], $account['name'], $account['type'], $now, $now],
             );

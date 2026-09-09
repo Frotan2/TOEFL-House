@@ -13,6 +13,7 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -215,7 +216,7 @@ final class MaintainCashDrawer
         return $branch !== null && $branch->lifecycle_state === 'active' ? $branch : null;
     }
 
-    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, string $capability, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

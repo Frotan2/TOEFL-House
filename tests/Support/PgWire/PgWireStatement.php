@@ -63,7 +63,7 @@ final class PgWireStatement extends PDOStatement
     /** @param array<int, mixed> $options */
     public static function create(PgWirePdo $pdo, string $originalSql, string $rewrittenSql, array $options = []): static
     {
-        $stmt = new static;
+        $stmt = new self;
         $stmt->pdo = $pdo;
         $stmt->originalSql = $originalSql;
         $stmt->rewrittenSql = $rewrittenSql;
@@ -407,7 +407,7 @@ final class PgWireStatement extends PDOStatement
     }
 
     /**
-     * @param array<string, mixed> $assoc
+     * @param  array<string, mixed>  $assoc
      * @return array<string|int, mixed>
      */
     private function bothRow(array $assoc): array
@@ -424,9 +424,8 @@ final class PgWireStatement extends PDOStatement
     }
 
     /**
-     * @param string $class
-     * @param array<int, mixed> $ctorArgs
-     * @param array<string, mixed> $assoc
+     * @param  array<int, mixed>  $ctorArgs
+     * @param  array<string, mixed>  $assoc
      */
     private function intoNew(string $class, array $ctorArgs, array $assoc): object
     {

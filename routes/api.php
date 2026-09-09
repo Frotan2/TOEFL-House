@@ -7,9 +7,9 @@ use App\Http\Controllers\Api\IdentityApiController;
 use App\Http\Controllers\Api\NotificationApiController;
 use App\Http\Controllers\Api\PayrollApiController;
 use App\Http\Controllers\Api\PlacementApiController;
+use App\Http\Controllers\Api\SearchApiController;
 use App\Http\Controllers\Api\StudentsApiController;
 use App\Http\Controllers\Api\TeacherApiController;
-use App\Http\Controllers\Api\SearchApiController;
 use App\Http\Controllers\Api\WorkManagementApiController;
 use App\Http\Controllers\Api\WorkspaceApiController;
 use App\Support\Authorization\Actor;
@@ -205,6 +205,7 @@ Route::prefix('v1')->middleware('employee')->group(function (): void {
     });
 
     Route::prefix('payroll')->name('api.payroll.')->group(function (): void {
+        Route::get('/workspace', [PayrollApiController::class, 'workspace'])->name('workspace');
         Route::get('/periods', [PayrollApiController::class, 'periods'])->name('periods');
         Route::get('/calculations', [PayrollApiController::class, 'calculations'])->name('calculations');
         Route::post('/calculations', [PayrollApiController::class, 'calculate'])->name('calculate');

@@ -52,12 +52,12 @@ final class OpeningStateFeatureTest extends TestCase
         parent::setUp();
         $this->financeManager(); // seeds authority + the opening period + chart accounts below
         app(MaintainFinancialPeriod::class)->open($this->financeManager(), $this->openingPeriodKey, '2026-08-01', '2026-08-31', 'op-per-1');
-        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '1000', 'Cash on hand', 'asset', 'op-acc-1');
-        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '3000', 'Opening equity', 'equity', 'op-acc-2');
+        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '1900', 'Cash on hand', 'asset', 'op-acc-1');
+        app(MaintainChartOfAccounts::class)->define($this->financeManager(), '3900', 'Opening equity', 'equity', 'op-acc-2');
 
         // a live student of the operating business
         $this->personWithAuthority('op-person-student', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('op-adm'), 'op-person-student', 'Program', 'op-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('op-adm'), 'op-person-student', 'Program', 'op-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('op-adm'), $this->admissionsReviewer('op-adm-r'), $this->admissionsApprover('op-adm-a'), $applicant, true, 'live student', 'ev/op', 'op-adm-2');
@@ -76,7 +76,7 @@ final class OpeningStateFeatureTest extends TestCase
     }
 
     /**
-     * @param list<array{category: string, amount: string, studentId?: string|null, personId?: string|null, asset?: string|null, equity?: string|null, source: string, description?: string}> $entries
+     * @param  list<array{category: string, amount: string, studentId?: string|null, personId?: string|null, asset?: string|null, equity?: string|null, source: string, description?: string}>  $entries
      * @return array{state: OpeningState, entries: array<string, string>}
      */
     private function preparedState(array $entries = []): array
@@ -227,22 +227,38 @@ final class OpeningStateFeatureTest extends TestCase
         }
 
         // no raw SQL path: update/delete of state or entries rejected by triggers
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE opening_states SET status = ? WHERE id = ?', ['draft', $state->id]);
             $this->fail('raw SQL unfreeze must fail');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM opening_entries WHERE id = ?', [$prepared['entries']['paper/wrong-1']]);
             $this->fail('raw SQL entry delete must fail');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE opening_entries SET amount = 4000.00 WHERE id = ?', [$prepared['entries']['paper/wrong-1']]);
             $this->fail('raw SQL entry rewrite must fail');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
         $this->assertDatabaseHas('opening_entries', ['id' => $prepared['entries']['paper/wrong-1'], 'amount' => '5000.00']);
@@ -337,7 +353,7 @@ final class OpeningStateFeatureTest extends TestCase
         $this->assertSame('0.00', $septemberView['value']);
 
         // correction after approval: approved discount of 500 adjusts WITHOUT touching opening evidence
-        $discount = app(MaintainDiscount::class)->propose($this->financeManager(), $baseObligation, FinancialPeriod::query()->findOrFail($september['period_id']), '500.00', 'policy/correction', '2026-09-10', null, 'post-approval correction', 'op-dis-1');
+        $discount = app(MaintainDiscount::class)->propose($this->financeManager(), $baseObligation, FinancialPeriod::query()->where('period_key', $this->openingPeriodKey)->firstOrFail(), '500.00', 'policy/correction', '2026-08-15', null, 'post-approval correction', 'op-dis-1');
         app(MaintainDiscount::class)->approve($this->grantedActor('op-dis-appr', ['finance.discount_approve']), Discount::query()->findOrFail($discount['discount_id']), 'op-dis-2');
         $afterCorrection = app(ComputeProjection::class)->compute($analyst, 'student_outstanding_balance', $this->openingPeriodKey, 'student', $this->studentId, 'op-proj-4');
         $this->assertSame('2000.00', $afterCorrection['value']);

@@ -82,6 +82,7 @@ final class DomainEventRelay
                     if (! $consumer->supports($event)) {
                         $this->recordNotApplicable($event, $consumerKey);
                         $summary['skipped']++;
+
                         continue;
                     }
                     $summary['considered']++;

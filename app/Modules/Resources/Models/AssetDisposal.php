@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Approved asset disposal — immutable history; requires two distinct approvers.
+ *
  * @property string $id
  * @property string $asset_id
  * @property string $method

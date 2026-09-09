@@ -152,6 +152,6 @@ return new class extends Migration
         // knowingly reintroduce its double-counting settlement defect. Like
         // 000141, this convergence is one-way until a reviewed historical
         // baseline exists; never make rollback silently weaken Finance facts.
-        throw new \RuntimeException('Finance settlement-guard convergence is one-way; restore from the reviewed pre-convergence baseline rather than reintroducing stacked triggers.');
+        throw new RuntimeException('Finance settlement-guard convergence is one-way; restore from the reviewed pre-convergence baseline rather than reintroducing stacked triggers.');
     }
 };

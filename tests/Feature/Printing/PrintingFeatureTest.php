@@ -28,16 +28,13 @@ final class PrintingFeatureTest extends TestCase
     {
         // The bootstrap organization id is the single institution; naming it
         // the official name keeps exactly one organization and the fixture's
-        // access model and the document header agree.
+        // access model and the document header agree. The bootstrap branch is
+        // the only active branch, so the header states it (a second branch
+        // would make the branch line ambiguous and omit it).
         Organization::query()->updateOrCreate(
             ['id' => '00000000-0000-4000-8000-00000000b005'],
             ['name' => 'The TOEFL House', 'lifecycle_state' => 'active'],
         );
-        Branch::query()->create([
-            'id' => RandomIdentifier::new(),
-            'name' => 'Kabul Main Branch',
-            'lifecycle_state' => 'active',
-        ]);
     }
 
     private function signIn(): void
@@ -74,6 +71,10 @@ final class PrintingFeatureTest extends TestCase
             'id' => RandomIdentifier::new(),
             'period_id' => $period->id,
             'student_id' => $student->id,
+            // The branch guard requires every new payment to carry an active
+            // originating branch (the student's home at record time).
+            'originating_branch_id' => $this->bootstrapBranchId(),
+            'current_home_branch_id' => $this->bootstrapBranchId(),
             'amount' => '250.00',
             'method' => 'cash',
             'payer_ref' => 'PAY-2026-08-001',
@@ -84,7 +85,7 @@ final class PrintingFeatureTest extends TestCase
         $this->get('/print/receipt/'.$payment->id)
             ->assertOk()
             ->assertSee('The TOEFL House')
-            ->assertSee('Kabul Main Branch')
+            ->assertSee('Authority Bootstrap Branch')
             ->assertSee('Payment Receipt')
             ->assertSee('PAY-2026-08-001')
             ->assertSee('250.00');
@@ -141,6 +142,11 @@ final class PrintingFeatureTest extends TestCase
             'id' => RandomIdentifier::new(),
             'period_id' => $period->id,
             'student_id' => $student->id,
+            // Every new payment carries an active originating branch (the
+            // student's home at record time); the header identity rule below
+            // is what the tests exercise, not provenance fallback.
+            'originating_branch_id' => $this->bootstrapBranchId(),
+            'current_home_branch_id' => $this->bootstrapBranchId(),
             'amount' => '250.00',
             'method' => 'cash',
             'payer_ref' => 'PAY-2026-08-IDENT',
@@ -151,10 +157,11 @@ final class PrintingFeatureTest extends TestCase
 
     public function test_document_identity_is_the_institution_brand_when_the_structure_is_ambiguous(): void
     {
-        // Two active organizations AND two active branches: no single
-        // organization or branch is uniquely determined, so the document must
-        // carry the institution brand (config app.name) and no branch line —
-        // never an arbitrary candidate.
+        // The bootstrap institution plus a second active organization AND
+        // several active branches: no single organization or branch is
+        // uniquely determined, so the document must carry the institution
+        // brand (config app.name) and no branch line — never an arbitrary
+        // candidate.
         $payment = $this->makeReceipt('Beta Institute', ['Zeta Branch', 'Eta Branch'], 'Alpha Institute');
 
         $this->get('/print/receipt/'.$payment->id)
@@ -163,20 +170,23 @@ final class PrintingFeatureTest extends TestCase
             ->assertDontSee('Alpha Institute')
             ->assertDontSee('Beta Institute')
             ->assertDontSee('Zeta Branch')
-            ->assertDontSee('Eta Branch');
+            ->assertDontSee('Eta Branch')
+            ->assertDontSee('Authority Bootstrap Branch');
     }
 
     public function test_document_identity_shows_the_org_and_omits_the_branch_with_multiple_branches(): void
     {
-        // One active organization: the header states it. Two active branches:
-        // no branch is uniquely the issuing location (records are not
-        // branch-scoped), so the branch line is omitted rather than guessed.
+        // One active organization (the bootstrap institution): the header
+        // states it. More than one active branch: no branch is uniquely the
+        // issuing location, so the branch line is omitted rather than
+        // guessed — even though the record itself is branch-provenanced.
         $payment = $this->makeReceipt('TOEFL House Academy', ['Zeta Branch', 'Eta Branch']);
 
         $this->get('/print/receipt/'.$payment->id)
             ->assertOk()
             ->assertSee('TOEFL House Academy')
             ->assertDontSee('Zeta Branch')
-            ->assertDontSee('Eta Branch');
+            ->assertDontSee('Eta Branch')
+            ->assertDontSee('Authority Bootstrap Branch');
     }
 }

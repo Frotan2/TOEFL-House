@@ -53,7 +53,7 @@ return new class extends Migration
             $table->unique(['teacher_profile_id', 'branch_id', 'effective_from'], 'teacher_profile_branches_identity');
         });
         DB::statement("ALTER TABLE teacher_profile_branches ADD CONSTRAINT teacher_profile_branches_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
-        DB::statement("ALTER TABLE teacher_profile_branches ADD CONSTRAINT teacher_profile_branches_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_profile_branches ADD CONSTRAINT teacher_profile_branches_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
 
         Schema::create('teacher_qualifications', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -72,7 +72,7 @@ return new class extends Migration
             $table->foreign('teacher_profile_id')->references('id')->on('teacher_profiles');
         });
         DB::statement("ALTER TABLE teacher_qualifications ADD CONSTRAINT teacher_qualifications_state_check CHECK (lifecycle_state IN ('pending','verified','expired','revoked'))");
-        DB::statement("ALTER TABLE teacher_qualifications ADD CONSTRAINT teacher_qualifications_period_check CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from)");
+        DB::statement('ALTER TABLE teacher_qualifications ADD CONSTRAINT teacher_qualifications_period_check CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from)');
 
         Schema::create('teacher_skill_authorities', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -93,7 +93,7 @@ return new class extends Migration
         });
         DB::statement("ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_kind_check CHECK (authority_kind IN ('teach','assess','moderate'))");
         DB::statement("ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
-        DB::statement("ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_skill_authorities ADD CONSTRAINT teacher_skill_authorities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
 
         Schema::create('teacher_availabilities', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -111,9 +111,9 @@ return new class extends Migration
             $table->foreign('branch_id')->references('id')->on('branches');
             $table->unique(['teacher_profile_id', 'weekday', 'starts_at', 'effective_from'], 'teacher_availabilities_identity');
         });
-        DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_weekday_check CHECK (weekday BETWEEN 1 AND 7)");
-        DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_time_check CHECK (ends_at > starts_at)");
-        DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_weekday_check CHECK (weekday BETWEEN 1 AND 7)');
+        DB::statement('ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_time_check CHECK (ends_at > starts_at)');
+        DB::statement('ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
         DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
         DB::statement("ALTER TABLE teacher_availabilities ADD CONSTRAINT teacher_availabilities_kind_check CHECK (availability_kind IN ('available','unavailable'))");
 
@@ -132,8 +132,8 @@ return new class extends Migration
             $table->foreign('branch_id')->references('id')->on('branches');
             $table->unique(['teacher_profile_id', 'branch_id', 'effective_from'], 'teacher_workload_limits_identity');
         });
-        DB::statement("ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_hours_check CHECK (max_hours_per_week > 0)");
-        DB::statement("ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)");
+        DB::statement('ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_hours_check CHECK (max_hours_per_week > 0)');
+        DB::statement('ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_period_check CHECK (effective_to IS NULL OR effective_to > effective_from)');
         DB::statement("ALTER TABLE teacher_workload_limits ADD CONSTRAINT teacher_workload_limits_state_check CHECK (lifecycle_state IN ('planned','active','ended','revoked'))");
 
         DB::statement(<<<'SQL'
@@ -174,72 +174,91 @@ return new class extends Migration
                         RAISE EXCEPTION 'terminal teacher authority state is final' USING ERRCODE = 'check_violation';
                     END IF;
                 END IF;
-                IF TG_TABLE_NAME IN ('teacher_profile_branches', 'teacher_skill_authorities', 'teacher_availabilities', 'teacher_workload_limits')
-                   AND NEW.lifecycle_state = 'ended' AND NEW.effective_to IS NULL THEN
-                    RAISE EXCEPTION 'ended teacher authority requires an effective end date'
-                        USING ERRCODE = 'check_violation';
+                -- teacher_qualifications has no effective_to column, and
+                -- PL/pgSQL resolves NEW.effective_to even when the
+                -- TG_TABLE_NAME test above is false, so the table check must
+                -- be a nested IF rather than a conjunct.
+                IF TG_TABLE_NAME IN ('teacher_profile_branches', 'teacher_skill_authorities', 'teacher_availabilities', 'teacher_workload_limits') THEN
+                    IF NEW.lifecycle_state = 'ended' AND NEW.effective_to IS NULL THEN
+                        RAISE EXCEPTION 'ended teacher authority requires an effective end date'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
                 END IF;
-                IF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_qualifications'
-                   AND OLD.lifecycle_state IN ('verified', 'expired', 'revoked')
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.qualification_type IS DISTINCT FROM OLD.qualification_type
-                       OR NEW.title IS DISTINCT FROM OLD.title
-                       OR NEW.issuer IS DISTINCT FROM OLD.issuer
-                       OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
-                       OR NEW.submitted_by IS DISTINCT FROM OLD.submitted_by
-                       OR NEW.valid_from IS DISTINCT FROM OLD.valid_from
-                       OR NEW.valid_to IS DISTINCT FROM OLD.valid_to
-                       OR NEW.verified_by IS DISTINCT FROM OLD.verified_by
-                       OR NEW.verified_at IS DISTINCT FROM OLD.verified_at
-                   ) THEN
-                    RAISE EXCEPTION 'verified teacher qualification evidence is immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_profile_branches'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.provenance_reason IS DISTINCT FROM OLD.provenance_reason
-                       OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-                   ) THEN
-                    RAISE EXCEPTION 'teacher branch authorization identity and provenance are immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_skill_authorities'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.skill_id IS DISTINCT FROM OLD.skill_id
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                       OR NEW.authority_kind IS DISTINCT FROM OLD.authority_kind
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-                       OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
-                   ) THEN
-                    RAISE EXCEPTION 'teacher subject authority identity and evidence are immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_availabilities'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.weekday IS DISTINCT FROM OLD.weekday
-                       OR NEW.starts_at IS DISTINCT FROM OLD.starts_at
-                       OR NEW.ends_at IS DISTINCT FROM OLD.ends_at
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.availability_kind IS DISTINCT FROM OLD.availability_kind
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                   ) THEN
-                    RAISE EXCEPTION 'teacher availability identity is immutable'
-                        USING ERRCODE = 'check_violation';
-                ELSIF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'teacher_workload_limits'
-                   AND (
-                       NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
-                       OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
-                       OR NEW.max_hours_per_week IS DISTINCT FROM OLD.max_hours_per_week
-                       OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
-                       OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
-                       OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
-                   ) THEN
-                    RAISE EXCEPTION 'teacher workload limit identity and evidence are immutable'
-                        USING ERRCODE = 'check_violation';
+                -- PL/pgSQL evaluates the whole boolean expression, so a NEW.<column>
+                -- reference is resolved even when the TG_TABLE_NAME test is false. This
+                -- shared guard is attached to several tables, so each table's columns
+                -- must be referenced only inside that table's own branch.
+                IF TG_TABLE_NAME = 'teacher_qualifications' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND OLD.lifecycle_state IN ('verified', 'expired', 'revoked')
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.qualification_type IS DISTINCT FROM OLD.qualification_type
+                           OR NEW.title IS DISTINCT FROM OLD.title
+                           OR NEW.issuer IS DISTINCT FROM OLD.issuer
+                           OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
+                           OR NEW.submitted_by IS DISTINCT FROM OLD.submitted_by
+                           OR NEW.valid_from IS DISTINCT FROM OLD.valid_from
+                           OR NEW.valid_to IS DISTINCT FROM OLD.valid_to
+                           OR NEW.verified_by IS DISTINCT FROM OLD.verified_by
+                           OR NEW.verified_at IS DISTINCT FROM OLD.verified_at
+                       ) THEN
+                        RAISE EXCEPTION 'verified teacher qualification evidence is immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_profile_branches' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.provenance_reason IS DISTINCT FROM OLD.provenance_reason
+                           OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                       ) THEN
+                        RAISE EXCEPTION 'teacher branch authorization identity and provenance are immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_skill_authorities' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.skill_id IS DISTINCT FROM OLD.skill_id
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                           OR NEW.authority_kind IS DISTINCT FROM OLD.authority_kind
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                           OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
+                       ) THEN
+                        RAISE EXCEPTION 'teacher subject authority identity and evidence are immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_availabilities' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.weekday IS DISTINCT FROM OLD.weekday
+                           OR NEW.starts_at IS DISTINCT FROM OLD.starts_at
+                           OR NEW.ends_at IS DISTINCT FROM OLD.ends_at
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.availability_kind IS DISTINCT FROM OLD.availability_kind
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                       ) THEN
+                        RAISE EXCEPTION 'teacher availability identity is immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
+                ELSIF TG_TABLE_NAME = 'teacher_workload_limits' THEN
+                    IF TG_OP = 'UPDATE'
+                       AND (
+                           NEW.teacher_profile_id IS DISTINCT FROM OLD.teacher_profile_id
+                           OR NEW.branch_id IS DISTINCT FROM OLD.branch_id
+                           OR NEW.max_hours_per_week IS DISTINCT FROM OLD.max_hours_per_week
+                           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+                           OR NEW.approved_by IS DISTINCT FROM OLD.approved_by
+                           OR NEW.evidence_ref IS DISTINCT FROM OLD.evidence_ref
+                       ) THEN
+                        RAISE EXCEPTION 'teacher workload limit identity and evidence are immutable'
+                            USING ERRCODE = 'check_violation';
+                    END IF;
                 END IF;
                 IF TG_TABLE_NAME = 'teacher_qualifications' THEN
                     IF NEW.lifecycle_state = 'verified' AND (NEW.submitted_by IS NULL OR NEW.verified_by IS NULL OR NEW.verified_at IS NULL) THEN
@@ -656,7 +675,7 @@ return new class extends Migration
                        COALESCE((SELECT es.status FROM employment_statuses es
                                   WHERE es.employment_id = e.id
                                     AND es.effective_from <= NEW.effective_from
-                                  ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                  ORDER BY es.effective_from DESC, es.seq DESC
                                   LIMIT 1), e.lifecycle_state)
                   INTO profile_person, profile_state, assignment_employment_id, employment_state
                   FROM teacher_profiles tp
@@ -674,7 +693,7 @@ return new class extends Migration
                     SELECT COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = assignment_employment_id
                                         AND es.effective_from <= NEW.effective_to - 1
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state)
                       INTO end_employment_state
                       FROM employments e
@@ -890,7 +909,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.scheduled_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND EXISTS (
                            SELECT 1 FROM teacher_profile_branches tpb
@@ -1004,7 +1023,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.scheduled_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                      ORDER BY ta.teacher_profile_id, ta.branch_id
                 LOOP
@@ -1084,7 +1103,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= session_date
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                        AND ta.teacher_profile_id IS NOT NULL
@@ -1152,7 +1171,7 @@ return new class extends Migration
                            AND COALESCE((SELECT es.status FROM employment_statuses es
                                           WHERE es.employment_id = e.id
                                             AND es.effective_from <= CURRENT_DATE
-                                          ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                          ORDER BY es.effective_from DESC, es.seq DESC
                                           LIMIT 1), e.lifecycle_state) = 'active'
                            AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                            AND ta.branch_id = NEW.branch_id
@@ -1209,7 +1228,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.assessed_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                        AND ta.effective_from <= NEW.assessed_on
@@ -1257,7 +1276,7 @@ return new class extends Migration
                        AND COALESCE((SELECT es.status FROM employment_statuses es
                                       WHERE es.employment_id = e.id
                                         AND es.effective_from <= NEW.assessed_on
-                                      ORDER BY es.effective_from DESC, es.created_at DESC, es.id DESC
+                                      ORDER BY es.effective_from DESC, es.seq DESC
                                       LIMIT 1), e.lifecycle_state) = 'active'
                        AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                        AND ta.effective_from <= NEW.assessed_on
@@ -1357,7 +1376,8 @@ return new class extends Migration
             $fn$ LANGUAGE plpgsql;
             SQL);
         DB::statement('CREATE CONSTRAINT TRIGGER teacher_profile_lifecycle_history_guard_trigger AFTER INSERT OR UPDATE ON teacher_profiles DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION teacher_profile_lifecycle_history_guard()');
-        DB::statement('CREATE INDEX teacher_profile_statuses_history ON teacher_profile_statuses (teacher_profile_id, effective_from, created_at)');    }
+        DB::statement('CREATE INDEX teacher_profile_statuses_history ON teacher_profile_statuses (teacher_profile_id, effective_from, created_at)');
+    }
 
     public function down(): void
     {

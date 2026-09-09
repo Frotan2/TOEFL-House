@@ -6,13 +6,14 @@ namespace App\Modules\Access\Commands;
 
 use App\Modules\Access\Domain\AccessLifecycle;
 use App\Modules\Access\Models\Delegation;
+use App\Modules\Audit\AttemptedOperation;
+use App\Modules\Audit\AuditRecorder;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\Department;
-use App\Modules\Audit\AttemptedOperation;
-use App\Modules\Audit\AuditRecorder;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Errors\ValidationError;
@@ -121,15 +122,15 @@ final class DelegateAuthority
         }
     }
 
-    private function scopeForDelegation(?string $scopeType, ?string $scopeId): ?\App\Support\Authorization\StructureScope
+    private function scopeForDelegation(?string $scopeType, ?string $scopeId): ?StructureScope
     {
         if ($scopeType === null || trim((string) $scopeId) === '') {
             return null;
         }
 
         return match ($scopeType) {
-            'organization' => new \App\Support\Authorization\StructureScope((string) $scopeId),
-            'campus' => new \App\Support\Authorization\StructureScope((string) (Campus::query()->whereKey($scopeId)->value('organization_id')
+            'organization' => new StructureScope((string) $scopeId),
+            'campus' => new StructureScope((string) (Campus::query()->whereKey($scopeId)->value('organization_id')
                 ?? throw BusinessRejection::forCode('access.scope_unavailable', 'delegation campus scope does not resolve')), (string) $scopeId),
             'branch' => Branch::query()->whereKey($scopeId)->firstOrFail()->structureScope(),
             'department' => Department::query()->whereKey($scopeId)->firstOrFail()->structureScope(),

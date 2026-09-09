@@ -12,6 +12,7 @@ use App\Modules\Audit\AuditRecorder;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\PersonBranchScope;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -88,7 +89,7 @@ final class AssignPosition
         }
     }
 
-    private function requireAssigner(Actor $assigner, \App\Support\Authorization\StructureScope $scope): void
+    private function requireAssigner(Actor $assigner, StructureScope $scope): void
     {
         $outcome = $this->access->decide($assigner, self::CAPABILITY, $scope);
         if (! $outcome->allowed) {

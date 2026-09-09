@@ -69,7 +69,7 @@ final class ApiSessionStackFeatureTest extends TestCase
 
         $this->getJson('/api/v1/me')
             ->assertOk()
-            ->assertJsonPath('username', 'api.session')
-            ->assertJsonPath('person_id', $person->id);
+            ->assertJsonPath('data.username', 'api.session')
+            ->assertJsonPath('data.person_id', $person->id);
     }
 }

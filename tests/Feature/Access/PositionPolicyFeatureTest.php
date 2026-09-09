@@ -30,12 +30,14 @@ final class PositionPolicyFeatureTest extends TestCase
     public function test_assignment_lifecycle_proposes_then_activates_and_revokes(): void
     {
         $publisher = $this->accessAdministrator('pol-admin-1');
-        $organization = $this->establishActiveOrganization();
+        // Position assignments must stay inside the person home organization;
+        // these lifecycle scenarios run under the bootstrap organization.
+        $organizationId = $this->bootstrapOrganizationId;
         $this->personWithAuthority('pol-holder-1', []);
         /** @var Role $role */
         $role = Role::query()->create(['id' => RandomIdentifier::new(), 'name' => 'Campus Director']);
         /** @var Position $position */
-        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organization->id, 'name' => 'Director Position']);
+        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organizationId, 'name' => 'Director Position']);
         app(DefineAccessPolicy::class)->bindPositionRole($publisher, $position->id, $role->id, new CarbonImmutable('2026-08-25'), 'policy-key-1');
         app(DefineAccessPolicy::class)->grantRolePermission($publisher, $role->id, 'identity.verify', new CarbonImmutable('2026-08-25'), 'policy-key-2');
 
@@ -43,14 +45,14 @@ final class PositionPolicyFeatureTest extends TestCase
         $this->assertDatabaseHas('position_assignments', ['id' => $created['assignment_id'], 'lifecycle_state' => 'proposed']);
         $holder = new Actor('pol-holder-1', 'Holder');
         $resolution = new AccessResolution;
-        $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($organization->id))->allowed);
+        $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($organizationId))->allowed);
 
         app(TransitionPositionAssignment::class)->activate($publisher, PositionAssignment::query()->findOrFail($created['assignment_id']), 'assign-key-2');
         $this->assertDatabaseHas('position_assignments', ['id' => $created['assignment_id'], 'lifecycle_state' => 'active']);
-        $this->assertTrue($resolution->decide($holder, 'identity.verify', new StructureScope($organization->id))->allowed);
+        $this->assertTrue($resolution->decide($holder, 'identity.verify', new StructureScope($organizationId))->allowed);
 
         app(TransitionPositionAssignment::class)->revoke($publisher, PositionAssignment::query()->findOrFail($created['assignment_id']), 'assign-key-3');
-        $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($organization->id))->allowed);
+        $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($organizationId))->allowed);
         $this->assertDatabaseHas('audit_events', ['operation' => 'access.position.activate', 'target_type' => 'position_assignment', 'target_id' => $created['assignment_id']]);
         $this->assertDatabaseHas('audit_events', ['operation' => 'access.position.revoke', 'target_type' => 'position_assignment', 'target_id' => $created['assignment_id']]);
     }
@@ -58,10 +60,12 @@ final class PositionPolicyFeatureTest extends TestCase
     public function test_forbidden_assignment_transitions_are_rejected(): void
     {
         $publisher = $this->accessAdministrator('pol-admin-2');
-        $organization = $this->establishActiveOrganization();
+        // Position assignments must stay inside the person home organization;
+        // these lifecycle scenarios run under the bootstrap organization.
+        $organizationId = $this->bootstrapOrganizationId;
         $this->personWithAuthority('pol-holder-2', []);
         /** @var Position $position */
-        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organization->id, 'name' => 'Forbidden Position']);
+        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organizationId, 'name' => 'Forbidden Position']);
         $created = app(AssignPosition::class)->assign($publisher, 'pol-holder-2', $position->id, new CarbonImmutable('2026-08-25'), 'assign-key-4');
         /** @var PositionAssignment $assignment */
         $assignment = PositionAssignment::query()->findOrFail($created['assignment_id']);
@@ -85,10 +89,12 @@ final class PositionPolicyFeatureTest extends TestCase
     public function test_repeated_assignment_closes_the_prior_open_assignment(): void
     {
         $publisher = $this->accessAdministrator('pol-admin-3');
-        $organization = $this->establishActiveOrganization();
+        // Position assignments must stay inside the person home organization;
+        // these lifecycle scenarios run under the bootstrap organization.
+        $organizationId = $this->bootstrapOrganizationId;
         $this->personWithAuthority('pol-holder-3', []);
         /** @var Position $position */
-        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organization->id, 'name' => 'Repeat Position']);
+        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organizationId, 'name' => 'Repeat Position']);
 
         $first = app(AssignPosition::class)->assign($publisher, 'pol-holder-3', $position->id, new CarbonImmutable('2026-08-25'), 'assign-key-8');
         app(TransitionPositionAssignment::class)->activate($publisher, PositionAssignment::query()->findOrFail($first['assignment_id']), 'assign-key-9');
@@ -126,7 +132,7 @@ final class PositionPolicyFeatureTest extends TestCase
         $role = Role::query()->create(['id' => RandomIdentifier::new(), 'name' => 'Denied Role']);
 
         $this->expectException(AuthorizationDenied::class);
-        $this->expectExceptionMessage('no active authority grants access.define_policy');
+        $this->expectExceptionMessage('an organization-wide authority grant is required');
         app(DefineAccessPolicy::class)->grantRolePermission($unprivileged, $role->id, 'identity.verify', new CarbonImmutable('2026-08-25'), 'policy-key-5');
 
         $this->assertDatabaseHas('audit_events', ['operation' => 'access.policy.publish.denied', 'actor_id' => 'unpriv-publisher']);
@@ -138,11 +144,12 @@ final class PositionPolicyFeatureTest extends TestCase
         $organization = $this->establishActiveOrganization();
         $unprivileged = $this->actorWithoutAnyCapability('unpriv-assigner');
         $this->personWithAuthority('pol-holder-4', []);
+        $organizationId = $this->bootstrapOrganizationId;
         /** @var Position $position */
-        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organization->id, 'name' => 'Denied Position']);
+        $position = Position::query()->create(['id' => RandomIdentifier::new(), 'organization_id' => $organizationId, 'name' => 'Denied Position']);
 
         $this->expectException(AuthorizationDenied::class);
-        $this->expectExceptionMessage('no active authority grants access.assign_position');
+        $this->expectExceptionMessage('no active authority grants access.assign_position in scope');
         app(AssignPosition::class)->assign($unprivileged, 'pol-holder-4', $position->id, new CarbonImmutable('2026-08-25'), 'assign-key-11');
 
         $this->assertDatabaseHas('audit_events', ['operation' => 'access.position.assign.denied', 'actor_id' => 'unpriv-assigner']);

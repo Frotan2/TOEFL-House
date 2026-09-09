@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Finance\Commands;
 
+use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Offering;
-use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Finance\Domain\FinanceLifecycle;
@@ -18,6 +18,7 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Domain\StudentOperationalEligibility;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -157,7 +158,7 @@ final class PostObligation
         }
     }
 
-    private function require(Actor $actor, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, self::CAPABILITY, $scope);
         if (! $outcome->allowed) {

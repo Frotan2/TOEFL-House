@@ -18,8 +18,9 @@ use Tests\TestCase;
  * Printing authorization (WP-ACAD-SCOPE): documents render only when the
  * owning branch is visible to the signed-in actor. Cross-branch production
  * attempts are refused with 403 and denial-audited; every production is
- * audit-logged. Null-provenance documents render for any authorized actor
- * but never for a bare session.
+ * audit-logged. Records outside the actor's branch — including bootstrap
+ * provenance — render for an organization-wide holder but never for a bare
+ * session.
  */
 final class PrintingAuthorizationTest extends TestCase
 {
@@ -33,13 +34,13 @@ final class PrintingAuthorizationTest extends TestCase
 
     private string $studentB;
 
-    private string $studentNull;
+    private string $studentBootstrap;
 
     private string $payA;
 
     private string $payB;
 
-    private string $payNull;
+    private string $payBootstrap;
 
     protected function setUp(): void
     {
@@ -50,11 +51,12 @@ final class PrintingAuthorizationTest extends TestCase
 
         $this->studentA = $this->makeStudent()['student']->id;
         $this->studentB = $this->makeStudent()['student']->id;
-        $this->studentNull = $this->makeStudent()['student']->id;
+        $this->studentBootstrap = $this->makeStudent()['student']->id;
         // Provenance seeding: these students belong to their branches; the
-        // third stays branchless (legacy/backfill shape).
-        Student::query()->whereKey($this->studentA)->update(['current_home_branch_id' => $this->branchA]);
-        Student::query()->whereKey($this->studentB)->update(['current_home_branch_id' => $this->branchB]);
+        // third keeps the bootstrap branch (the only provenance the intake
+        // pipeline can produce — branchless people no longer exist).
+        $this->transferStudentHome($this->studentA, $this->branchA, 'hb5');
+        $this->transferStudentHome($this->studentB, $this->branchB, 'hb6');
 
         $period = FinancialPeriod::query()->create([
             'id' => RandomIdentifier::new(),
@@ -64,13 +66,14 @@ final class PrintingAuthorizationTest extends TestCase
             'lifecycle_state' => 'open',
         ]);
 
-        // Payments carry no branch of their own: the receipt gate falls back
-        // to the owning student's branch.
-        $this->payA = $this->newPayment($period->id, $this->studentA, 'PAY-PA-001');
-        $this->payB = $this->newPayment($period->id, $this->studentB, 'PAY-PB-001');
-        $this->payNull = $this->newPayment($period->id, $this->studentNull, 'PAY-PN-001');
+        // Payments carry their originating branch as an immutable fact; the
+        // receipt gate reads that branch (never the mutable student home).
+        $this->payA = $this->newPayment($period->id, $this->studentA, 'PAY-PA-001', $this->branchA);
+        $this->payB = $this->newPayment($period->id, $this->studentB, 'PAY-PB-001', $this->branchB);
+        $this->payBootstrap = $this->newPayment($period->id, $this->studentBootstrap, 'PAY-PB-002', $this->bootstrapBranchId());
 
         $this->makeLogin('officer.a', 'prt-officer-a', ['academic.enroll'], $this->branchA);
+        $this->makeLogin('officer.org', 'prt-officer-org', ['academic.enroll'], null);
         $this->makeLogin('officer.bare', 'prt-officer-bare', [], null);
     }
 
@@ -86,12 +89,16 @@ final class PrintingAuthorizationTest extends TestCase
         return $id;
     }
 
-    private function newPayment(string $periodId, string $studentId, string $payerRef): string
+    private function newPayment(string $periodId, string $studentId, string $payerRef, string $branchId): string
     {
         return Payment::query()->create([
             'id' => RandomIdentifier::new(),
             'period_id' => $periodId,
             'student_id' => $studentId,
+            // The provenance guard requires an active originating branch on
+            // every new payment (here the student's home at record time).
+            'originating_branch_id' => $branchId,
+            'current_home_branch_id' => $branchId,
             'amount' => '250.00',
             'method' => 'cash',
             'payer_ref' => $payerRef,
@@ -170,17 +177,26 @@ final class PrintingAuthorizationTest extends TestCase
         ]);
     }
 
-    public function test_null_provenance_documents_render_for_authorized_actors_only(): void
+    public function test_out_of_scope_provenance_documents_render_for_org_wide_holders_only(): void
     {
-        // The branch-A officer holds effective authority, so the
-        // branchless receipt renders (backfill doctrine).
+        // The bootstrap-provenance receipt is OUTSIDE the branch-A officer's
+        // visible set: branch grants never leak into other branches.
         $this->signIn('officer.a');
-        $this->get('/print/receipt/'.$this->payNull)->assertOk()->assertSee('PAY-PN-001');
+        $this->getJson('/print/receipt/'.$this->payBootstrap)->assertForbidden();
+        $this->getJson('/print/id-card/'.$this->studentBootstrap)->assertForbidden();
+
+        // An organization-wide holder sees every branch under the
+        // institution: ancestor scope covers descendants.
+        $this->post('/logout')->assertRedirect('/login');
+        $this->signIn('officer.org');
+        $this->get('/print/receipt/'.$this->payBootstrap)->assertOk()->assertSee('PAY-PB-002');
+        $this->get('/print/receipt/'.$this->payA)->assertOk()->assertSee('PAY-PA-001');
+        $this->get('/print/id-card/'.$this->studentBootstrap)->assertOk();
 
         // A bare session with no authority grant renders nothing.
         $this->post('/logout')->assertRedirect('/login');
         $this->signIn('officer.bare');
-        $this->getJson('/print/receipt/'.$this->payNull)->assertForbidden();
-        $this->getJson('/print/id-card/'.$this->studentNull)->assertForbidden();
+        $this->getJson('/print/receipt/'.$this->payBootstrap)->assertForbidden();
+        $this->getJson('/print/id-card/'.$this->studentBootstrap)->assertForbidden();
     }
 }

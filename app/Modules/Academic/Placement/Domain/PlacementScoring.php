@@ -109,5 +109,4 @@ final class PlacementScoring
 
         return $band?->cefr_ref;
     }
-
 }

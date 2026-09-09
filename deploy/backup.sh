@@ -22,6 +22,8 @@
 # =============================================================================
 set -euo pipefail
 
+BACKUP_DIR_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Preflight: the PostgreSQL client tools must be installed (postgresql-client,
 # version >= the server). Without them this script fails loudly rather than
 # producing an "OK" with no backup.
@@ -70,9 +72,15 @@ if [ -n "$AGE_KEYRECIPIENT" ]; then
     fi
 fi
 
-# Retention: keep the last $RETENTION_DAILY daily dumps.
+# Retention: keep the last $RETENTION_DAILY daily dumps. Pruning goes through
+# deploy/lib/retention.sh, which treats "the glob matched nothing" as nothing to
+# do: an `ls | tail | xargs` pipeline here aborted the whole backup on a young
+# backup directory (ls exits 2, and `set -o pipefail` carried that out of the
+# pipeline AFTER a verified dump had already been written).
 log "applying retention (keep last $RETENTION_DAILY)"
-ls -1t "$BACKUP_DIR/${DB_NAME}-"*.dump 2>/dev/null | tail -n +$((RETENTION_DAILY + 1)) | xargs -r rm -f
-ls -1t "$BACKUP_DIR/${DB_NAME}-"*.dump.age 2>/dev/null | tail -n +$((RETENTION_DAILY + 1)) | xargs -r rm -f
+# shellcheck source=./lib/retention.sh
+source "$BACKUP_DIR_SELF/lib/retention.sh"
+prune_old_entries "$BACKUP_DIR" "${DB_NAME}-*.dump" "$RETENTION_DAILY"
+prune_old_entries "$BACKUP_DIR" "${DB_NAME}-*.dump.age" "$RETENTION_DAILY"
 
 log "backup complete"

@@ -6,8 +6,10 @@ namespace Tests\Feature\Console;
 
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
+use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\ClassModel;
+use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
@@ -23,6 +25,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -36,6 +39,7 @@ use Tests\TestCase;
 final class TransportWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -48,17 +52,24 @@ final class TransportWorkflowFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'boundary rules', 'twt-ver');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'twt-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'twt-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        // Two levels so an advance out of the A1 class has an A2 target.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-transportworkflowfeature', 1, 'Level', 'A1', 'canon-transportworkflowfeature-lvl');
+        app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-transportworkflowfeature-2', 2, 'Level 2', 'A2', 'canon-transportworkflowfeature-lvl2');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-transportworkflowfeature-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-transportworkflowfeature-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'twt-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'twt-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('twt-teacher-1', []);
+        $this->buildActiveTeacher('twt-teacher-1', null, 'transpor33a');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'twt-teacher-1', new CarbonImmutable('2026-09-01'), null, 'twt-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'twt-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'twt-cls-act');
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -98,6 +109,8 @@ final class TransportWorkflowFeatureTest extends TestCase
 
         $registered = app(RegisterApplicant::class)->register(
             $this->admissionsClerk('twt-clerk-'.$suffix), $personId, 'IELTS Preparation', 'twt-reg-'.$suffix,
+            null,
+            $this->bootstrapBranchId(),
         );
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
@@ -112,6 +125,25 @@ final class TransportWorkflowFeatureTest extends TestCase
         $converted = app(EnrollAdmittedApplicant::class)->convert($this->admissionsApprover('twt-adv2-'.$suffix), $applicant, 'twt-conv-'.$suffix);
 
         return $converted['student_id'];
+    }
+
+    /**
+     * A level-aware progression requires the student to hold an active seat
+     * in the class; seat the student through the enrollment commands.
+     */
+    private function seatStudent(string $suffix, string $studentId): void
+    {
+        $requested = app(MaintainEnrollment::class)->request(
+            $this->enrollmentClerk('twt-enroll-clerk-'.$suffix),
+            $studentId,
+            $this->classId,
+            'twt-enroll-'.$suffix,
+        );
+        app(MaintainEnrollment::class)->activate(
+            $this->academicOfficer('twt-enroll-officer-'.$suffix),
+            Enrollment::query()->findOrFail($requested['enrollment_id']),
+            'twt-activate-'.$suffix,
+        );
     }
 
     public function test_enrollment_seat_lifecycle_through_the_console(): void
@@ -218,6 +250,7 @@ final class TransportWorkflowFeatureTest extends TestCase
         $this->makeEmployee('twt-rev-p1', ['academic.progression_review'], 'progression-reviewer');
         $this->makeEmployee('twt-app-p1', ['academic.progression_approve'], 'progression-approver');
         $studentId = $this->newStudent('p1');
+        $this->seatStudent('p1', $studentId);
 
         // Proposal — the proposer's own session only.
         $this->signIn('proposer');
@@ -226,6 +259,7 @@ final class TransportWorkflowFeatureTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'meets the exit criteria',
+            'basis' => 'assessed evidence on file',
         ])->assertRedirect('/academic');
         $this->assertDatabaseHas(DB::connection()->getTablePrefix().'progression_decisions', [
             'student_id' => $studentId, 'class_id' => $this->classId, 'outcome' => 'advance', 'lifecycle_state' => 'proposed',
@@ -259,6 +293,7 @@ final class TransportWorkflowFeatureTest extends TestCase
         // still be unable to sign the same decision twice.
         $this->makeEmployee('twt-all-p1', ['academic.progression_propose', 'academic.progression_review', 'academic.progression_approve'], 'lone-signer');
         $studentId = $this->newStudent('p2');
+        $this->seatStudent('p2', $studentId);
 
         $this->signIn('lone-signer');
         $this->post('/academic/progressions', [
@@ -266,6 +301,7 @@ final class TransportWorkflowFeatureTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'repeat',
             'reason' => 'did not meet the exit criteria',
+            'basis' => 'assessed evidence on file',
         ])->assertRedirect('/academic');
         $decisionId = DB::table(DB::connection()->getTablePrefix().'progression_decisions')->where('student_id', $studentId)->value('id');
 

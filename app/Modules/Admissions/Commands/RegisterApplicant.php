@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Admissions\Commands;
 
+use App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder;
 use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Placement\Queries\AcademicEligibilitySnapshotQuery;
 use App\Modules\Admissions\Domain\ApplicantLifecycle;
@@ -146,13 +147,16 @@ final class RegisterApplicant
         if (! $snapshot['verification']['valid']) {
             throw BusinessRejection::forCode('admissions.eligibility_snapshot_unverified', 'the placement eligibility snapshot could not be verified: '.$snapshot['verification']['reason']);
         }
-        if ((string) ($snapshot['snapshot']['snapshot_schema_version'] ?? '') !== \App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION
-            || (string) ($snapshot['snapshot']['placement_recommendation_id'] ?? '') !== trim((string) $profile->placement_recommendation_id)) {
+        if (trim((string) ($snapshot['snapshot']['snapshot_schema_version'] ?? '')) !== AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION
+            || trim((string) ($snapshot['snapshot']['placement_recommendation_id'] ?? '')) !== trim((string) $profile->placement_recommendation_id)) {
             throw BusinessRejection::forCode('admissions.eligibility_snapshot_lineage_invalid', 'admission registration requires the profile-pointer-bound v2 placement eligibility snapshot');
         }
-        if ((string) ($snapshot['snapshot']['person_id'] ?? '') !== $personId
-            || (string) ($snapshot['snapshot']['placement_profile_id'] ?? '') !== $profile->id
-            || (string) ($snapshot['snapshot']['originating_branch_id'] ?? '') !== $profileBranchId) {
+        // Identifier columns are char(36) and PostgreSQL blank-pads them, while
+        // the signed snapshot stores unpadded values. Compare trimmed, as the
+        // recommendation-id check above already does.
+        if (trim(trim((string) ($snapshot['snapshot']['person_id'] ?? ''))) !== trim($personId)
+            || trim(trim((string) ($snapshot['snapshot']['placement_profile_id'] ?? ''))) !== trim((string) $profile->id)
+            || trim(trim((string) ($snapshot['snapshot']['originating_branch_id'] ?? ''))) !== trim((string) $profileBranchId)) {
             throw BusinessRejection::forCode('admissions.eligibility_snapshot_mismatch', 'the signed placement snapshot does not match the applicant evidence lineage');
         }
 

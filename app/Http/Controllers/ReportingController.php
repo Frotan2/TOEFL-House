@@ -4,19 +4,20 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Modules\Academic\Models\ClassModel;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Reporting\Commands\MaintainDashboard;
 use App\Modules\Reporting\Commands\RunReport;
 use App\Modules\Reporting\Domain\MetricCatalog;
 use App\Modules\Reporting\Models\Dashboard;
 use App\Modules\Reporting\Models\MetricDefinition;
-use App\Modules\Organization\Models\Branch;
-use App\Modules\Academic\Models\ClassModel;
-use App\Modules\Students\Models\Student;
 use App\Modules\Reporting\Models\ReportRun;
+use App\Modules\Students\Models\Student;
 use App\Support\Errors\BusinessRejection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
@@ -138,8 +139,8 @@ final class ReportingController extends Controller
         ]);
     }
 
-    /** @return \Illuminate\Support\Collection<int, MetricDefinition> */
-    private function resolvedMetrics(): \Illuminate\Support\Collection
+    /** @return Collection<int, MetricDefinition> */
+    private function resolvedMetrics(): Collection
     {
         return MetricDefinition::query()->orderBy('key')->get()->filter(static function (MetricDefinition $metric): bool {
             try {

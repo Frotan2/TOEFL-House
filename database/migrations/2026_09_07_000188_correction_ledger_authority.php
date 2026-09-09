@@ -217,6 +217,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new \RuntimeException('Financial-correction ledger authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
+        throw new RuntimeException('Financial-correction ledger authority is one-way; restore from a reviewed pre-convergence baseline rather than weakening accounting history.');
     }
 };

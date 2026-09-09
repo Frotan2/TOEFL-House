@@ -6,11 +6,11 @@ namespace App\Support\Authorization;
 
 use App\Modules\Access\Domain\AccessLifecycle;
 use App\Modules\Access\Models\Delegation;
-use App\Modules\Hr\Models\Employment;
-use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Hr\Domain\EmploymentLifecycle;
+use App\Modules\Hr\Models\Employment;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\CampusAssignment;
@@ -227,7 +227,7 @@ final class ActorBranches
     }
 
     /** @param list<string> $branchIds
-     *  @return list<string>
+     * @return list<string>
      */
     private function operationalBranchIds(array $branchIds, string $day): array
     {

@@ -262,7 +262,7 @@ final class GovernedConfigFoundationTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $envelope
+     * @param  array<string, mixed>  $envelope
      * @return array<string, mixed>
      */
     private function rawRow(string $key, int $versionNo, array $envelope, string $from, ?string $to, string $lifecycle): array
@@ -286,10 +286,15 @@ final class GovernedConfigFoundationTest extends TestCase
 
     private function assertQueryRejected(callable $action): void
     {
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $action();
             $this->fail('the database statement should have been rejected by a database invariant');
+            DB::rollBack();
         } catch (QueryException $e) {
+            DB::rollBack();
             $this->assertNotSame('', $e->getMessage());
         }
     }

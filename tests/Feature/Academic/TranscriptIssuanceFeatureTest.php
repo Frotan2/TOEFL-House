@@ -13,8 +13,6 @@ use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Commands\ManageAssessmentResult;
 use App\Modules\Academic\Commands\RecordAttendance;
 use App\Modules\Academic\Domain\TranscriptComposer;
-use App\Modules\Academic\Placement\Commands\DecidePlacement;
-use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
@@ -29,6 +27,8 @@ use App\Modules\Academic\Models\ProgramVersionLevel;
 use App\Modules\Academic\Models\ProgressionDecision;
 use App\Modules\Academic\Models\ResultCorrection;
 use App\Modules\Academic\Models\Transcript;
+use App\Modules\Academic\Placement\Commands\DecidePlacement;
+use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Queries\TranscriptQuery;
 use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
@@ -48,6 +48,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsPlacementCatalog;
+use Tests\Concerns\BuildsSessions;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -59,13 +61,14 @@ use Tests\TestCase;
 final class TranscriptIssuanceFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
+    use BuildsSessions;
+    use BuildsTeachers;
 
     private string $programVersionId;
 
     private string $periodId;
 
     private string $levelA1Id;
-
 
     private string $classId;
 
@@ -82,8 +85,13 @@ final class TranscriptIssuanceFeatureTest extends TestCase
         $this->periodId = (string) app(MaintainAcademicStructure::class)->definePeriod($officer, 'Transcript Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'trx-period')['period_id'];
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'trx-period-pub');
 
-        $this->personWithAuthority('trx-teacher-1', []);
-        $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'trx-class', $this->levelA1Id)['class_id'];
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $this->levelA1Id, $this->periodId, 'trx-av');
+        app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $this->levelA1Id, $this->periodId, 200, 'trx-of');
+
+        $this->buildActiveTeacher('trx-teacher-1', null, 'transcri1a0');
+        $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'trx-class', $this->levelA1Id, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'trx-teacher-1', new CarbonImmutable('2026-09-01'), null, 'trx-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'trx-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'trx-class-active');
@@ -357,13 +365,23 @@ final class TranscriptIssuanceFeatureTest extends TestCase
 
     private function scheduledSession(string $seed): string
     {
+        // Scheduling requires an explicit skill the assigned teacher is
+        // authorized to deliver; the domain refuses to infer one.
+        $skillId = $this->makeClassSchedulable(
+            $this->academicOfficer('trx-schedule-'.$seed),
+            $this->classId,
+            $this->bootstrapBranchId(),
+            'trxs'.substr(md5($seed), 0, 4)
+        );
+
         return (string) app(MaintainClass::class)->scheduleSession(
             $this->academicOfficer('trx-schedule-'.$seed),
             ClassModel::query()->findOrFail($this->classId),
-            new CarbonImmutable('2026-09-10'),
+            CarbonImmutable::today()->addDays(3),
             '09:00',
             '10:30',
             'trx-session-'.$seed,
+            $skillId,
         )['session_id'];
     }
 

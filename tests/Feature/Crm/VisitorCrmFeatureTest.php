@@ -243,10 +243,16 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertSame('Call back with fee info', $followup->title);
 
         // Interactions are evidence: an UPDATE is impossible at the DB boundary.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('visitor_interactions')->where('id', $interaction['interaction_id'])->update(['summary' => 'rewritten']);
             $this->fail('interactions must be append-only');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('immutable', $exception->getMessage());
         }
     }
@@ -285,7 +291,7 @@ final class VisitorCrmFeatureTest extends TestCase
         $capture = app(CaptureVisitor::class)->capture($crmStaff, $person->id, '', null, 'register@example.com', 'email', 'online', null, null, null, 'IELTS', null, 'capture-register');
 
         $registrar = $this->admissionsClerk('crm-adm-clerk-1');
-        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-1');
+        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-1', null, $this->bootstrapBranchId());
 
         $visitor = Visitor::query()->findOrFail($capture['visitor_id']);
         $this->assertSame(Visitor::STATUS_CONVERTED, $visitor->status);
@@ -384,6 +390,9 @@ final class VisitorCrmFeatureTest extends TestCase
             'name' => 'CRM Branch '.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8),
             'lifecycle_state' => 'active',
         ]);
+        // Visitor operations resolve the target organization from the branch
+        // topology, so the fixture branch must belong to an active organization.
+        $this->attachBranchToBootstrapOrganization($branch->id);
         $branchStaff = $this->personWithAuthority('crm-branch-staff-1', []);
         $this->grantScopeAuthority($branchStaff->id, ['crm.visitor'], 'branch', $branch->id);
         $branchActor = new Actor($branchStaff->id, 'Branch CRM Staff');
@@ -396,15 +405,28 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertSame('hot', $visitor->fresh()?->rating);
 
         // Branch provenance is immutable once assigned.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('visitors')->where('id', $visitor->id)->update(['origin_branch_id' => RandomIdentifier::new()]);
             $this->fail('branch provenance must be immutable');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('immutable', $exception->getMessage());
         }
 
         // An actor with the capability only in a different branch is denied.
-        $other = $this->actorWithStructureCapabilities('crm-branch-other-1', ['crm.visitor']);
+        $otherBranch = Branch::query()->create([
+            'id' => RandomIdentifier::new(),
+            'name' => 'CRM Other Branch '.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8),
+            'lifecycle_state' => 'active',
+        ]);
+        $this->attachBranchToBootstrapOrganization($otherBranch->id);
+        $otherPerson = $this->personWithAuthority('crm-branch-other-1', []);
+        $this->grantScopeAuthority($otherPerson->id, ['crm.visitor'], 'branch', $otherBranch->id);
+        $other = new Actor($otherPerson->id, 'Other Branch CRM Staff');
         try {
             app(MaintainVisitor::class)->update($other, $visitor->fresh(), null, null, null, null, 'cold', null, null, null, 'branch-update-2');
             $this->fail('cross-branch visitor access must be denied');
@@ -433,7 +455,7 @@ final class VisitorCrmFeatureTest extends TestCase
             ->where('target_id', $student->id)
             ->firstOrFail();
         app(VisitorConversionRecorder::class)->record(
-            new Actor($studentAuthorityEvent->actor_id, 'Students authority'),
+            new Actor(trim((string) $studentAuthorityEvent->actor_id), 'Students authority'),
             Visitor::query()->findOrFail($capture['visitor_id']),
             'student',
             'student',
@@ -526,7 +548,7 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertSame($person->id, trim((string) $refreshedVisitor->person_id));
 
         $registrar = $this->admissionsClerk('crm-link-clerk-1');
-        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-link');
+        app(RegisterApplicant::class)->register($registrar, $person->id, 'IELTS Preparation', 'reg-crm-link', null, $this->bootstrapBranchId());
         $this->assertSame(Visitor::STATUS_CONVERTED, $visitor->fresh()?->status);
         $this->assertDatabaseHas('visitor_conversions', ['visitor_id' => $visitor->id, 'conversion_type' => 'applicant']);
     }

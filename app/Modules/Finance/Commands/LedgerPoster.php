@@ -10,7 +10,6 @@ use App\Modules\Finance\Models\FinancialCorrection;
 use App\Modules\Finance\Models\Journal;
 use App\Modules\Finance\Models\JournalLine;
 use App\Support\Authorization\Actor;
-use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use App\Support\MoneyAmount;
 

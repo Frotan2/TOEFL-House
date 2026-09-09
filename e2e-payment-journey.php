@@ -161,7 +161,14 @@ final class Browser
     }
 }
 
-$pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=$E2E_DB", 'postgres', 'postgres');
+// Connection details come from the environment so the journey runs against
+// whichever PostgreSQL instance is under verification (see
+// docs/RUNTIME_ENVIRONMENT_LOCK.md); the defaults match a stock local server.
+$E2E_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$E2E_PORT = getenv('DB_PORT') ?: '5432';
+$E2E_USER = getenv('DB_USERNAME') ?: 'postgres';
+$E2E_PASS = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : 'postgres';
+$pdo = new PDO("pgsql:host=$E2E_HOST;port=$E2E_PORT;dbname=$E2E_DB", $E2E_USER, $E2E_PASS);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 function q(string $sql, array $p = []): ?array
 {
@@ -230,12 +237,16 @@ qc('SELECT count(*) FROM user_accounts') === 1 ? pass('bootstrap: exactly 1 owne
 $owner = new Browser($BASE);
 $owner->prime();
 $owner->post('/login', ['username' => 'owner', 'password' => 'Owner-Pass-123']);
-$me = $owner->get('/api/me');
-($me['status'] === 200 && ($me['json']['username'] ?? '') === 'owner') ? pass('owner signed in; /api/me → owner') : fail('owner.login', "/api/me {$me['status']}");
+$me = $owner->get('/api/v1/me');
+($me['status'] === 200 && ($me['json']['data']['username'] ?? '') === 'owner') ? pass('owner signed in; /api/me → owner') : fail('owner.login', "/api/v1/me {$me['status']}");
 
 $positionId = qv('SELECT id FROM positions ORDER BY id LIMIT 1');
-$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId): Browser {
-    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1985-07-07']);
+// Genesis structure: the first-run bootstrap provisions the campus + branch
+// every branch-mandated intake needs (see the final certification report).
+$branchId = qv('SELECT id FROM branches ORDER BY created_at LIMIT 1');
+$branchId !== '' ? pass('bootstrap provisioned the genesis branch') : fail('bootstrap.structure', 'no branch');
+$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId, $branchId): Browser {
+    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1985-07-07', 'home_branch_id' => $branchId]);
     $pid = qv('SELECT id FROM people WHERE legal_name=? ORDER BY id DESC LIMIT 1', [$fullName]);
     $owner->post("/identity/people/$pid/verify", ['identity_key' => "nid-$username", 'evidence_ref' => "id/$username"]);
     $owner->post('/identity/accounts', ['person_id' => $pid, 'username' => $username]);
@@ -261,11 +272,11 @@ pass('finance + refund-requester + refund-approver provisioned');
 // ---------- student ----------
 step('STAGE 2 — register a real student through the actual workflow');
 // person intake + verify
-$owner->post('/identity/people', ['legal_name' => 'Paying Student', 'date_of_birth' => '2007-04-22']);
+$owner->post('/identity/people', ['legal_name' => 'Paying Student', 'date_of_birth' => '2007-04-22', 'home_branch_id' => $branchId]);
 $studentPersonId = qv("SELECT id FROM people WHERE legal_name='Paying Student'");
 $owner->post("/identity/people/$studentPersonId/verify", ['identity_key' => 'nid-PAY-001', 'evidence_ref' => 'passport/PAY-001']);
 // applicant register (finance officer is omnipotent via position)
-$finance->post('/students/applicants', ['person_id' => $studentPersonId, 'program_interest' => 'TOEFL Preparation']);
+$finance->post('/students/applicants', ['person_id' => $studentPersonId, 'program_interest' => 'TOEFL Preparation', 'branch_id' => $branchId]);
 $applicantId = qv('SELECT id FROM applicants WHERE person_id=?', [$studentPersonId]);
 // 3-signature admission: initiator (finance) -> reviewer (refunder) -> approver (refundApprover)
 $finance->post("/students/applicants/$applicantId/initiate", ['decision' => 'admit', 'reason' => 'meets policy', 'evidence_ref' => 'adm/PAY-001']);
@@ -305,7 +316,7 @@ if ($obligationId === '') {
 // ---------- record payment ----------
 step('STAGE 5 — record a real payment (400.00) through the payment endpoint');
 $PAYMENT = '400.00';
-$r = $finance->post('/api/finance/payments', [
+$r = $finance->post('/api/v1/finance/payments', [
     'period_id' => $periodId, 'student_id' => $studentId, 'amount' => $PAYMENT,
     'method' => 'bank_transfer', 'payer_ref' => 'RCPT-PAY-001', 'received_on' => '2026-09-02',
 ], true);
@@ -343,7 +354,7 @@ if ($allocCount === 1 && $allocated === '400.00' && $payRemaining === '0.00' && 
 // ---------- overpayment rejected ----------
 step('STAGE 8 — overpayment against the invoice must be rejected (allocate > remaining)');
 // Invoice remainder is 600. Record a 700 payment and try to allocate 650 to the invoice (> 600 remainder).
-$finance->post('/api/finance/payments', [
+$finance->post('/api/v1/finance/payments', [
     'period_id' => $periodId, 'student_id' => $studentId, 'amount' => '700.00',
     'method' => 'cash', 'payer_ref' => 'RCPT-PAY-002', 'received_on' => '2026-09-03',
 ], true);
@@ -367,7 +378,7 @@ $finance->post("/finance/obligations/$obligationId/allocate", ['payment_id' => $
 info('allocated 500 of 700 cash payment; payment2 remaining 200; invoice remainder '.obligationRemaining($obligationId));
 $invRemBefore = obligationRemaining($obligationId); // 100.00
 // A separate 300 payment, allocate 200 to the invoice (only 100 room) -> exceeds obligation.
-$finance->post('/api/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '300.00', 'method' => 'cash', 'payer_ref' => 'RCPT-PAY-003', 'received_on' => '2026-09-04'], true);
+$finance->post('/api/v1/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '300.00', 'method' => 'cash', 'payer_ref' => 'RCPT-PAY-003', 'received_on' => '2026-09-04'], true);
 $payment3Id = qv("SELECT id FROM payments WHERE payer_ref='RCPT-PAY-003'");
 $rOverObl = $finance->post("/finance/obligations/$obligationId/allocate", ['payment_id' => $payment3Id, 'amount' => '200.00'], false, ['Referer' => "$BASE/finance"]);
 $alloc200 = qc('SELECT count(*) FROM payment_allocations WHERE payment_id=? AND amount=200.00', [$payment3Id]);
@@ -390,8 +401,8 @@ step('STAGE 10 — duplicate/replayed payment is idempotent (no duplicate financ
 // (Allowed key charset is [A-Za-z0-9._:-] — no hyphen.)
 $idemKey = 'pay.idem.'.bin2hex(random_bytes(6));
 $idemPayload = ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '250.00', 'method' => 'cash', 'payer_ref' => 'RCPT-IDEM-1', 'received_on' => '2026-09-05'];
-$r1 = $finance->post('/api/finance/payments', $idemPayload, true, ['Idempotency-Key' => $idemKey]);
-$r2 = $finance->post('/api/finance/payments', $idemPayload, true, ['Idempotency-Key' => $idemKey]);
+$r1 = $finance->post('/api/v1/finance/payments', $idemPayload, true, ['Idempotency-Key' => $idemKey]);
+$r2 = $finance->post('/api/v1/finance/payments', $idemPayload, true, ['Idempotency-Key' => $idemKey]);
 $idemPays = qc("SELECT count(*) FROM payments WHERE payer_ref='RCPT-IDEM-1'");
 $idemKeyRows = qc('SELECT count(*) FROM idempotency_keys WHERE idempotency_key=?', [$idemKey]);
 info("idem replay: first HTTP {$r1['status']}, second HTTP {$r2['status']}, payment rows=$idemPays (expect 1), idempotency-key rows=$idemKeyRows (expect 1)");
@@ -401,13 +412,13 @@ if ($r1['status'] === 201 && in_array($r2['status'], [200, 201], true) && $idemP
     fail('idempotency.duplicate', "r1={$r1['status']} r2={$r2['status']} pays=$idemPays keys=$idemKeyRows");
 }
 // same key reused with a DIFFERENT payload -> rejected as conflicting payload
-$rConflict = $finance->post('/api/finance/payments', array_merge($idemPayload, ['amount' => '999.00']), true, ['Idempotency-Key' => $idemKey]);
+$rConflict = $finance->post('/api/v1/finance/payments', array_merge($idemPayload, ['amount' => '999.00']), true, ['Idempotency-Key' => $idemKey]);
 info("same idem key + different amount HTTP {$rConflict['status']} code=".($rConflict['json']['error'] ?? '-').' (expect 409 idempotency.conflicting_payload)');
 $rConflict['status'] === 409 && ($rConflict['json']['error'] ?? '') === 'idempotency.conflicting_payload'
     ? pass('idempotency key reused with different payload rejected 409')
     : fail('idempotency.conflict', "status={$rConflict['status']} code=".($rConflict['json']['error'] ?? '-'));
 // a plain duplicate payer_ref with NO idem key is independently rejected
-$rDup = $finance->post('/api/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '250.00', 'method' => 'cash', 'payer_ref' => 'RCPT-IDEM-1', 'received_on' => '2026-09-05'], true);
+$rDup = $finance->post('/api/v1/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '250.00', 'method' => 'cash', 'payer_ref' => 'RCPT-IDEM-1', 'received_on' => '2026-09-05'], true);
 $dupCode = $rDup['status'];
 info("duplicate payer_ref (no idem key) HTTP $dupCode with code=".($rDup['json']['error'] ?? '-').' (expect 409 finance.payment_duplicate)');
 $dupCode === 409 && ($rDup['json']['error'] ?? '') === 'finance.payment_duplicate' ? pass('duplicate payer_ref rejected 409 finance.payment_duplicate') : fail('duplicate.payer_ref', "status=$dupCode");
@@ -418,7 +429,7 @@ $bad = ['abc', '-50', '0.001', '12.999', '1e2', ''];
 $all422 = true;
 $any500 = false;
 foreach ($bad as $amt) {
-    $r = $finance->post('/api/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => $amt, 'method' => 'cash', 'payer_ref' => 'BAD-'.md5((string) $amt).substr((string) microtime(true), 6), 'received_on' => '2026-09-06'], true);
+    $r = $finance->post('/api/v1/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => $amt, 'method' => 'cash', 'payer_ref' => 'BAD-'.md5((string) $amt).substr((string) microtime(true), 6), 'received_on' => '2026-09-06'], true);
     if ($r['status'] !== 422) {
         $all422 = false;
         info('amount '.var_export($amt, true)." → HTTP {$r['status']}");
@@ -442,19 +453,19 @@ $refundPayId = qv("SELECT id FROM payments WHERE payer_ref='RCPT-IDEM-1'");
 $refundable = bcsub('250.00', paymentAllocated($refundPayId), 2);
 info("refundable remainder of RCPT-IDEM-1 = $refundable (expect 250.00)");
 // requester proposes a partial refund (100)
-$r = $refunder->post("/api/finance/payments/$refundPayId/refund", ['period_id' => $periodId, 'amount' => '100.00', 'reason' => 'student withdrew before term start'], true);
+$r = $refunder->post("/api/v1/finance/payments/$refundPayId/refund", ['period_id' => $periodId, 'amount' => '100.00', 'reason' => 'student withdrew before term start'], true);
 $refundId = qv('SELECT id FROM refunds WHERE payment_id=? ORDER BY created_at DESC LIMIT 1', [$refundPayId]);
 $proposedState = qv('SELECT lifecycle_state FROM refunds WHERE id=?', [$refundId]);
 $r['status'] === 201 && $proposedState === 'proposed' ? pass("refund proposed: 100.00 (state=proposed, HTTP {$r['status']})") : fail('refund.propose', "status={$r['status']} state=$proposedState");
 // requester cannot approve (SoD)
-$rSelf = $refunder->post("/api/finance/refunds/$refundId/approve", [], true);
+$rSelf = $refunder->post("/api/v1/finance/refunds/$refundId/approve", [], true);
 $selfCode = $rSelf['status'];
 $selfErr = $rSelf['json']['error'] ?? '';
 $stillProposed = qv('SELECT lifecycle_state FROM refunds WHERE id=?', [$refundId]);
 info("self-approve → HTTP $selfCode $selfErr (expect 403 finance.refund_not_independent)");
 $selfCode === 403 && $selfErr === 'finance.refund_not_independent' && $stillProposed === 'proposed' ? pass('SoD: refund requester cannot approve their own refund') : fail('refund.sod', "self-approve $selfCode $selfErr state=$stillProposed");
 // distinct approver records it
-$r = $refundApprover->post("/api/finance/refunds/$refundId/approve", [], true);
+$r = $refundApprover->post("/api/v1/finance/refunds/$refundId/approve", [], true);
 $recordedState = qv('SELECT lifecycle_state FROM refunds WHERE id=?', [$refundId]);
 $r['status'] === 200 && $recordedState === 'recorded' ? pass("refund approved+recorded by distinct approver: state=recorded (HTTP {$r['status']})") : fail('refund.approve', "status={$r['status']} state=$recordedState body=".substr($r['body'], 0, 140));
 $refundedSoFar = paymentRefunded($refundPayId);
@@ -463,7 +474,7 @@ info("recorded refunds on RCPT-IDEM-1 = $refundedSoFar (expect 100.00)");
 // ---------- refund cannot exceed refundable ----------
 step('STAGE 13 — refund cannot exceed the refundable remainder');
 // 250 payment, 100 refunded -> refundable now 150. Propose 200 (over cap) -> must be rejected.
-$rOver = $refunder->post("/api/finance/payments/$refundPayId/refund", ['period_id' => $periodId, 'amount' => '200.00', 'reason' => 'attempt to over-refund'], true);
+$rOver = $refunder->post("/api/v1/finance/payments/$refundPayId/refund", ['period_id' => $periodId, 'amount' => '200.00', 'reason' => 'attempt to over-refund'], true);
 $overCode = $rOver['status'];
 $overErr = $rOver['json']['error'] ?? '';
 $refundedAfter = paymentRefunded($refundPayId);
@@ -479,11 +490,11 @@ $finance->post("/finance/periods/$periodId/close", [], false, ['Referer' => "$BA
 $periodState = qv('SELECT lifecycle_state FROM financial_periods WHERE id=?', [$periodId]);
 info("period state after close = $periodState (expect closed)");
 // try to record a payment into the closed period
-$rPay = $finance->post('/api/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '10.00', 'method' => 'cash', 'payer_ref' => 'RCPT-CLOSED-1', 'received_on' => '2026-09-07'], true);
+$rPay = $finance->post('/api/v1/finance/payments', ['period_id' => $periodId, 'student_id' => $studentId, 'amount' => '10.00', 'method' => 'cash', 'payer_ref' => 'RCPT-CLOSED-1', 'received_on' => '2026-09-07'], true);
 $payClosed = qc("SELECT count(*) FROM payments WHERE payer_ref='RCPT-CLOSED-1'");
 $payErr = $rPay['json']['error'] ?? '';
 // try a refund into the closed period
-$rRef = $refunder->post("/api/finance/payments/$refundPayId/refund", ['period_id' => $periodId, 'amount' => '10.00', 'reason' => 'closed period refund'], true);
+$rRef = $refunder->post("/api/v1/finance/payments/$refundPayId/refund", ['period_id' => $periodId, 'amount' => '10.00', 'reason' => 'closed period refund'], true);
 $refClosed = qc("SELECT count(*) FROM refunds WHERE payment_id=? AND reason='closed period refund'", [$refundPayId]);
 $refErr = $rRef['json']['error'] ?? '';
 // try an obligation into the closed period
@@ -511,7 +522,7 @@ $finance->post('/finance/obligations', ['period_id' => $period2Id, 'student_id' 
 $concObligationId = qv("SELECT id FROM obligations WHERE reason='concurrency test invoice'");
 $concPayments = [];
 for ($i = 1; $i <= 6; $i++) {
-    $finance->post('/api/finance/payments', ['period_id' => $period2Id, 'student_id' => $studentId, 'amount' => '300.00', 'method' => 'cash', 'payer_ref' => "RCPT-CONC-$i", 'received_on' => '2027-09-01'], true);
+    $finance->post('/api/v1/finance/payments', ['period_id' => $period2Id, 'student_id' => $studentId, 'amount' => '300.00', 'method' => 'cash', 'payer_ref' => "RCPT-CONC-$i", 'received_on' => '2027-09-01'], true);
     $concPayments[] = qv('SELECT id FROM payments WHERE payer_ref=?', ["RCPT-CONC-$i"]);
 }
 // Snapshot the finance session so each worker is an authenticated finance actor.
@@ -593,7 +604,7 @@ $totalInvoiced = qv('SELECT COALESCE(sum(original_amount),0) FROM obligations WH
 $totalAllocatedToObligations = qv('SELECT COALESCE(sum(pa.amount),0) FROM payment_allocations pa JOIN obligations o ON o.id=pa.obligation_id WHERE o.student_id=?', [$studentId]);
 $studentBalanceDue = bcsub($totalInvoiced, $totalAllocatedToObligations, 2);
 // Application-reported balance via the finance console listing (read the obligations the page serves)
-$api = $finance->get('/api/finance/obligations');
+$api = $finance->get('/api/v1/finance/obligations');
 $apiObligations = $api['json']['obligations'] ?? [];
 $apiInvoiced = '0.00';
 foreach ($apiObligations as $ob) {

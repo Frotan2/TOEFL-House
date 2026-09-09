@@ -12,6 +12,7 @@ use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\Organization;
 use App\Modules\Outbox\Domain\EventConsumer;
 use App\Modules\Outbox\Models\DomainEvent;
+use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 
 /**
@@ -43,42 +44,42 @@ final class NotificationProjectionConsumer implements EventConsumer
         $sourceType = trim((string) ($intent['source_type'] ?? $event->aggregate_type));
         $sourceId = trim((string) ($intent['source_id'] ?? $event->aggregate_id));
         if ($recipient === '' || $title === '' || $sourceType === '' || $sourceId === '') {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_intent_invalid', 'a notification requires recipient, title, and source identity');
+            throw BusinessRejection::forCode('communication.notification_intent_invalid', 'a notification requires recipient, title, and source identity');
         }
         if ($sourceType !== trim((string) $event->aggregate_type)
             || $sourceId !== trim((string) $event->aggregate_id)) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_source_mismatch', 'a notification source must match its domain event aggregate');
+            throw BusinessRejection::forCode('communication.notification_source_mismatch', 'a notification source must match its domain event aggregate');
         }
         $intentBranch = trim((string) ($intent['branch_id'] ?? ''));
         $eventBranch = trim((string) ($event->context['branch_id'] ?? ''));
         $eventOrganization = trim((string) ($event->context['organization_id'] ?? ''));
         $scopeType = trim((string) ($event->context['scope_type'] ?? 'unknown'));
         if (! $this->recipientIsActive($recipient)) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_recipient_unknown', 'a notification requires an active recipient identity');
+            throw BusinessRejection::forCode('communication.notification_recipient_unknown', 'a notification requires an active recipient identity');
         }
         if (($intentBranch !== '' && $eventBranch === '') || ($intentBranch !== '' && $intentBranch !== $eventBranch)) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_branch_invalid', 'a notification branch must match the event envelope provenance');
+            throw BusinessRejection::forCode('communication.notification_branch_invalid', 'a notification branch must match the event envelope provenance');
         }
         if (! in_array($scopeType, ['branch', 'organization'], true)) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_scope_unknown', 'an event without organization or branch provenance cannot create a notification');
+            throw BusinessRejection::forCode('communication.notification_scope_unknown', 'an event without organization or branch provenance cannot create a notification');
         }
         if (($scopeType === 'organization' && ($eventBranch !== '' || $intentBranch !== '' || $eventOrganization === ''))
             || ($scopeType === 'branch' && ($eventBranch === '' || $eventOrganization === ''))) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_branch_invalid', 'notification scope must match the event envelope provenance');
+            throw BusinessRejection::forCode('communication.notification_branch_invalid', 'notification scope must match the event envelope provenance');
         }
         if (! Organization::query()->whereKey($eventOrganization)->where('lifecycle_state', 'active')->exists()) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_organization_unknown', 'a notification requires an existing organization provenance');
+            throw BusinessRejection::forCode('communication.notification_organization_unknown', 'a notification requires an existing organization provenance');
         }
         if ($eventBranch !== '' && ! $this->branchBelongsToOrganization($eventBranch, $eventOrganization)) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_scope_invalid', 'branch and organization notification provenance must agree');
+            throw BusinessRejection::forCode('communication.notification_scope_invalid', 'branch and organization notification provenance must agree');
         }
         $branchId = $eventBranch !== '' ? $eventBranch : ($intentBranch !== '' ? $intentBranch : null);
         if ($branchId !== null && ! Branch::query()->whereKey($branchId)->where('lifecycle_state', 'active')->exists()) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_branch_unknown', 'a notification requires an existing branch provenance');
+            throw BusinessRejection::forCode('communication.notification_branch_unknown', 'a notification requires an existing branch provenance');
         }
         $severity = $intent['severity'] ?? 'info';
         if (! in_array($severity, ['info', 'warning', 'critical'], true)) {
-            throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_severity_invalid', 'a notification severity is not governed');
+            throw BusinessRejection::forCode('communication.notification_severity_invalid', 'a notification severity is not governed');
         }
         $dedupe = trim((string) ($intent['dedupe_key'] ?? $event->id.'|'.$recipient));
 

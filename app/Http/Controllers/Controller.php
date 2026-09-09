@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Modules\Audit\AttemptedOperation;
-use App\Support\Authorization\AccessDecision;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
+use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;

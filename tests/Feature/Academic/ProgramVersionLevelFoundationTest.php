@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature\Academic;
 
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
+use App\Modules\Academic\Commands\MaintainClass;
+use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Models\ProgramVersionLevel;
-use App\Modules\Organization\Models\Branch;
 use App\Support\Errors\BusinessRejection;
-use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +19,10 @@ use Tests\TestCase;
 /**
  * WP-2 F2 (WP2-DEC-02): ProgramVersionLevel is the authoritative level/version
  * model — ordered levels unique per immutable program version, with optional
- * CEFR. A class's level must belong to the class's own program version
- * (schema-enforced), and pre-existing classes keep an unassigned (NULL) level.
+ * CEFR. A class's level must belong to the class's own program version: the
+ * defineClass command enforces it (academic.class_level_version_mismatch) and
+ * the classes_level_version_matches trigger refuses any direct cross-version
+ * write the same way.
  */
 final class ProgramVersionLevelFoundationTest extends TestCase
 {
@@ -89,6 +91,12 @@ final class ProgramVersionLevelFoundationTest extends TestCase
         $officer = $this->academicOfficer();
         $level = $structure->defineLevel($officer, $this->versionId, 'beginner', 1, 'Beginner', 'A1', 'f2-lvl-e');
         $periodId = $structure->definePeriod($officer, 'F2 Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'f2-period')['period_id'];
+        $period = AcademicPeriod::query()->findOrFail($periodId);
+        $structure->transitionPeriod($officer, $period, 'published', 'f2-period-pub');
+        // Classes are born from an open offering of their level; open the
+        // delivery surface for level 'beginner' before defining any class.
+        $structure->declareBranchAvailability($officer, $this->bootstrapBranchId(), $level['level_id'], $periodId, 'f2-avail');
+        $structure->openOffering($officer, $this->bootstrapBranchId(), $level['level_id'], $periodId, 200, 'f2-offering');
 
         // A second version whose levels do not include the first version's level.
         $version2 = $structure->publishVersion(
@@ -98,36 +106,38 @@ final class ProgramVersionLevelFoundationTest extends TestCase
             'f2-ver-2',
         )['version_id'];
 
-        $this->insertClass($this->versionId, $periodId);
+        // A class of version 1 bound to its own level is valid.
+        $class = app(MaintainClass::class)->defineClass($officer, $this->versionId, $periodId, 20, 'f2-class-1', $level['level_id'], $this->bootstrapBranchId());
+        $this->assertSame($level['level_id'], DB::table('classes')->where('id', $class['class_id'])->value('program_version_level_id'));
 
-        // Assigning the first version's level to a class of version 1 is valid.
-        DB::table('classes')
-            ->where('program_version_id', $this->versionId)
-            ->update(['program_version_level_id' => $level['level_id']]);
-        $this->assertSame($level['level_id'], DB::table('classes')->where('program_version_id', $this->versionId)->value('program_version_level_id'));
-
-        // Assigning a version-1 level to a class of version 2 is rejected.
-        $this->insertClass($version2, $periodId);
+        // A class of version 2 cannot reference version 1's level: the define
+        // command refuses the mismatch before any row is written.
         try {
-            DB::table('classes')->where('program_version_id', $version2)
+            app(MaintainClass::class)->defineClass($officer, $version2, $periodId, 20, 'f2-class-2', $level['level_id'], $this->bootstrapBranchId());
+            $this->fail('A class level from a different program version must be rejected.');
+        } catch (BusinessRejection $e) {
+            $this->assertSame('academic.class_level_version_mismatch', $e->errorCode());
+        }
+
+        // And the schema still refuses any direct rewrite of an
+        // offering-established class level: provenance is immutable, so a
+        // cross-version level write cannot bypass the domain command.
+        $upper = $structure->defineLevel($officer, $version2, 'upper', 1, 'Upper', 'B1', 'f2-lvl-v2');
+        $structure->declareBranchAvailability($officer, $this->bootstrapBranchId(), $upper['level_id'], $periodId, 'f2-avail-v2');
+        $structure->openOffering($officer, $this->bootstrapBranchId(), $upper['level_id'], $periodId, 200, 'f2-offering-v2');
+        $class2 = app(MaintainClass::class)->defineClass($officer, $version2, $periodId, 20, 'f2-class-3', $upper['level_id'], $this->bootstrapBranchId());
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
+        try {
+            DB::table('classes')->where('id', $class2['class_id'])
                 ->update(['program_version_level_id' => $level['level_id']]);
             $this->fail('A class level from a different program version must be rejected.');
+            DB::rollBack();
         } catch (QueryException $e) {
-            $this->assertStringContainsString('does not belong to the class program version', $e->getMessage());
+            DB::rollBack();
+            $this->assertStringContainsString('immutable', $e->getMessage());
         }
-    }
-
-    private function insertClass(string $programVersionId, string $periodId): void
-    {
-        DB::table('classes')->insert([
-            'id' => RandomIdentifier::new(),
-            'program_version_id' => $programVersionId,
-            'period_id' => $periodId,
-            'branch_id' => Branch::query()->value('id'),
-            'capacity' => 20,
-            'lifecycle_state' => 'planned',
-            'created_at' => now()->toDateTimeString(),
-            'updated_at' => now()->toDateTimeString(),
-        ]);
     }
 }

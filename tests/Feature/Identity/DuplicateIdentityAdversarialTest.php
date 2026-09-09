@@ -12,6 +12,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\RegistersPeople;
 use Tests\TestCase;
 
 /**
@@ -21,18 +22,11 @@ use Tests\TestCase;
 final class DuplicateIdentityAdversarialTest extends TestCase
 {
     use BuildsActors;
+    use RegistersPeople;
 
     private function newPerson(string $legalName): Person
     {
-        /** @var Person $person */
-        $person = Person::query()->create([
-            'id' => RandomIdentifier::new(),
-            'legal_name' => $legalName,
-            'date_of_birth' => '1990-01-01',
-            'verification_state' => Person::VERIFICATION_UNVERIFIED,
-        ]);
-
-        return $person;
+        return $this->newUnverifiedPerson($legalName, '1990-01-01', 'dup');
     }
 
     public function test_a_second_verified_person_with_the_same_identity_key_is_rejected(): void

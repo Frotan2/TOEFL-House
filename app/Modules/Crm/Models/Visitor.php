@@ -6,6 +6,7 @@ namespace App\Modules\Crm\Models;
 
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -41,7 +42,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $contact_key
  * @property string $created_by
  * @property string|null $updated_by
- * @property \Carbon\CarbonImmutable|null $captured_at
+ * @property CarbonImmutable|null $captured_at
  * @property string|null $capture_time_basis
  */
 final class Visitor extends Model

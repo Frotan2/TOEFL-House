@@ -15,6 +15,7 @@ use App\Modules\Finance\Models\Obligation;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -166,7 +167,7 @@ final class MaintainDiscount
         return $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
     }
 
-    private function require(Actor $actor, string $capability, \App\Support\Authorization\StructureScope $scope): void
+    private function require(Actor $actor, string $capability, StructureScope $scope): void
     {
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

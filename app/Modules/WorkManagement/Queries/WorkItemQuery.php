@@ -72,6 +72,7 @@ final class WorkItemQuery
                         $queue->whereNull('assigned_to')->where(function ($membership) use ($organizationQueues, $branchQueues): void {
                             if ($organizationQueues === [] && $branchQueues === []) {
                                 $membership->whereRaw('1 = 0');
+
                                 return;
                             }
                             foreach ($organizationQueues as $scope) {
@@ -136,8 +137,7 @@ final class WorkItemQuery
     }
 
     /**
-     * @param list<string> $branchIds
-     *
+     * @param  list<string>  $branchIds
      * @return array<string, string>
      */
     private function branchOrganizations(array $branchIds): array
@@ -178,8 +178,7 @@ final class WorkItemQuery
     }
 
     /**
-     * @param list<string> $candidateBranchIds
-     *
+     * @param  list<string>  $candidateBranchIds
      * @return list<string>
      */
     private function authorizedBranches(Actor $actor, array $candidateBranchIds): array

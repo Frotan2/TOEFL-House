@@ -9,6 +9,7 @@ use App\Modules\Integrations\Domain\JobCatalog;
 use App\Modules\Integrations\Domain\SignatureVerifier;
 use App\Modules\Integrations\Domain\TransportResult;
 use App\Modules\Integrations\Jobs\IntegrationRetrySweepJob;
+use App\Modules\Outbox\Jobs\DomainEventRelayJob;
 use App\Support\Errors\BusinessRejection;
 use Tests\TestCase;
 
@@ -16,8 +17,9 @@ final class IntegrationDomainTest extends TestCase
 {
     public function test_job_catalog_is_closed(): void
     {
-        $this->assertSame(['integrations.retry_sweep'], JobCatalog::keys());
+        $this->assertSame(['integrations.retry_sweep', 'outbox.relay'], JobCatalog::keys());
         $this->assertSame(IntegrationRetrySweepJob::class, JobCatalog::handlerFor('integrations.retry_sweep'));
+        $this->assertSame(DomainEventRelayJob::class, JobCatalog::handlerFor('outbox.relay'));
 
         try {
             JobCatalog::handlerFor('integrations.invented');

@@ -8,6 +8,7 @@ use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Students\Commands\TransferStudentHomeBranch;
 use App\Modules\Students\Models\Student;
 use App\Support\Identifiers\RandomIdentifier;
 
@@ -25,7 +26,7 @@ trait BuildsStudents
      * @param  array<string, string>  $ids  deterministic ids: ['initiator','reviewer','approver','applicant','student']
      * @return array{student: Student, person: Person}
      */
-    private function makeStudent(array $ids = []): array
+    protected function makeStudent(array $ids = []): array
     {
         $initiatorId = $ids['initiator'] ?? 'adm-init-'.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8);
         $reviewerId = $ids['reviewer'] ?? 'adm-rev-'.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8);
@@ -45,13 +46,19 @@ trait BuildsStudents
             'identity_evidence_ref' => 'evidence/fixture/'.$applicantPersonId,
             'verified_by' => 'fixture-verifier',
             'verified_at' => now()->toDateTimeString(),
+            // A verified person is immutable, so provenance is set on insert.
+            'home_branch_id' => $this->bootstrapBranchId(),
         ]);
 
+        // Registration requires an explicit operational branch; the domain
+        // deliberately refuses to infer one.
         app(RegisterApplicant::class)->register(
             $this->grantedActor($initiatorId, []),
             $applicantPersonId,
             'TOEFL Intensive',
             'idem-print-'.RandomIdentifier::new(),
+            null,
+            $this->bootstrapBranchId(),
         );
         $applicant = Applicant::query()->where('person_id', $applicantPersonId)->firstOrFail();
 
@@ -75,5 +82,25 @@ trait BuildsStudents
         $student = Student::query()->where('person_id', $applicantPersonId)->firstOrFail();
 
         return ['student' => $student, 'person' => $person];
+    }
+
+    /**
+     * Moves a student's home branch through the production command.
+     *
+     * students_admission_authority_guard requires the newest matching
+     * branch-transfer fact, so writing `current_home_branch_id` directly is
+     * refused — correctly, because a home branch is provenance, not a column.
+     */
+    protected function transferStudentHome(string $studentId, string $targetBranchId, string $key): void
+    {
+        $student = Student::query()->findOrFail($studentId);
+        if (trim((string) $student->current_home_branch_id) === trim($targetBranchId)) {
+            return;
+        }
+
+        $actor = $this->grantedActor($key.'-tr', ['students.transfer']);
+
+        app(TransferStudentHomeBranch::class)
+            ->transfer($actor, $student, $targetBranchId, 'fixture branch transfer', $key.'-trk');
     }
 }

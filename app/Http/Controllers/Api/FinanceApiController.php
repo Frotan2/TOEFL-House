@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Finance\Commands\AllocateFunds;
 use App\Modules\Finance\Commands\AllocatePayment;
 use App\Modules\Finance\Commands\MaintainCashDrawer;
@@ -25,29 +26,30 @@ use App\Modules\Finance\Commands\RecordPayment;
 use App\Modules\Finance\Commands\RecordReconciliation;
 use App\Modules\Finance\Commands\RefundPayment;
 use App\Modules\Finance\Commands\RevokeFinancialCoverage;
-use App\Modules\Finance\Queries\GeneralLedgerQuery;
-use App\Modules\Finance\Models\FinancialCorrection;
-use App\Modules\Finance\Models\Account;
 use App\Modules\Finance\Models\CashDrawer;
 use App\Modules\Finance\Models\Discount;
 use App\Modules\Finance\Models\EnrollmentInstallmentPlan;
 use App\Modules\Finance\Models\Expense;
-use App\Modules\Finance\Models\FinancialCredit;
+use App\Modules\Finance\Models\FinancialCorrection;
 use App\Modules\Finance\Models\FinancialCoverageRevocation;
+use App\Modules\Finance\Models\FinancialCredit;
 use App\Modules\Finance\Models\FinancialGateException;
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Finance\Models\FundAllocation;
 use App\Modules\Finance\Models\FundingSource;
 use App\Modules\Finance\Models\Journal;
 use App\Modules\Finance\Models\Obligation;
+use App\Modules\Finance\Models\ObligationLine;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PaymentAllocation;
 use App\Modules\Finance\Models\Reconciliation;
 use App\Modules\Finance\Models\Refund;
 use App\Modules\Finance\Models\ScholarshipAward;
+use App\Modules\Finance\Queries\GeneralLedgerQuery;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Payroll\Models\SettlementProposal;
+use App\Support\Errors\AuthorizationDenied;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -402,7 +404,7 @@ final class FinanceApiController extends Controller
         ]);
         $result = app(AllocateFunds::class)->allocate(
             $this->actor(), FundingSource::query()->findOrFail($fundId),
-            \App\Modules\Finance\Models\ObligationLine::query()->findOrFail((string) $input['obligation_line_id']),
+            ObligationLine::query()->findOrFail((string) $input['obligation_line_id']),
             $input['amount'], $input['reason'], $this->idempotencyKey('finance.fund.allocate'),
         );
 
@@ -686,8 +688,8 @@ final class FinanceApiController extends Controller
     private function requireOrganizationInScope(string $capability, string $organizationId, string $operation, string $targetType): void
     {
         if (! in_array($organizationId, $this->authorizedOrganizations($capability), true)) {
-            app(\App\Modules\Audit\AttemptedOperation::class)->deniedByActor(
-                \App\Support\Errors\AuthorizationDenied::forCode('api.organization_read_denied', 'this organization is outside your authorized finance scope'),
+            app(AttemptedOperation::class)->deniedByActor(
+                AuthorizationDenied::forCode('api.organization_read_denied', 'this organization is outside your authorized finance scope'),
                 $this->actor(), $operation, $targetType, $organizationId,
             );
         }

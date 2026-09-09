@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Launcher;
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -1020,9 +1019,10 @@ final class WindowsLauncherContractTest extends TestCase
 
     private function tailscaleStepBlock(): string
     {
-        // The Step 10 Tailscale section, from its section banner up to (but not
+        // The Step 11 Tailscale section (renumbered from 10 when the frontend
+        // build became Step 4), from its section banner up to (but not
         // including) the "Subroutines" divider that begins :fail et al.
-        $startMarker = 'echo [10/10]';
+        $startMarker = 'echo [11/11]';
         $endMarker = 'REM ===========================================================================';
         $start = strpos($this->bat, $startMarker);
         if ($start === false) {
@@ -1081,8 +1081,9 @@ final class WindowsLauncherContractTest extends TestCase
             'TAR must be the Windows built-in %SystemRoot%\\System32\\tar.exe (bsdtar), not a PATH-resolved tar.',
         );
 
-        // Every archive extraction must invoke the quoted built-in tar.
-        $this->assertSame(2, preg_match_all('/"%TAR%"\s+-xf/', $this->bat), 'both the PHP and PostgreSQL archives must be extracted with "%TAR%" -xf.');
+        // Every archive extraction must invoke the quoted built-in tar
+        // (PHP, PostgreSQL, and the build-only Node runtime).
+        $this->assertSame(3, preg_match_all('/"%TAR%"\s+-xf/', $this->bat), 'the PHP, PostgreSQL and Node archives must all be extracted with "%TAR%" -xf.');
 
         // No bare, PATH-resolved "tar" may remain: that is the GNU tar that
         // fails with "Cannot connect to C: resolve failed" on a drive-letter path.
@@ -1148,49 +1149,69 @@ final class WindowsLauncherContractTest extends TestCase
     }
 
     /**
-     * Optional live proof that the archive URL resolves for the pinned patch.
-     * Skipped when the runner has no route to the PHP mirror, so it never
-     * breaks offline CI; it asserts 200 where the network is available.
+     * Optional live proof that the pinned PHP build is actually fetchable.
+     *
+     * This mirrors the launcher's real download contract EXACTLY: :fetch_file is
+     * given the current-release URL as the primary source and the permanent
+     * /archives/ URL as the fallback, and it succeeds if EITHER one serves the
+     * zip (`call :fetch_try "%FF_URL1%"` then, `if errorlevel 1`, "%FF_URL2%").
+     * So the faithful guarantee to assert is "the pinned build resolves from at
+     * least one tier", NOT "the archive tier returns exactly 200 at this instant".
+     *
+     * php.net continuously rotates which tier holds a given patch (today it even
+     * serves the CURRENT 8.2 patch from /archives/), so pinning the assertion to
+     * one specific tier returning 200 is flaky by construction - it can fail on a
+     * perfectly bootable launcher merely because the mirror moved the file between
+     * /releases/ and /archives/. Asserting the union matches what the .bat does.
+     *
+     * Skipped when the runner has no route to the PHP mirror at all, so it never
+     * breaks offline/air-gapped CI; where the network is available it proves the
+     * launcher's fallback chain can obtain the pinned build.
      */
-    #[DataProvider('phpUrlProvider')]
-    public function test_php_urls_resolve_over_http(string $urlVar, bool $isFallback): void
+    public function test_php_urls_resolve_over_http(): void
     {
-        $url = str_replace(
-            '%PHP_ZIP%',
-            str_replace('%PHP_VERSION%', $this->vars['PHP_VERSION'], $this->vars['PHP_ZIP']),
-            $this->vars[$urlVar],
-        );
-
-        $ch = curl_init($url);
-        if ($ch === false) {
+        if (! function_exists('curl_init')) {
             $this->markTestSkipped('curl extension unavailable; live URL check skipped.');
         }
-        curl_setopt_array($ch, [CURLOPT_NOBODY => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 12, CURLOPT_SSL_VERIFYPEER => true]);
-        curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $errno = curl_errno($ch);
-        curl_close($ch);
 
-        if ($errno !== 0 || $status === 0) {
-            $this->markTestSkipped("no route to the PHP mirror from this runner (errno=$errno); live check skipped.");
-        }
-
-        // The permanent archive must always serve the pinned patch; this is the URL
-        // that resolves the reported 404. The current-release URL may be 200 (new
-        // patch) or 404 (moved to archive) - the launcher handles both via fallback.
-        if ($isFallback) {
-            $this->assertSame(200, $status, "permanent archive URL must serve the pinned PHP build: $url");
-        } else {
-            $this->assertContains($status, [200, 404], "releases URL expected 200 or 404 (fallback covers 404): $url");
-        }
-    }
-
-    /** @return array<string, array{0:string, 1:bool}> */
-    public static function phpUrlProvider(): array
-    {
-        return [
-            'releases (current)' => ['PHP_ZIP_URL', false],
-            'archives (permanent fallback)' => ['PHP_ARCHIVE_ZIP_URL', true],
+        $zip = str_replace('%PHP_VERSION%', $this->vars['PHP_VERSION'], $this->vars['PHP_ZIP']);
+        $urls = [
+            'releases' => str_replace('%PHP_ZIP%', $zip, $this->vars['PHP_ZIP_URL']),
+            'archives' => str_replace('%PHP_ZIP%', $zip, $this->vars['PHP_ARCHIVE_ZIP_URL']),
         ];
+
+        $statuses = [];
+        $reachable = false;
+        foreach ($urls as $tier => $url) {
+            $ch = curl_init($url);
+            if ($ch === false) {
+                $this->markTestSkipped('curl could not be initialised; live URL check skipped.');
+            }
+            curl_setopt_array($ch, [CURLOPT_NOBODY => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 12, CURLOPT_SSL_VERIFYPEER => true]);
+            curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $errno = curl_errno($ch);
+            curl_close($ch);
+
+            $statuses[$tier] = ($errno !== 0 || $status === 0) ? "errno=$errno" : (string) $status;
+            if ($errno === 0 && $status !== 0) {
+                $reachable = true;
+            }
+        }
+
+        // No route to the mirror on EITHER host (offline/air-gapped runner): skip,
+        // never fail - the static URL-shape contract is covered by other tests.
+        if (! $reachable) {
+            $this->markTestSkipped('no route to the PHP mirror from this runner ('.json_encode($statuses).'); live check skipped.');
+        }
+
+        // The launcher's releases -> archives fallback boots as long as AT LEAST
+        // ONE tier serves the pinned build. Assert exactly that union.
+        $this->assertContains(
+            '200',
+            array_values($statuses),
+            'the launcher must be able to fetch the pinned PHP build from at least one tier '
+            .'(releases or the permanent archive); mirror responses: '.json_encode($statuses),
+        );
     }
 }

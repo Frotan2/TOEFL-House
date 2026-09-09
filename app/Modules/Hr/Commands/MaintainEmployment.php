@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Hr\Commands;
 
+use App\Modules\Academic\Commands\MaintainTeacherAssignment;
 use App\Modules\Access\Commands\TransitionPositionAssignment;
 use App\Modules\Access\Models\PositionAssignment;
-use App\Modules\Academic\Commands\MaintainTeacherAssignment;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Hr\Domain\EmploymentLifecycle;

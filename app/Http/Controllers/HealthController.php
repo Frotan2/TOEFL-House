@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 /**
  * Production health/readiness probe (The TOEFL House).
@@ -31,7 +33,7 @@ final class HealthController extends Controller
 
         try {
             DB::connection()->select('select 1');
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $checks['database'] = 'error';
             $healthy = false;
         }

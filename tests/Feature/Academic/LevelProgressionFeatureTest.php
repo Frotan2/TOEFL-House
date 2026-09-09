@@ -35,6 +35,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -47,6 +48,7 @@ use Tests\TestCase;
 final class LevelProgressionFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $programVersionId;
@@ -76,7 +78,6 @@ final class LevelProgressionFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority('lp-teacher-1', []);
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('lp-officer');
 
@@ -96,6 +97,9 @@ final class LevelProgressionFeatureTest extends TestCase
             'lifecycle_state' => 'active',
         ])->id;
         $this->attachBranchToBootstrapOrganization($this->branchId);
+        // The teacher must be authorized for the branch its class belongs to,
+        // so the branch has to exist first.
+        $this->buildActiveTeacher('lp-teacher-1', $this->branchId, 'levelpro9fd');
 
         $this->offeringA1 = $this->openOffering($structure, $officer, $this->levelA1, 'lp-off-a1');
         $this->offeringA2 = $this->openOffering($structure, $officer, $this->levelA2, 'lp-off-a2');
@@ -389,7 +393,7 @@ final class LevelProgressionFeatureTest extends TestCase
 
     private function defineActiveClass(MaintainAcademicStructure $structure, Actor $officer, string $key, string $levelId): string
     {
-        $classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, $key, $levelId)['class_id'];
+        $classId = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, $key, $levelId, $this->branchId)['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($classId), 'lp-teacher-1', new CarbonImmutable('2026-09-01'), null, $key.'-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', $key.'-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'active', $key.'-active');
@@ -400,7 +404,7 @@ final class LevelProgressionFeatureTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk($personId.'-clerk'), $personId, 'Program', $personId.'-reg');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk($personId.'-clerk'), $personId, 'Program', $personId.'-reg', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

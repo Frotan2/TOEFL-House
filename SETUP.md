@@ -1,215 +1,373 @@
-# The TOEFL House — Windows One-Click Deployment (SETUP.md)
+# TOEFL House — Setup, Verification & Runtime Readiness
 
-This folder turns a Windows desktop into a private TOEFL House server.
-After a fresh clone, the entire setup is:
+**STATUS: CURRENT CANONICAL — RUNTIME PROCEDURE (synchronized 2026-09-09 with
+the certified state; see `docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md`)**
 
-> **Clone the repository → double-click `START-TOEFL-HOUSE.bat` → the
-> application is ready.**
+This document describes the supported local/Windows deployment path, the
+clean-environment provisioner, and the developer verification commands. It
+deliberately separates repository preparation from runtime evidence.
 
-No PowerShell, no Git commands, no Composer, no PHP, no PostgreSQL and no
-manual database commands are needed at any point. The launcher does
-everything itself and, if anything is ever missing, it **stops and tells
-you exactly what** — it never fails silently.
+## 1. Runtime targets
 
-```
-Windows PC ──► PostgreSQL ──► Laravel ──► localhost ──► Tailscale Serve ──► your Tailnet
-```
+The authoritative specification is
+[`docs/RUNTIME_ENVIRONMENT_LOCK.md`](docs/RUNTIME_ENVIRONMENT_LOCK.md),
+machine-checked by `npm run verify:environment`. Summary:
 
-The application is **private to your Tailnet**. Tailscale **Serve** is the
-mechanism; Tailscale **Funnel is never used** and nothing is exposed to the
-public internet.
+| Component | Locked | Allowed range |
+|---|---|---|
+| PHP | 8.4.14 | `>=8.2 <8.5` (`composer.json` `^8.2`) |
+| Composer | 2.9.2 | `>=2.5 <3.0` |
+| Laravel | 12.67.0 | `^12.67.0` (Laravel 13 is **prohibited**) |
+| PostgreSQL | 18.4 | `>=18.0 <19.0` |
+| Node | 22.22.3 | `>=22.0 <23.0` (`package.json` engines) |
+| npm | 10.9.8 | `>=10.0` |
+| React / Vite / TypeScript | 19.1.1 / 7.3.6 / 5.9.x | per lockfiles |
 
----
+Concrete patch pins used by a deployment artifact (the Windows launcher) are
+deployment implementation details and must remain consistent with the
+dependency lockfiles. **SQLite/pdo_sqlite are deliberately excluded** —
+PostgreSQL is the only supported database.
 
-## Requirements (one-time)
+## 2. Repository facts
 
-| Requirement | Notes |
-|---|---|
-| Windows 10 (1803+) or Windows 11, 64-bit | The launcher verifies this and fails loudly otherwise |
-| Internet connection for the **first** run | Downloads PHP 8.2.27, Composer and PostgreSQL 18.3 (about 400 MB once) into `.runtime\`, plus the Composer packages. Later runs need no downloads |
-| A Tailscale account with the TOEFL House tailnet | Tailscale itself is installed by the launcher if missing; **signing in is the only manual step ever** (see below) |
-| The database port 5432 and app port 8080 free | The launcher tells you if something else owns them |
+The current database migration chain contains exactly **185 migration files**,
+with ordinals running `000001`–`000190`; the numbering gap
+`000175`–`000179` is intentional historical numbering and is not, by itself,
+a defect. The chain replays cleanly to completion on the locked runtime
+(185/185, verified on PostgreSQL 18.4).
 
-Everything the launcher downloads is pinned to exact official URLs
-(see the top of `START-TOEFL-HOUSE.bat`), verified by executing it
-(`php -v`, `composer --version`, `initdb --version`) before use, and cached
-in `.runtime\` — re-runs are instant and deterministic.
+The migration chain has **not** been replaced by a guessed schema baseline.
+PostgreSQL baseline consolidation remains governed by
+`docs/DATABASE_SCHEMA_CONSOLIDATION.md` and
+`docs/decisions/2026-09-07-database-baseline-readiness.md`, and is
+runtime-gated behind a schema freeze.
 
-## Startup — the whole procedure
+The **standard finance chart is seeded by migration `000186`**, so any
+`migrate` run lands with a complete chart. `StandardFinanceChartSeeder`
+exists as the standalone re-seed equivalent for databases that need it
+without a migration replay.
 
-1. **Clone the repository** (once) — e.g. with GitHub Desktop:
-   *Clone → repository `alfrotan-glitch/TOEFL-House` → folder `TOEFL-House`.*
-2. **Double-click `START-TOEFL-HOUSE.bat`.**
-3. **First run only:** when asked, enter the owner's full name, date of
-   birth (`YYYY-MM-DD`), a login username and a password of at least 12
-   characters (twice). This creates the owner account — the one person who
-   signs in first. Every later account is created inside the application,
-   through the normal access workflow; you are never prompted again.
-4. **First run only (Tailscale):** if Tailscale was not already signed in on
-   this machine, the launcher installs it (a Windows security prompt may
-   ask for approval — click **Yes**), then asks you to open
-   `https://login.tailscale.com`, sign in, and approve this machine on your
-   phone. Then **double-click `START-TOEFL-HOUSE.bat` once more** — the app
-   is already running; that run finishes the Tailscale configuration.
-5. Done. The window prints the addresses:
-   * **This computer:** `http://127.0.0.1:8080`
-   * **Other TOEFL House devices:** the printed `https://…ts.net` Tailnet
-     address (same address on every run).
+Retired database structures such as `compensation_components` and
+`work_bases` must not be reintroduced by application code or a future
+baseline.
 
-Sign in with the owner account. You now have the complete certified
-application: every module, every workflow, printing, backups and reports.
+## 3. Windows one-click deployment
 
-Re-running `START-TOEFL-HOUSE.bat` at any later time is safe and idempotent:
-it re-verifies everything, starts whatever is stopped, and re-prints the
-addresses.
+The supported Windows convenience path is:
 
-## Recovery (interruptions, reboots, failures)
+`START-TOEFL-HOUSE.bat` → local PostgreSQL → Laravel → local HTTP on
+`http://127.0.0.1:8080` → optional Tailscale Serve
 
-* **Reboot / closing the window at any point:** everything (web server,
-  database) starts again the next time you double-click
-  `START-TOEFL-HOUSE.bat`. Tailscale keeps running after a reboot and,
-  for Serve configured with `--bg`, resumes the mapping automatically
-  (documented Tailscale behavior); re-running the launcher is still the
-  normal start and is safe either way.
-* **Interrupted first run (any step):** re-run the launcher. Each step is
-  guarded (already-downloaded runtimes are reused, an existing cluster is
-  started, existing migrations are skipped). If the interruption happened
-  mid-migration, the launcher repairs the partial state automatically on a
-  fresh deployment (see the step list above); it never touches a database
-  that already contains accounts.
-* **Corrupted or missing runtimes:** delete the affected folder under
-  `.runtime\` (the launcher's failure messages name the exact folder) and
-  re-run.
-* **Data disaster:** `RESTORE-TOEFL-HOUSE.bat` with your latest backup —
-  it verifies the dump before changing anything and requires you to type
-  `RESTORE`.
-* **Everything fails:** every failure message names the exact step, the
-  exact cause, and the exact next action. If a message still does not get
-  you moving, the message itself is the thing to report to the TOEFL House
-  maintainer — it contains the diagnostic.
+The launcher prepares its pinned runtime artifacts under `.runtime\` (PHP,
+Composer, Node — build-only — and PostgreSQL), installs Composer
+dependencies from the committed lockfile, **builds the employee console**
+(pinned Node 22.22.3, `npm ci --engine-strict` from the committed
+`package-lock.json`, then `vite build`; production `/health` refuses to
+report healthy without the built manifest), creates a local PostgreSQL
+cluster, runs the current migration chain, performs the guarded first-run
+bootstrap (prompting for the owner account's name, birthdate, username and
+password on first run), starts Laravel and checks `/health`.
 
-## Stop
+The launcher deliberately serves with the PHP built-in server directly
+(not `artisan serve`) — the same rule as every other environment, see
+`docs/RUNTIME_ENVIRONMENT_LOCK.md` §6.
 
-Double-click **`STOP-TOEFL-HOUSE.bat`**. It stops the web server, stops
-PostgreSQL, and removes the Tailscale Serve mapping (so the app is no
-longer reachable on the Tailnet while stopped). No data is deleted.
-
-## Backup
-
-Double-click **`BACKUP-TOEFL-HOUSE.bat`** (at least once a day, and after
-anything important). It creates a verified backup in `backup\` using the
-same protocol as the production tooling (`deploy/backup.sh`): PostgreSQL
-custom format, compressed, `--no-owner --no-privileges`, integrity-verified
-with `pg_restore --list`, keeping the 14 most recent dumps. The `.dump`
-files are portable: they can be restored on any platform, including the
-Linux production tooling (`deploy/restore.sh`).
-
-## Restore
-
-Double-click **`RESTORE-TOEFL-HOUSE.bat`** (restores the most recent backup).
-It verifies the dump **before** touching anything, then asks you to type
-`RESTORE` — anything else refuses with no change. The live database is
-overwritten. After restoring, double-click `START-TOEFL-HOUSE.bat` again.
-(`RESTORE-TOEFL-HOUSE.bat "path\to\specific.dump"` restores a specific file
-when run from a folder window.)
-
-## How the launcher works (for the curious)
-
-`START-TOEFL-HOUSE.bat`, in order, failing loudly at any step:
-
-1. Verify Windows + built-in `curl.exe`.
-2. Prepare `.runtime\php` (official PHP 8.2.27 zip + a minimal controlled
-   `php.ini`), `.runtime\composer.phar` (official Composer),
-   `.runtime\pgsql` (official PostgreSQL 18.3 zip) — each verified by
-   execution.
-3. `composer install` (production, `--no-dev`, lock file authoritative).
-4. Create `.env` from the production template `.env.example`
-   (`APP_ENV=production`, `APP_DEBUG=false`) with desktop overrides
-   (local database, `SESSION_SECURE_COOKIE=false` because the local console
-   is plain HTTP while the Tailnet side is HTTPS), then `php artisan
-   key:generate`.
-5. `initdb` a local-only cluster (trust auth, bound to `127.0.0.1`) and
-   start PostgreSQL.
-6. Create `toefl_house` and run `php artisan migrate --force` (118
-   migrations, from zero). If a previous run was interrupted mid-migration,
-   the launcher detects the partial state and recovers automatically: a
-   fresh deployment with no accounts is rebuilt from scratch (provably safe
-   — `user_accounts` is the root of every record in this system); a
-   deployment that already has accounts is left untouched and pointed at
-   `RESTORE-TOEFL-HOUSE.bat`.
-7. **First run only:** `db:seed --class=FirstRunBootstrapSeeder` — a
-   guard-protected bootstrap that runs *only while zero accounts exist*:
-   it writes the authoritative organization, the Owner role with the
-   complete 90-capability set, the position/assignment and the owner
-   account. On any live system it is a no-op.
-8. Start `php artisan serve` on `127.0.0.1:8080` in a minimized window.
-9. Poll `/health` until it answers 200.
-10. Install Tailscale if missing, `tailscale serve --bg 8080` (Serve, never
-    Funnel), and print the private `https://…ts.net` address. If the
-    background configuration fails once — which on a fresh tailnet means
-    the one-time HTTPS-certificates setup is still pending — the launcher
-    opens a Tailscale window that completes it (follow the link there if
-    one appears), you press any key, and it retries automatically.
-
-## Security model
-
-* **PostgreSQL** listens on `127.0.0.1` only (local trust auth) — it is not
-  reachable from the network at all.
-* **Laravel** listens on `127.0.0.1:8080` only. The only path to it from
-  other devices is the Tailscale Serve proxy, i.e. only for authorized
-  Tailnet members, over HTTPS, with the Tailnet's per-device ACLs.
-* **Funnel is never configured.** The launcher does not invoke it and there
-  is no route to it.
-* **No secrets in the repository.** `.env` (with the generated `APP_KEY`
-  and local database settings), `.runtime\` (runtimes + database cluster)
-  and `backup\` are all git-ignored. The owner password exists only as a
-  bcrypt hash in the local database.
-* The application itself runs with the same production hardening as the
-  certified deployment: `APP_ENV=production`, `APP_DEBUG=false`, login
-  rate limiting, CSRF protection, capability-based authorization, and the
-  append-only, schema-enforced audit trail.
-
-## Files
+The repository also includes:
 
 | File | Purpose |
 |---|---|
-| `START-TOEFL-HOUSE.bat` | One-click setup + start |
-| `STOP-TOEFL-HOUSE.bat` | Clean shutdown |
-| `BACKUP-TOEFL-HOUSE.bat` | Verified daily backup into `backup\` |
-| `RESTORE-TOEFL-HOUSE.bat` | Confirmed disaster-recovery restore |
-| `SETUP.md` | This document |
-| `database/seeders/FirstRunBootstrapSeeder.php` | First-run owner bootstrap (guarded no-op afterwards) |
-| `tests/Feature/Deployment/WindowsOneClickDeploymentContractTest.php` | Permanent guard that this deployment contract (files, no secrets, no Funnel, protocol parity, complete capability set, working bootstrap) is never broken |
+| `START-TOEFL-HOUSE.bat` | Windows local deployment/startup |
+| `STOP-TOEFL-HOUSE.bat` | Windows shutdown |
+| `BACKUP-TOEFL-HOUSE.bat` | Verified PostgreSQL backup |
+| `RESTORE-TOEFL-HOUSE.bat` | Confirmed PostgreSQL restore |
+| `DIAG-PHP-CRASH.bat` | Read-only Windows PHP native-crash diagnostic utility |
 
-## What is verified here, and what is not (honest status)
+`DIAG-PHP-CRASH.bat` is an operational diagnostic, not an application runtime
+dependency. It is retained because it has a defined troubleshooting purpose
+and does not mutate the database or reinstall runtime components.
 
-**Verified in the development environment (this repository's gate set):**
-the complete existing gate set (full test suite, static analysis, code
-style) is green with the deployment files in place; the first-run bootstrap
-seeder is exercised by permanent tests (fresh database → owner account
-created → real login succeeds → re-run is a no-op); the deployment files are
-guarded by the permanent contract test above (presence, no secrets, Serve
-not Funnel, backup/restore protocol parity with the production tooling, and
-the owner capability list equal to every capability defined in the source).
+## 4. Manual developer bootstrap (Linux / clean environment)
 
-**UNVERIFIED — marked, not claimed:**
-* **End-to-end execution of the `.bat` files on an actual Windows
-  machine** (the development environment for this repository is Linux; the
-  batch files follow documented Windows behavior — built-in `curl.exe`,
-  `tar`, `netstat`, `taskkill`, `msiexec` — and are pinned to URLs whose
-  existence was checked against the official archives, but they have not
-  been executed on Windows).
-* **The Tailscale Serve mapping and access from a second authorized
-  device** (no Tailnet exists in the development environment). The
-  command used, `tailscale serve --bg 8080`, and its behavior — tailnet-only
-  exposure, proxying `http://127.0.0.1:8080`, automatic resumption after a
-  reboot, and the one-time HTTPS-certificates setup on a fresh tailnet —
-  were verified against the official Tailscale documentation, but actual
-  access from a second device was not exercised here.
-* **The runtime download URLs over time** (pinned now; if a pinned archive
-  is ever removed from the official site, the launcher fails loudly with
-  the exact URL and a manual-download fallback).
+### Provision the runtime (one command)
 
-On first use on the real Windows machine: run the launcher, and if any step
-reports a failure, the message names the exact step, the exact cause, and
-the exact remedy.
+Environments without a system PHP/PostgreSQL use the self-contained
+provisioner (it builds around the sandbox's allow-listed network channels —
+see `docs/RUNTIME_ENVIRONMENT_LOCK.md` §6 for why):
+
+```bash
+bash scripts/runtime/provision.sh    # PHP 8.4.14 + Composer 2.9.2 + PostgreSQL 18.4 → .runtime/
+source scripts/runtime/env.sh        # put the runtime on PATH
+bash scripts/runtime/pg.sh start     # start the local PostgreSQL server
+bash scripts/runtime/pg.sh createdbs # create dev + test databases
+```
+
+On hosts with suitable system PHP/PostgreSQL, the same `composer`/`npm`/
+`php artisan` commands below apply directly.
+
+### PHP dependencies
+
+```text
+composer install
+```
+
+The committed `composer.lock` is authoritative. Do not regenerate it just to
+change formatting or documentation.
+
+### Frontend dependencies
+
+```text
+npm ci
+```
+
+The committed `package-lock.json` is authoritative. Use `npm ci` (not
+`npm install`) so the lockfile is honored exactly.
+
+### Environment
+
+Copy `.env.example` to `.env` and populate local secrets/configuration.
+Generate the Laravel key with:
+
+```text
+php artisan key:generate
+```
+
+Do not commit `.env`.
+
+### Database
+
+Use PostgreSQL for the application database. The current canonical
+connection is `pgsql`.
+
+After PostgreSQL is available:
+
+```text
+php artisan migrate --force
+```
+
+The standard finance chart is included (migration `000186`).
+
+### First-run bootstrap (fresh installations only)
+
+`FirstRunBootstrapSeeder` provisions the bootstrap organization, the genesis
+campus + branch every branch-mandated intake needs, the owner role/position
+with the complete canonical capability set, and the owner account. It is
+guard-protected: **it is a no-op once any user account exists**, so it can
+never touch a live system. It runs ONLY on an empty installation:
+
+```text
+BOOTSTRAP_OWNER_NAME="First Owner" BOOTSTRAP_OWNER_BIRTHDATE="1980-01-01" \
+BOOTSTRAP_OWNER_USERNAME=owner BOOTSTRAP_OWNER_PASSWORD='<strong-password>' \
+  php artisan db:seed --class=FirstRunBootstrapSeeder --force
+```
+
+These variables are read from the **process environment** (never from
+`.env`); nothing but the bcrypt password hash is persisted. The governance
+basis is `docs/decisions/2026-09-09-first-run-genesis-structure.md`: this is
+the one sanctioned place where structure facts may be written outside the
+four-actor `StructureDecision` chain, and only at genesis.
+
+## 5. Verification commands
+
+### Environment contract
+
+```text
+npm run verify:environment
+```
+
+Asserts the locked runtime (versions + required PHP extensions, 8 checks).
+
+### Database migration audit
+
+```text
+php scripts/database-migration-audit.php
+```
+
+Dependency-free static migration audit: validates migration filename
+numbering and known data-writing exceptions; it does not prove PostgreSQL
+schema equivalence (that is what `migrate:fresh` + the schema census on the
+locked runtime proves).
+
+### Terminology audit
+
+```text
+php scripts/terminology-audit.php
+```
+
+### Backend tests
+
+```text
+php artisan test
+```
+
+### PHP formatting check
+
+```text
+vendor/bin/pint --test
+```
+
+### PHP static analysis
+
+```text
+vendor/bin/phpstan analyse
+```
+
+### Frontend gates
+
+```text
+npm run typecheck
+npm run build
+npm run test:frontend
+```
+
+### Database invariants and concurrency (real PostgreSQL)
+
+```text
+npm run verify:invariants     # PostgreSQL itself rejects invalid states (6/6)
+npm run verify:concurrency    # genuinely simultaneous transactions (4/4)
+```
+
+### End-to-end business journeys (real HTTP, fresh first-boot databases)
+
+The three root-level journey scripts drive the whole system over HTTP the way
+the release protocol's critical-journey gate requires:
+
+| Script | Proves |
+|---|---|
+| `e2e-journey.php` | Student lifecycle: structure, intake, academic chain, enrollment, billing — 77 checks |
+| `e2e-payment-journey.php` | Payment lifecycle: obligations, payments, allocations, refunds — 29 checks |
+| `e2e-payroll-journey.php` | Payroll → Finance liability recognition → exactly-once journal → reconciliation — 27 checks |
+
+Run each against its own freshly migrated database and a served instance
+(`php -S 127.0.0.1:<port> -t public public/index.php` with `PHP_CLI_SERVER_WORKERS` > 1);
+see the header of each script for the exact reset recipe.
+
+### Browser E2E
+
+```text
+npm run verify:browser        # real Chromium; requires CHROMIUM_PATH + NSS on LD_LIBRARY_PATH
+```
+
+### Application health
+
+Once the application is actually running:
+
+```text
+curl http://127.0.0.1:8080/health
+```
+
+The expected HTTP status for a healthy runtime is `200`.
+
+## 6. Runtime verification gates
+
+Runtime claims are evidence-based, on the ladder defined by
+`docs/ai/06-VERIFICATION-EVIDENCE-STANDARD.md`:
+
+- **VERIFIED** — command executed successfully in the required runtime.
+- **STATICALLY VERIFIED** — established from repository inspection or static
+  tooling without runtime execution.
+- **UNVERIFIED** — not executed or not proven.
+- **BLOCKED** — execution is prevented by a missing dependency/environment
+  capability. Environment blockers are reported, never hidden by substituting
+  unsupported runtimes.
+
+The following are release-critical and require real runtime evidence:
+
+- Laravel boot;
+- PostgreSQL migration replay;
+- schema/invariant verification;
+- authorization/scope isolation;
+- concurrency tests on real PostgreSQL;
+- frontend type/build execution;
+- critical business journeys over real HTTP;
+- browser/accessibility/performance verification where applicable;
+- backup/restore drills;
+- production-like deployment/recovery checks.
+
+A documented command is not evidence that the command passed. As of
+2026-09-09, every gate above except the browser E2E and deployment-rehearsal
+items has been **executed on the locked runtime** — see
+`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md` for the per-gate evidence and
+the honest boundary of what was carried forward versus re-executed.
+
+## 7. Environment limitations (current, honest)
+
+The locked runtime is fully reproducible from a clean environment via
+`scripts/runtime/provision.sh` — Composer, PostgreSQL and the complete
+verification chain are all executable. The remaining known limitations are:
+
+- **Browser E2E** (`npm run verify:browser`) requires a Chromium binary
+  (`CHROMIUM_PATH`) plus NSS libraries; sandboxes without Chromium cannot run
+  it. It was executed on 2026-09-08 (Chromium 152) and is carried as prior
+  evidence.
+- **`php artisan serve`** cannot serve the provisioned runtime whenever a
+  `.env` exists (it strips `LD_LIBRARY_PATH`/`PHPRC` from the child
+  `php -S`); serve with the built-in server directly instead. See
+  `docs/RUNTIME_ENVIRONMENT_LOCK.md` §6.
+- Network egress in sandboxed environments is allow-listed; the provisioner
+  is built around exactly those channels. External mirrors (Debian apt,
+  `getcomposer.org`, Packagist) may be unreachable — never substitute an
+  unofficial runtime to work around that.
+
+## 8. Database baseline rule
+
+Do not delete the historical migration chain merely to reduce file count.
+
+Before physical consolidation:
+
+1. provision a disposable PostgreSQL instance;
+2. replay all 185 accepted migrations from zero (demonstrated on the locked
+   runtime: 185/185);
+3. capture an authoritative schema-only PostgreSQL snapshot;
+4. inventory tables, columns, nullability, defaults, keys, checks,
+   exclusions, indexes, sequences, types, extensions, functions, triggers,
+   and views;
+5. verify retired structures are absent;
+6. establish the canonical baseline/snapshot through the approved Laravel
+   mechanism;
+7. replay the baseline independently and compare it with the source snapshot;
+8. reconcile any existing environment without destructive reset or fake
+   migration history.
+
+Until those gates pass, the existing migration chain remains the
+authoritative implementation candidate. The live schema census for the
+current chain is recorded in
+`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md` §4.
+
+## 9. Compatibility boundary
+
+The versioned `/api/v1` surface is the canonical interactive SPA API.
+
+The older employee web POST endpoints remain as transport compatibility
+boundaries where they are still part of the current route contract. They
+delegate to the same domain command/query authorities and do not own business
+truth. Their eventual removal requires an explicit
+consumer-migration/deprecation decision; they must not be deleted solely
+because the React frontend no longer calls them directly.
+
+## 10. Security requirements
+
+Never commit:
+
+- `.env` files containing real secrets;
+- database passwords;
+- API/service tokens;
+- private keys;
+- database dumps or live exports;
+- local runtime data;
+- generated logs.
+
+The repository `.gitignore` excludes the normal environment, dependency,
+build, runtime, and backup artifacts.
+
+## 11. Production-readiness statement
+
+The repository's release authority is
+[`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md):
+TOEFL House is **certified production-ready at commit `96925d3`** on the
+locked runtime, with the exact evidence boundary (what was executed fresh,
+what is carried forward, what remains environment-limited) stated there.
+
+This setup document is a procedure, not a certification. Any future
+lock-version bump or material change requires re-running the full
+verification chain of §5 and updating `docs/RUNTIME_ENVIRONMENT_LOCK.md` and
+`docs/RUNTIME_VERIFICATION_HANDOFF.md` together.

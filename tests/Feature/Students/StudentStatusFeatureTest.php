@@ -31,7 +31,7 @@ final class StudentStatusFeatureTest extends TestCase
     {
         parent::setUp();
         $this->personWithAuthority('stu-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('stu-clerk'), 'stu-person-1', 'Program', 'stu-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('stu-clerk'), 'stu-person-1', 'Program', 'stu-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
@@ -139,7 +139,7 @@ final class StudentStatusFeatureTest extends TestCase
         app(MaintainGuardianRelationship::class)->record($manager, $this->student, 'stu-guardian-2', 'mother', ['view-academic'], 'guard-key-5');
         $this->expectException(BusinessRejection::class);
         $this->expectExceptionMessage('already has an open row');
-        app(MaintainGuardianRelationship::class)->record($manager, $this->student, 'stu-guardian-2', 'mother', ['view-financial'], 'guard-key-6');
+        app(MaintainGuardianRelationship::class)->record($manager, $this->student, 'stu-guardian-2', 'mother', ['view-finance'], 'guard-key-6');
     }
 
     public function test_unprivileged_actor_cannot_transition_status(): void

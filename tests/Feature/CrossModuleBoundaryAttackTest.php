@@ -15,6 +15,8 @@ use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Finance\Commands\MaintainFinancialPeriod;
+use App\Modules\Finance\Commands\PostObligation;
+use App\Modules\Finance\Commands\RecordPayment;
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Hr\Commands\MaintainContractVersion;
 use App\Modules\Hr\Commands\MaintainEmployment;
@@ -30,6 +32,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -44,6 +47,7 @@ use Tests\TestCase;
 final class CrossModuleBoundaryAttackTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'bd-teacher-1';
@@ -63,7 +67,7 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         parent::setUp();
 
         $officer = $this->academicOfficer();
-        $this->personWithAuthority($this->teacherPersonId, []);
+        $this->buildActiveTeacher($this->teacherPersonId, null, 'crossmod515');
 
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'IELTS Preparation', $this->k('prog'));
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'boundary rules', $this->k('ver'));
@@ -71,11 +75,16 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), $this->k('period'));
         $this->periodId = $period['period_id'];
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', $this->k('period-pub'));
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-crossmoduleboundaryattac', 1, 'Level', 'A1', 'canon-crossmoduleboundaryattac-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-crossmoduleboundaryattac-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-crossmoduleboundaryattac-offering');
 
         // Class A holds two seats; class B holds one.
-        $classA = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 2, $this->k('class-a'));
+        $classA = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 2, $this->k('class-a'), null, $this->bootstrapBranchId());
         $this->classIdA = $classA['class_id'];
-        $classB = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 1, $this->k('class-b'));
+        $classB = app(MaintainClass::class)->defineClass($officer, $this->versionId, $this->periodId, 1, $this->k('class-b'), null, $this->bootstrapBranchId());
         $this->classIdB = $classB['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classIdA), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, $this->k('ta-a'));
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classIdB), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, $this->k('ta-b'));
@@ -107,7 +116,7 @@ final class CrossModuleBoundaryAttackTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('bd-clerk-'.$personId), $personId, 'IELTS Preparation', $this->k('reg'));
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('bd-clerk-'.$personId), $personId, 'IELTS Preparation', $this->k('reg'), null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
@@ -223,16 +232,28 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         DB::table('enrollments')->where('id', $seat['enrollment_id'])->update(['lifecycle_state' => 'active']);
     }
 
-    public function test_direct_sql_cannot_activate_a_seat_beyond_class_capacity(): void
+    public function test_direct_sql_cannot_claim_a_seat_beyond_class_capacity(): void
     {
+        // A requested seat already claims capacity (canonical delivery
+        // semantics), so no command can ever place a third live claim on a
+        // capacity-2 class; the schema must enforce the same invariant
+        // against a forged INSERT.
         $classId = $this->activeClass($this->classIdA);
         $this->activeSeat('bd-person-cap-1', $classId);
         $this->activeSeat('bd-person-cap-2', $classId);
         $thirdStudent = $this->newStudent('bd-person-cap-3');
-        $seat = app(MaintainEnrollment::class)->request($this->clerk(), $thirdStudent, $classId, $this->k('cap-req'));
 
         $this->expectException(QueryException::class);
-        DB::table('enrollments')->where('id', $seat['enrollment_id'])->update(['lifecycle_state' => 'active']);
+        DB::table('enrollments')->insert([
+            'id' => 'eeeeeeee-ffff-4000-8000-0000000000c8',
+            'student_id' => $thirdStudent,
+            'class_id' => $classId,
+            'offering_id' => null,
+            'lifecycle_state' => 'requested',
+            'originating_branch_id' => $this->bootstrapBranchId(),
+            'current_home_branch_id' => $this->bootstrapBranchId(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
     }
 
     public function test_direct_sql_cannot_activate_a_seat_in_a_class_that_is_no_longer_active(): void
@@ -319,8 +340,13 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         ]);
     }
 
-    public function test_direct_sql_can_end_an_open_teacher_assignment(): void
+    public function test_direct_sql_cannot_end_an_open_teacher_assignment_outside_the_lifecycle(): void
     {
+        // Ending an assignment is a governed lifecycle transition: the row
+        // must move to an ended/cancelled state, not merely gain an
+        // effective_to date by direct UPDATE (canonical teacher-assignment
+        // authority guard). The positive path is the command, exercised over
+        // the console suites.
         $this->activeClass($this->classIdA);
         /** @var string|null $open */
         $open = DB::table('teacher_assignments')
@@ -330,8 +356,8 @@ final class CrossModuleBoundaryAttackTest extends TestCase
             ->value('id');
         $this->assertNotNull($open);
 
+        $this->expectException(QueryException::class);
         DB::table('teacher_assignments')->where('id', $open)->update(['effective_to' => '2026-09-30']);
-        $this->assertDatabaseHas('teacher_assignments', ['id' => $open, 'effective_to' => '2026-09-30']);
     }
 
     private function closedFinancialPeriod(string $actorId, string $month, string $from, string $to): string
@@ -362,7 +388,6 @@ final class CrossModuleBoundaryAttackTest extends TestCase
         $commands->submit($fm, $version, $this->k('con-sub'));
         $commands->approve($this->grantedActor('bd-gm', ['hr.contract.approve']), $version, $this->k('con-apr'));
 
-        app(MaintainEmployment::class)->hire($manager, Employment::query()->findOrFail($employmentId), '2026-09-01', $this->k('hire'));
         $period = app(MaintainPayrollPeriod::class)->open($this->grantedActor('bd-pay-open', ['payroll.period']), '2026-09', '2026-09-01', '2026-09-30', $this->k('pay-per'));
         $this->payrollPeriodId = $period['period_id'];
 
@@ -427,27 +452,38 @@ final class CrossModuleBoundaryAttackTest extends TestCase
     public function test_direct_sql_cannot_record_a_refund_into_a_closed_period(): void
     {
         $accountant = $this->grantedActor('bd-acc-rfd', ['finance.chart', 'finance.period']);
+        $clerk = $this->grantedActor('bd-pay-rfd', ['finance.payment']);
         $period = app(MaintainFinancialPeriod::class)->open($accountant, '2026-09', '2026-09-01', '2026-09-30', $this->k('fp-rfd'));
         $studentId = $this->newStudent('bd-person-rfd');
-        DB::table('payments')->insert([
-            'id' => 'eeeeeeee-ffff-4000-8000-0000000000c4',
-            'period_id' => $period['period_id'],
-            'student_id' => $studentId,
-            'amount' => '250.00',
-            'method' => 'cash',
-            'payer_ref' => 'bd-ref-rfd',
-            'received_on' => '2026-09-05',
-            'recorded_by' => 'bd-forger-1',
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
+        // The antecedent payment is born through the owning command: it is
+        // journalized with the fact, so the period can lawfully close (the
+        // ledger-completeness gate is itself the boundary being tested).
+        $payment = app(RecordPayment::class)->record(
+            $clerk,
+            FinancialPeriod::query()->findOrFail($period['period_id']),
+            $studentId,
+            '250.00',
+            'cash',
+            'bd-ref-rfd',
+            '2026-09-05',
+            $this->k('pay-rfd'),
+        );
         app(MaintainFinancialPeriod::class)->close($accountant, FinancialPeriod::query()->findOrFail($period['period_id']), $this->k('fp-rfd-close'));
 
+        // The forged refund must first satisfy the refund-lifecycle guard's
+        // provenance mirrors (it compares against the payment's immutable
+        // provenance before any period gate), so carry the payment's own
+        // provenance — the CLOSED-period window guard is the boundary under
+        // attack, not provenance.
+        $provenance = DB::table('payments')->where('id', $payment['payment_id'])->first();
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('requires an open financial period');
         DB::table('refunds')->insert([
             'id' => 'eeeeeeee-ffff-4000-8000-0000000000c5',
-            'payment_id' => 'eeeeeeee-ffff-4000-8000-0000000000c4',
+            'payment_id' => $payment['payment_id'],
             'period_id' => $period['period_id'],
+            'originating_branch_id' => $provenance->originating_branch_id,
+            'current_home_branch_id' => $provenance->current_home_branch_id,
             'amount' => '100.00',
             'reason' => 'forged refund into a closed period',
             'requested_by' => 'bd-forger-1',
@@ -459,25 +495,27 @@ final class CrossModuleBoundaryAttackTest extends TestCase
     public function test_direct_sql_cannot_attach_a_discount_into_a_closed_period(): void
     {
         $accountant = $this->grantedActor('bd-acc-dsc', ['finance.chart', 'finance.period']);
+        $poster = $this->grantedActor('bd-obl-dsc', ['finance.obligation']);
         $period = app(MaintainFinancialPeriod::class)->open($accountant, '2026-09', '2026-09-01', '2026-09-30', $this->k('fp-dsc'));
         $studentId = $this->newStudent('bd-person-dsc');
-        DB::table('obligations')->insert([
-            'id' => 'eeeeeeee-ffff-4000-8000-0000000000c6',
-            'period_id' => $period['period_id'],
-            'student_id' => $studentId,
-            'source' => 'tuition',
-            'original_amount' => '1000.00',
-            'reason' => 'tuition for the forged discount target',
-            'posted_by' => 'bd-forger-1',
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
+        // The antecedent obligation is born through the owning command and is
+        // journalized with the fact, so the period can lawfully close.
+        $obligation = app(PostObligation::class)->post(
+            $poster,
+            FinancialPeriod::query()->findOrFail($period['period_id']),
+            $studentId,
+            'tuition',
+            'tuition for the forged discount target',
+            [['category' => 'tuition', 'amount' => '1000.00', 'source_ref' => 'price-list/v1']],
+            $this->k('obl-dsc'),
+        );
         app(MaintainFinancialPeriod::class)->close($accountant, FinancialPeriod::query()->findOrFail($period['period_id']), $this->k('fp-dsc-close'));
 
         $this->expectException(QueryException::class);
-        $this->expectExceptionMessage('requires an open financial period');
+        $this->expectExceptionMessage('discounts require an open financial period');
         DB::table('discounts')->insert([
             'id' => 'eeeeeeee-ffff-4000-8000-0000000000c7',
-            'obligation_id' => 'eeeeeeee-ffff-4000-8000-0000000000c6',
+            'obligation_id' => $obligation['obligation_id'],
             'period_id' => $period['period_id'],
             'amount' => '500.00',
             'eligibility' => 'sibling',
@@ -532,6 +570,7 @@ final class CrossModuleBoundaryAttackTest extends TestCase
             'id' => 'eeeeeeee-ffff-4000-8000-0000000000ca',
             'period_id' => $period['period_id'],
             'student_id' => $studentId,
+            'originating_branch_id' => $this->bootstrapBranchId(),
             'amount' => '250.00',
             'method' => 'cash',
             'payer_ref' => 'bd-ref-open',

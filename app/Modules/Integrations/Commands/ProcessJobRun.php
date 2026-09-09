@@ -110,6 +110,7 @@ final class ProcessJobRun
                 'run_by' => $claim['run_by'],
                 'attempt' => $claim['attempts'],
             ]);
+
             return $this->finalizeSuccess($actor, $claim, $outcome);
         } catch (Throwable $failure) {
             return $this->finalizeFailure($actor, $claim, $failure);
@@ -117,8 +118,8 @@ final class ProcessJobRun
     }
 
     /**
-     * @param array<string, mixed> $claim
-     * @param array<string, mixed> $outcome
+     * @param  array<string, mixed>  $claim
+     * @param  array<string, mixed>  $outcome
      * @return array{run_id: string, status: string, outcome: array<string, mixed>|null}
      */
     private function finalizeSuccess(Actor $actor, array $claim, array $outcome): array
@@ -146,7 +147,7 @@ final class ProcessJobRun
     }
 
     /** @param array<string, mixed> $claim
-     *  @return array{run_id: string, status: string, outcome: array<string, mixed>|null}
+     * @return array{run_id: string, status: string, outcome: array<string, mixed>|null}
      */
     private function finalizeFailure(Actor $actor, array $claim, Throwable $failure): array
     {

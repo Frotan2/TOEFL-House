@@ -46,7 +46,7 @@ final class AccessWorkflowFeatureTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -203,10 +203,14 @@ final class AccessWorkflowFeatureTest extends TestCase
             ->assertRedirect('/access')
             ->assertSessionHas('error_code', 'access.lifecycle_transition_forbidden');
 
-        // Delegations are temporary, reasoned, and revocable.
+        // Delegations are temporary, reasoned, and revocable. The transport
+        // requires an explicit structure scope on every delegation; typing
+        // your own person id into a fully-formed request is refused by the
+        // domain's self-delegation gate.
         $this->post('/access/delegations', [
             'delegator_person_id' => 'acw-delegator', 'delegate_person_id' => 'acw-delegator',
-            'permission' => 'identity.verify', 'effective_from' => '2026-09-01', 'effective_to' => '2026-10-01',
+            'permission' => 'identity.verify', 'scope_type' => 'campus', 'scope_id' => $campus->id,
+            'effective_from' => '2026-09-01', 'effective_to' => '2026-10-01',
             'reason' => 'Probe self-delegation',
         ], ['referer' => 'http://localhost/access'])
             ->assertRedirect('/access')
@@ -320,12 +324,18 @@ final class AccessWorkflowFeatureTest extends TestCase
         ]);
 
         // The same person in both slots is refused at the boundary.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update([
                 'approver_two_id' => 'acw-owner-a', 'lifecycle_state' => 'approved', 'updated_at' => now(),
             ]);
             $this->fail('expected the boundary to refuse a non-distinct approver');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('two distinct approvers', $exception->getMessage());
         }
 
@@ -337,6 +347,9 @@ final class AccessWorkflowFeatureTest extends TestCase
 
         // Approver slots are written once — even on a legal transition,
         // rewriting a signed slot is refused.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update([
                 'approver_one_id' => 'acw-owner-b',
@@ -346,7 +359,9 @@ final class AccessWorkflowFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('expected the boundary to refuse rewriting an approver slot');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('written once', $exception->getMessage());
         }
 
@@ -359,10 +374,15 @@ final class AccessWorkflowFeatureTest extends TestCase
             'acw-sql-execute',
         );
         $this->assertDatabaseHas($requests, ['id' => $requestId, 'lifecycle_state' => 'granted']);
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update(['permission' => 'rewritten', 'updated_at' => now()]);
             $this->fail('expected the boundary to refuse changing an executed request');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('closed', $exception->getMessage());
         }
     }

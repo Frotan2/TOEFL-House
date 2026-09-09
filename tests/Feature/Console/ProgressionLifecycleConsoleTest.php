@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,7 @@ use Tests\TestCase;
 final class ProgressionLifecycleConsoleTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -48,17 +50,25 @@ final class ProgressionLifecycleConsoleTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'lifecycle rules', 'plc-ver');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'plc-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'plc-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one. The version carries two levels:
+        // every class is level-aware (its level comes from its offering), so
+        // an advance decision can only target an existing next level.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-plc-1', 1, 'Level', 'A1', 'plc-lvl-1');
+        app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-plc-2', 2, 'Level', 'A2', 'plc-lvl-2');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'plc-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'plc-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'plc-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 4, 'plc-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('plc-teacher-1', []);
+        $this->buildActiveTeacher('plc-teacher-1', null, 'progress311');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'plc-teacher-1', new CarbonImmutable('2026-09-01'), null, 'plc-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'plc-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'plc-cls-act');
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -98,6 +108,8 @@ final class ProgressionLifecycleConsoleTest extends TestCase
 
         $registered = app(RegisterApplicant::class)->register(
             $this->admissionsClerk('plc-clerk-'.$suffix), $personId, 'IELTS Preparation', 'plc-reg-'.$suffix,
+            null,
+            $this->bootstrapBranchId(),
         );
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
@@ -117,6 +129,26 @@ final class ProgressionLifecycleConsoleTest extends TestCase
     private function decisions(): string
     {
         return DB::connection()->getTablePrefix().'progression_decisions';
+    }
+
+    /**
+     * Level-aware decisions require the student to hold an ACTIVE seat in
+     * the class (the domain will not decide for an unseated or requested
+     * student), so each scenario seats the student through the console
+     * before proposing.
+     */
+    private function activateSeatFor(string $studentId): string
+    {
+        $this->makeEmployee('plc-act-clerk', ['academic.enroll'], 'act-clerk');
+        $this->makeEmployee('plc-act-seat', ['academic.enroll_approve'], 'act-seat');
+        $this->signIn('act-clerk');
+        $seatId = $this->activeSeatFor($studentId);
+        $this->signOut();
+        $this->signIn('act-seat');
+        $this->post('/academic/enrollments/'.$seatId.'/activate')->assertRedirect('/academic');
+        $this->signOut();
+
+        return $seatId;
     }
 
     private function activeSeatFor(string $studentId): string
@@ -158,6 +190,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'meets the exit criteria',
+            'basis' => 'exit interview evidence',
         ])->assertRedirect('/academic');
         $decisionId = DB::table($this->decisions())->where('student_id', $studentId)->value('id');
         $this->assertNotNull($decisionId);
@@ -247,6 +280,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
         $this->makeEmployee('plc-rev-2', ['academic.progression_review'], 'reject-reviewer');
         $this->makeEmployee('plc-app-2', ['academic.progression_approve'], 'reject-approver');
         $studentId = $this->newStudent('rej');
+        $this->activateSeatFor($studentId);
 
         $this->signIn('reject-proposer');
         $this->post('/academic/progressions', [
@@ -254,6 +288,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'borderline exit evidence',
+            'basis' => 'exit interview evidence',
         ])->assertRedirect('/academic');
         $decisionId = DB::table($this->decisions())->where('student_id', $studentId)->value('id');
         $this->assertNotNull($decisionId);
@@ -286,6 +321,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
     {
         $this->makeEmployee('plc-prop-3', ['academic.progression_propose'], 'evidence-proposer');
         $studentId = $this->newStudent('evi');
+        $this->activateSeatFor($studentId);
 
         $this->signIn('evidence-proposer');
         // This class carries no level, so level-aware evidence fields
@@ -295,10 +331,9 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'meets the exit criteria',
-            'basis' => 'exit interview',
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
-            ->assertSessionHas('error_code', 'academic.progression_level_unexpected');
+            ->assertSessionHas('error_code', 'academic.progression_basis_required');
         $this->assertSame(0, DB::table($this->decisions())->where('student_id', $studentId)->count());
 
         $this->post('/academic/progressions', [
@@ -306,6 +341,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'meets the exit criteria',
+            'basis' => 'exit interview evidence',
         ])->assertRedirect('/academic');
 
         // A second proposal while one is open is refused.
@@ -314,6 +350,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'repeat',
             'reason' => 'second opinion',
+            'basis' => 'exit interview evidence',
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
             ->assertSessionHas('error_code', 'academic.progression_open_decision');
@@ -328,6 +365,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
         $this->makeEmployee('plc-rev-4', ['academic.progression_review'], 'other-reviewer');
         $this->makeEmployee('plc-app-4', ['academic.progression_approve'], 'other-approver');
         $studentId = $this->newStudent('sod');
+        $this->activateSeatFor($studentId);
 
         $this->signIn('all-signer');
         $this->post('/academic/progressions', [
@@ -335,6 +373,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'meets the exit criteria',
+            'basis' => 'exit interview evidence',
         ])->assertRedirect('/academic');
         $decisionId = DB::table($this->decisions())->where('student_id', $studentId)->value('id');
         $this->assertNotNull($decisionId);
@@ -348,6 +387,21 @@ final class ProgressionLifecycleConsoleTest extends TestCase
         $this->post('/academic/progressions/'.$decisionId.'/approve')->assertRedirect('/academic');
         $this->signOut();
 
+        // An appeal is filed and marked appealed, recording the independent
+        // reviewer the console supersede path resolves from the record.
+        $this->makeEmployee('plc-fil-4', ['academic.appeal_manage'], 'appeal-filer-4');
+        $this->signIn('appeal-filer-4');
+        $this->post('/academic/appeals', [
+            'student_id' => $studentId,
+            'subject_type' => 'progression_decision',
+            'subject_id' => $decisionId,
+            'reason' => 'the exit evidence was misread',
+        ])->assertRedirect('/academic');
+        $this->signOut();
+        $this->signIn('other-reviewer');
+        $this->post('/academic/progressions/'.$decisionId.'/mark-appealed')->assertRedirect('/academic');
+        $this->signOut();
+
         $this->signIn('all-signer');
         $this->post('/academic/progressions/'.$decisionId.'/supersede', [
             'outcome' => 'repeat',
@@ -355,7 +409,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
             ->assertSessionHas('error_code', 'academic.appeal_not_independent');
-        $this->assertDatabaseHas($this->decisions(), ['id' => $decisionId, 'lifecycle_state' => 'approved']);
+        $this->assertDatabaseHas($this->decisions(), ['id' => $decisionId, 'lifecycle_state' => 'appealed']);
     }
 
     public function test_progression_lifecycle_denies_employees_without_capability(): void
@@ -363,6 +417,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
         $this->makeEmployee('plc-prop-5', ['academic.progression_propose'], 'capped-proposer');
         $this->makeEmployee('plc-plain-5', [], 'uncapped');
         $studentId = $this->newStudent('den');
+        $this->activateSeatFor($studentId);
 
         $this->signIn('uncapped');
         $this->post('/academic/progressions', [
@@ -370,6 +425,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'no authority behind this',
+            'basis' => 'exit interview evidence',
         ], ['referer' => 'http://localhost/academic'])
             ->assertRedirect('/academic')
             ->assertSessionHas('error_code', 'academic.progression_denied');
@@ -382,6 +438,7 @@ final class ProgressionLifecycleConsoleTest extends TestCase
             'class_id' => $this->classId,
             'outcome' => 'advance',
             'reason' => 'meets the exit criteria',
+            'basis' => 'exit interview evidence',
         ])->assertRedirect('/academic');
         $decisionId = DB::table($this->decisions())->where('student_id', $studentId)->value('id');
         $this->assertNotNull($decisionId);

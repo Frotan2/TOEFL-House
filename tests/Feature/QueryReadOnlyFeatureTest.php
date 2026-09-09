@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Identity\Commands\RegisterPerson;
 use App\Modules\Identity\Commands\VerifyPerson;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Queries\PersonDirectoryQuery;
 use App\Modules\Organization\Queries\EffectiveStructureQuery;
+use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
@@ -27,14 +29,22 @@ final class QueryReadOnlyFeatureTest extends TestCase
         $campus = $this->establishActiveCampus($organization);
         $branch = $this->establishActiveBranch($campus);
 
-        /** @var Person $person */
-        $person = Person::query()->create([
-            'id' => RandomIdentifier::new(),
-            'legal_name' => 'Queried Person',
-            'date_of_birth' => '1992-02-02',
-            'verification_state' => Person::VERIFICATION_UNVERIFIED,
-        ]);
-        app(VerifyPerson::class)->verify($this->identityVerifier(), $person, 'national-id-read', 'documents/national-id-read', RandomIdentifier::new());
+        // Person intake is the only lawful birth of a person row: it persists
+        // the active home branch the person-linked scope resolves from
+        // (identity intake doctrine), so the fixture registers through the
+        // command instead of writing an unprovenanced row.
+        $admin = 'qr-admin-1';
+        $this->personWithAuthority($admin, ['identity.admin', 'identity.verify']);
+        $this->grantScopeAuthority($admin, ['identity.admin', 'identity.verify'], 'organization', $organization->id);
+        $registered = app(RegisterPerson::class)->register(
+            new Actor($admin, 'Identity Administrator'),
+            'Queried Person',
+            '1992-02-02',
+            $branch->id,
+            RandomIdentifier::new(),
+        );
+        $person = Person::query()->findOrFail($registered['person_id']);
+        app(VerifyPerson::class)->verify(new Actor($admin, 'Identity Administrator'), $person, 'national-id-read', 'documents/national-id-read', RandomIdentifier::new());
 
         $before = $this->rowCounts();
         $structure = (new EffectiveStructureQuery)->effectiveStructure(new CarbonImmutable('2026-08-25'));

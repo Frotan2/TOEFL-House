@@ -79,7 +79,7 @@ final class ScaleContractVersionFeatureTest extends TestCase
     }
 
     /**
-     * @param list<array<string, mixed>> $rules
+     * @param  list<array<string, mixed>>  $rules
      * @return array{version_id: string, contract_id: string}
      */
     private function preparedVersion(array $rules, ?string $scaleId, string $effectiveFrom, string $keyPrefix): array
@@ -123,16 +123,27 @@ final class ScaleContractVersionFeatureTest extends TestCase
         }
 
         $command->retire($registrar, Scale::query()->where('key', 'S4')->firstOrFail(), 'p16-scale-ret-1');
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE scales SET rank_order = 9 WHERE key = ?', ['S3']);
             $this->fail('scale rank is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM scales WHERE key = ?', ['S4']);
             $this->fail('scales are never deleted');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }
@@ -152,11 +163,13 @@ final class ScaleContractVersionFeatureTest extends TestCase
         $this->assertSame(1, $version->version_no);
         $this->assertDatabaseHas('contracts', ['id' => $prepared['contract_id'], 'lifecycle_state' => 'draft']);
 
+        // The approval state machine runs before capability checks: no actor
+        // may approve a version that has not been submitted.
         try {
             $commands->approve($this->financeManager(), $version, 'p16-l1-appr-early');
             $this->fail('the Finance Manager cannot approve');
-        } catch (AuthorizationDenied $denial) {
-            $this->assertSame('hr.contract_version_denied', $denial->errorCode());
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('hr.contract_version_not_submitted', $rejection->errorCode());
         }
 
         $commands->submit($this->financeManager(), $version, 'p16-l1-sub');
@@ -170,50 +183,86 @@ final class ScaleContractVersionFeatureTest extends TestCase
             $this->assertSame('hr.contract_version_not_independent', $denial->errorCode());
         }
 
-        $beneficiary = $this->grantedActor($this->teacherPersonId, ['hr.contract.approve']);
-        try {
-            $commands->approve($beneficiary, $version, 'p16-l1-appr-bene');
-            $this->fail('the beneficiary may never approve their own contract');
-        } catch (AuthorizationDenied $denial) {
-            $this->assertSame('hr.contract_version_beneficiary', $denial->errorCode());
-        }
-        $this->assertSame(1, AuditEvent::query()->where('operation', 'hr.contract_version.approve.denied')->where('actor_id', $this->teacherPersonId)->count());
-
         $approval = $commands->approve($this->generalManager(), $version, 'p16-l1-appr');
         $this->assertSame('active', $approval['lifecycle_state']);
         $this->assertNotSame('', $approval['approval_digest']);
         $this->assertDatabaseHas('contract_versions', ['id' => $version->id, 'lifecycle_state' => 'active', 'approved_by' => 'p16-gm-1']);
         $this->assertDatabaseHas('contracts', ['id' => $prepared['contract_id'], 'lifecycle_state' => 'active', 'signed_by' => 'p16-gm-1']);
 
+        // Employment activates only once an in-force contract exists. With an
+        // active employment the beneficiary holds authority again, which lets
+        // the beneficiary-separation rule itself be exercised on an amendment.
+        $employment = Employment::query()->findOrFail($this->employmentId);
+        $hired = app(MaintainEmployment::class)->hire($this->grantedActor('p16-hr-1', ['hr.employ']), $employment, '2026-08-01', 'p16-emp-hire-1');
+        $this->assertSame('active', $hired['lifecycle_state']);
+
+        $beneficiary = $this->grantedActor($this->teacherPersonId, ['hr.contract.approve']);
+        $amendment = $this->preparedVersion([
+            ['method' => 'fixed_monthly', 'rate' => '21000.00'],
+        ], $this->scaleId, '2027-01-01', 'p16-l1b');
+        $commands->submit($this->financeManager(), ContractVersion::query()->findOrFail($amendment['version_id']), 'p16-l1b-sub');
+        try {
+            $commands->approve($beneficiary, ContractVersion::query()->findOrFail($amendment['version_id']), 'p16-l1-appr-bene');
+            $this->fail('the beneficiary may never approve their own contract');
+        } catch (AuthorizationDenied $denial) {
+            $this->assertSame('hr.contract_version_beneficiary', $denial->errorCode());
+        }
+        $this->assertSame(1, AuditEvent::query()->where('operation', 'hr.contract_version.approve.denied')->where('actor_id', $this->teacherPersonId)->count());
+
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE contract_versions SET terms_ref = ? WHERE id = ?', ['forged', $version->id]);
             $this->fail('approved versions are immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE contract_versions SET approved_by = ? WHERE id = ?', ['p16-gm-1', $version->id]);
             $this->fail('approval identity is immutable');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('DELETE FROM contract_versions WHERE id = ?', [$version->id]);
             $this->fail('contract versions are never deleted');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::statement('UPDATE compensation_rules SET rate = ? WHERE contract_version_id = ?', ['1.00', $version->id]);
             $this->fail('approved rules are frozen');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             $ruleRow = ['id' => '00000000-0000-4000-8000-00000000f001', 'contract_version_id' => $version->id, 'method' => 'session_rate', 'skill_id' => null, 'scale_id' => null, 'label' => null, 'rate' => 100];
             DB::table('compensation_rules')->insert($ruleRow);
             $this->fail('the schema must reject rule inserts on an approved version');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }
@@ -222,6 +271,9 @@ final class ScaleContractVersionFeatureTest extends TestCase
     {
         $prepared = $this->preparedVersion([['method' => 'fixed_monthly', 'rate' => '10000.00']], null, '2026-08-01', 'p16-l2');
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('contract_versions')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f101',
@@ -239,10 +291,15 @@ final class ScaleContractVersionFeatureTest extends TestCase
                 'approval_digest' => 'x',
             ]);
             $this->fail('the schema must reject a preparer approving their own version');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('contract_versions')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f102',
@@ -257,7 +314,9 @@ final class ScaleContractVersionFeatureTest extends TestCase
                 'submitted_at' => now(),
             ]);
             $this->fail('the schema must reject approval state without approval evidence');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
     }
@@ -359,13 +418,18 @@ final class ScaleContractVersionFeatureTest extends TestCase
             $this->assertSame('hr.compensation_rule_overlap', $rejection->errorCode());
         }
 
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table('compensation_rules')->insert([
                 'id' => '00000000-0000-4000-8000-00000000f201', 'contract_version_id' => $version->id,
                 'method' => 'session_rate', 'skill_id' => $this->skillAId, 'scale_id' => null, 'label' => null, 'rate' => 999,
             ]);
             $this->fail('the schema must reject duplicate per-unit keys');
+            DB::rollBack();
         } catch (QueryException) {
+            DB::rollBack();
             $this->addToAssertionCount(1);
         }
 

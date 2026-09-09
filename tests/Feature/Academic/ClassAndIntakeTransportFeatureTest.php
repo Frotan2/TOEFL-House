@@ -16,6 +16,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -34,6 +35,7 @@ use Tests\TestCase;
 final class ClassAndIntakeTransportFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private function signInAs(string $personId, string $username): void
     {
@@ -55,6 +57,7 @@ final class ClassAndIntakeTransportFeatureTest extends TestCase
         $this->postJson('/api/v1/identity/people', [
             'legal_name' => 'New Prospect',
             'date_of_birth' => '2005-06-15',
+            'home_branch_id' => $this->bootstrapBranchId(),
         ])->assertCreated()->assertJsonPath('status', 'registered');
 
         $person = Person::query()->where('legal_name', 'New Prospect')->firstOrFail();
@@ -70,6 +73,7 @@ final class ClassAndIntakeTransportFeatureTest extends TestCase
         $this->postJson('/api/v1/identity/people', [
             'legal_name' => 'Blocked Prospect',
             'date_of_birth' => '2005-06-15',
+            'home_branch_id' => $this->bootstrapBranchId(),
         ])->assertForbidden();
 
         $this->assertDatabaseMissing('people', ['legal_name' => 'Blocked Prospect']);
@@ -90,22 +94,29 @@ final class ClassAndIntakeTransportFeatureTest extends TestCase
             ->definePeriod($this->grantedActor($officer->id, []), 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'k-per-'.RandomIdentifier::new());
         app(MaintainAcademicStructure::class)
             ->transitionPeriod($this->grantedActor($officer->id, []), AcademicPeriod::findOrFail($period['period_id']), 'published', 'k-per-pub-'.RandomIdentifier::new());
+        // Every class references an open offering for its branch, level, and
+        // period (academic.class_offering_required).
+        $structure = app(MaintainAcademicStructure::class);
+        $level = $structure->defineLevel($this->grantedActor($officer->id, []), $version['version_id'], 'k-foundation', 1, 'Foundation', 'A1', 'k-lvl-'.RandomIdentifier::new());
+        $structure->declareBranchAvailability($this->grantedActor($officer->id, []), $this->bootstrapBranchId(), $level['level_id'], $period['period_id'], 'k-avail-'.RandomIdentifier::new());
+        $structure->openOffering($this->grantedActor($officer->id, []), $this->bootstrapBranchId(), $level['level_id'], $period['period_id'], 200, 'k-offer-'.RandomIdentifier::new());
 
         // 1. Define a class over HTTP (previously no route existed).
         $this->post('/academic/classes', [
             'program_version_id' => $version['version_id'],
             'period_id' => $period['period_id'],
             'capacity' => 10,
+            'branch_id' => $this->bootstrapBranchId(),
         ])->assertRedirect();
         $class = ClassModel::query()->where('program_version_id', $version['version_id'])->firstOrFail();
         $this->assertSame(ClassLifecycle::STATE_PLANNED, $class->lifecycle_state);
 
         // 2. Assign a teacher over HTTP (previously no route existed) — a class
         //    needs an open teacher assignment to become active.
-        $teacher = $this->personWithAuthority('class-teacher', []);
+        $teacher = $this->buildActiveTeacher('class-teacher', $this->bootstrapBranchId(), 'classand837');
         $this->post('/academic/teacher-assignments', [
             'class_id' => $class->id,
-            'teacher_person_id' => $teacher->id,
+            'teacher_person_id' => $teacher['person_id'],
             'effective_from' => '2026-09-01',
         ])->assertRedirect();
         $this->assertTrue(TeacherAssignment::query()->where('class_id', $class->id)->whereNull('effective_to')->exists());
@@ -129,11 +140,16 @@ final class ClassAndIntakeTransportFeatureTest extends TestCase
             ->definePeriod($this->grantedActor($officer->id, []), 'Spring 2027', new CarbonImmutable('2027-01-05'), new CarbonImmutable('2027-04-30'), 'k2-per-'.RandomIdentifier::new());
         app(MaintainAcademicStructure::class)
             ->transitionPeriod($this->grantedActor($officer->id, []), AcademicPeriod::findOrFail($period['period_id']), 'published', 'k2-per-pub-'.RandomIdentifier::new());
+        $structure = app(MaintainAcademicStructure::class);
+        $level = $structure->defineLevel($this->grantedActor($officer->id, []), $version['version_id'], 'k2-foundation', 1, 'Foundation', 'A1', 'k2-lvl-'.RandomIdentifier::new());
+        $structure->declareBranchAvailability($this->grantedActor($officer->id, []), $this->bootstrapBranchId(), $level['level_id'], $period['period_id'], 'k2-avail-'.RandomIdentifier::new());
+        $structure->openOffering($this->grantedActor($officer->id, []), $this->bootstrapBranchId(), $level['level_id'], $period['period_id'], 200, 'k2-offer-'.RandomIdentifier::new());
 
         $this->post('/academic/classes', [
             'program_version_id' => $version['version_id'],
             'period_id' => $period['period_id'],
             'capacity' => 5,
+            'branch_id' => $this->bootstrapBranchId(),
         ])->assertRedirect();
         $class = ClassModel::query()->where('program_version_id', $version['version_id'])->firstOrFail();
 

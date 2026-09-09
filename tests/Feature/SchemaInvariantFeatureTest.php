@@ -60,7 +60,7 @@ final class SchemaInvariantFeatureTest extends TestCase
         $this->assertContains('metric_definitions_key_unique', $this->indexNames('metric_definitions'));
         $this->assertContains('metric_versions_one_per_no', $this->indexNames('metric_versions'));
         $this->assertContains('metric_projections_one_slice', $this->indexNames('metric_projections'));
-        $this->assertContains('dashboards_name_unique', $this->indexNames('dashboards'));
+        $this->assertContains('dashboards_organization_name_unique', $this->indexNames('dashboards'));
         $this->assertContains('dashboard_pins_one_per_slice', $this->indexNames('dashboard_pins'));
         $this->assertContains('integration_endpoints_key_unique', $this->indexNames('integration_endpoints'));
         $this->assertContains('integration_deliveries_one_per_key', $this->indexNames('integration_deliveries'));
@@ -349,6 +349,10 @@ final class SchemaInvariantFeatureTest extends TestCase
         // Legacy labels remain representable for immutable old rows, but a
         // new metric cannot claim the superseded Funding authority for a
         // Finance-owned utilization calculation.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table('metric_definitions')->insert([
                 'id' => '00000000-0000-4000-8000-00000000030g',
@@ -366,7 +370,9 @@ final class SchemaInvariantFeatureTest extends TestCase
                 'updated_at' => $now,
             ]);
             $this->fail('a new fund-utilization definition must name Finance as its canonical owner');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('new metric definition lineage must match its canonical owner', $exception->getMessage());
         }
 
@@ -919,7 +925,11 @@ final class SchemaInvariantFeatureTest extends TestCase
         $this->assertContains('finance_refunds_lifecycle_guard_trigger', $refundTriggers, 'recorded refunds must be immutable at the schema level');
 
         $discountTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'discounts')->pluck('tgname')->all();
-        $this->assertContains('discounts_approved_immutable_trigger', $discountTriggers, 'approved discounts must be immutable at the schema level');
+        // The standalone approved-discount immutability trigger was consolidated
+        // into the discounts finance guard, which enforces the same rule (a
+        // discount transitions only proposed -> approved, no field of an
+        // approved discount may change, and rows can never be deleted).
+        $this->assertContains('discounts_finance_guard_trigger', $discountTriggers, 'approved discounts must be immutable at the schema level');
 
         $fundTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'funding_sources')->pluck('tgname')->all();
         $this->assertContains('funding_sources_immutable_trigger', $fundTriggers, 'funding agreements must be immutable at the schema level');

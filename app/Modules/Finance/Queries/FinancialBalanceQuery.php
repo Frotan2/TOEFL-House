@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 namespace App\Modules\Finance\Queries;
 
+use App\Modules\Finance\Models\Discount;
+use App\Modules\Finance\Models\FinancialCorrection;
+use App\Modules\Finance\Models\FundAllocation;
+use App\Modules\Finance\Models\FundingSource;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\ObligationLine;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PaymentAllocation;
 use App\Modules\Finance\Models\Refund;
-use App\Modules\Finance\Models\Discount;
-use App\Modules\Finance\Models\FinancialCorrection;
-use App\Modules\Finance\Models\FundAllocation;
-use App\Modules\Finance\Models\FundingSource;
 use App\Modules\Organization\Models\Organization;
-use App\Support\MoneyAmount;
 use App\Support\Errors\BusinessRejection;
+use App\Support\MoneyAmount;
 
 /**
  * Finance's single derived-balance authority.
@@ -139,7 +139,7 @@ final class FinancialBalanceQuery
         // balance. Finance owns this monetary dimension and its tenant anchor.
         /** @var FundingSource|null $authoritativeFund */
         $authoritativeFund = FundingSource::query()->whereKey($fund->id)->first();
-        $organizationId = trim((string) ($authoritativeFund?->organization_id ?? ''));
+        $organizationId = trim($authoritativeFund === null ? '' : (string) ($authoritativeFund->organization_id ?? ''));
         if ($authoritativeFund === null || $organizationId === '' || ! Organization::query()
             ->whereKey($organizationId)
             ->where('lifecycle_state', 'active')

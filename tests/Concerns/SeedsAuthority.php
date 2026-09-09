@@ -11,6 +11,7 @@ use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
 use App\Modules\Access\Models\ScopeGrant;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\CampusAssignment;
 use App\Modules\Organization\Models\Organization;
@@ -41,17 +42,65 @@ trait SeedsAuthority
     /** @var array<string, Person> */
     private array $authorityPeople = [];
 
-    private function ensureBootstrapAuthority(): void
+    private string $bootstrapCampusId = '00000000-0000-4000-8000-00000000c005';
+
+    private string $bootstrapBranchId = '00000000-0000-4000-8000-00000000d005';
+
+    /**
+     * Seeds the minimum *complete* structure an operational fixture needs.
+     *
+     * An organization on its own is not usable provenance: person-linked
+     * operations resolve scope through Person.home_branch_id -> Branch ->
+     * active CampusAssignment -> Organization (see PersonBranchScope). A
+     * bootstrap that stops at the organization leaves every fixture person
+     * without resolvable provenance, and the domain correctly rejects the
+     * operation rather than falling back to a global scope.
+     */
+    /** The shared operational branch every authority fixture is homed in. */
+    protected function bootstrapBranchId(): string
     {
-        if (Organization::query()->whereKey($this->bootstrapOrganizationId)->exists()) {
-            return;
+        $this->ensureBootstrapAuthority();
+
+        return $this->bootstrapBranchId;
+    }
+
+    protected function ensureBootstrapAuthority(): void
+    {
+        if (! Organization::query()->whereKey($this->bootstrapOrganizationId)->exists()) {
+            Organization::query()->create([
+                'id' => $this->bootstrapOrganizationId,
+                'name' => 'Authority Bootstrap',
+                'lifecycle_state' => 'active',
+            ]);
         }
 
-        Organization::query()->create([
-            'id' => $this->bootstrapOrganizationId,
-            'name' => 'Authority Bootstrap',
-            'lifecycle_state' => 'active',
-        ]);
+        if (! Campus::query()->whereKey($this->bootstrapCampusId)->exists()) {
+            Campus::query()->create([
+                'id' => $this->bootstrapCampusId,
+                'organization_id' => $this->bootstrapOrganizationId,
+                'name' => 'Authority Bootstrap Campus',
+                'lifecycle_state' => 'active',
+            ]);
+        }
+
+        if (! Branch::query()->whereKey($this->bootstrapBranchId)->exists()) {
+            Branch::query()->create([
+                'id' => $this->bootstrapBranchId,
+                'name' => 'Authority Bootstrap Branch',
+                'lifecycle_state' => 'active',
+            ]);
+        }
+
+        if (! CampusAssignment::query()->where('branch_id', $this->bootstrapBranchId)->whereNull('effective_to')->exists()) {
+            CampusAssignment::query()->create([
+                'id' => RandomIdentifier::new(),
+                'branch_id' => $this->bootstrapBranchId,
+                'campus_id' => $this->bootstrapCampusId,
+                'effective_from' => '2026-01-01',
+                'effective_to' => null,
+                'transfer_correlation_id' => RandomIdentifier::new(),
+            ]);
+        }
     }
 
     /**
@@ -59,7 +108,14 @@ trait SeedsAuthority
      * the bootstrap organization.
      */
     /** @param list<string> $capabilities */
-    private function personWithAuthority(string $personId, array $capabilities): Person
+    /**
+     * @param  list<string>  $capabilities
+     * @param  string|null  $homeBranchId  Provenance must be set on INSERT: a
+     *                                     verified person is immutable, so a
+     *                                     later UPDATE is refused by
+     *                                     people_identity_guard.
+     */
+    protected function personWithAuthority(string $personId, array $capabilities, ?string $homeBranchId = null): Person
     {
         $this->ensureBootstrapAuthority();
         if (! isset($this->authorityPeople[$personId])) {
@@ -72,6 +128,9 @@ trait SeedsAuthority
                 'identity_evidence_ref' => 'evidence/fixture/'.$personId,
                 'verified_by' => 'fixture-verifier',
                 'verified_at' => now()->toDateTimeString(),
+                // Set at creation: a verified person is immutable, so home
+                // provenance cannot be attached by a later UPDATE.
+                'home_branch_id' => $this->bootstrapBranchId,
             ]);
         }
         $person = $this->authorityPeople[$personId];
@@ -144,7 +203,7 @@ trait SeedsAuthority
      * Direct named-scope grant of capabilities to a person.
      */
     /** @param list<string> $capabilities */
-    private function grantScopeAuthority(string $personId, array $capabilities, string $scopeType, string $scopeId, ?string $effectiveTo = null): void
+    protected function grantScopeAuthority(string $personId, array $capabilities, string $scopeType, string $scopeId, ?string $effectiveTo = null): void
     {
         $this->ensureBootstrapAuthority();
         if (! isset($this->authorityPeople[$personId])) {
@@ -193,7 +252,7 @@ trait SeedsAuthority
      * campus assignment a branch resolves to no organization, and
      * organization-rooted authority correctly does not cover it.
      */
-    private function attachBranchToBootstrapOrganization(string $branchId): void
+    protected function attachBranchToBootstrapOrganization(string $branchId): void
     {
         $this->ensureBootstrapAuthority();
         $campusId = Campus::query()->where('organization_id', $this->bootstrapOrganizationId)->value('id');
@@ -223,7 +282,7 @@ trait SeedsAuthority
      * capabilities on a newly created scope, keeping wildcard fixture
      * actors authoritative inside every organization the test creates.
      */
-    private function grantKnownAuthorityOn(string $scopeType, string $scopeId): void
+    protected function grantKnownAuthorityOn(string $scopeType, string $scopeId): void
     {
         foreach ($this->authorityCapabilities as $personId => $capabilities) {
             $this->grantScopeAuthority($personId, $capabilities, $scopeType, $scopeId);

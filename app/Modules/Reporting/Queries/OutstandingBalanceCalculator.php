@@ -18,7 +18,7 @@ final class OutstandingBalanceCalculator implements MetricCalculator
 
     public function compute(string $periodId, ?string $scopeId): array
     {
-        $result = ($this->balances ?? new FinancialBalanceQuery())->periodBalance($periodId, $scopeId);
+        $result = ($this->balances ?? new FinancialBalanceQuery)->periodBalance($periodId, $scopeId);
 
         return $result;
     }

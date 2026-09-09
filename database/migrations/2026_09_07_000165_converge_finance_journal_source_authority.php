@@ -163,6 +163,6 @@ return new class extends Migration
         // A down migration would have to either delete Finance-owned payroll
         // liability journals or reintroduce direct Payroll-result authority.
         // Neither is a safe rollback of accounting history.
-        throw new \RuntimeException('Finance journal-source convergence is one-way; restore from a reviewed pre-convergence baseline rather than weakening or deleting accounting history.');
+        throw new RuntimeException('Finance journal-source convergence is one-way; restore from a reviewed pre-convergence baseline rather than weakening or deleting accounting history.');
     }
 };

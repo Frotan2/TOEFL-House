@@ -31,6 +31,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsStudents;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -42,6 +43,7 @@ use Tests\TestCase;
 final class GraduationIntegrityFeatureTest extends TestCase
 {
     use BuildsStudents;
+    use BuildsTeachers;
 
     private string $programVersionId;
 
@@ -52,7 +54,7 @@ final class GraduationIntegrityFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->personWithAuthority('grad-teacher-1', []);
+        $this->buildActiveTeacher('grad-teacher-1', null, 'graduatiad0');
         $structure = app(MaintainAcademicStructure::class);
         $officer = $this->academicOfficer('grad-officer');
 
@@ -60,8 +62,13 @@ final class GraduationIntegrityFeatureTest extends TestCase
         $this->programVersionId = (string) $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Graduation v1', 'grad-ver')['version_id'];
         $this->periodId = (string) $structure->definePeriod($officer, 'Graduation Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'grad-period')['period_id'];
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'grad-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $this->programVersionId, 'lvl-ofgraduati', 1, 'Level', 'A1', 'ofgraduati-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $this->periodId, 'ofgraduati-av');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $this->periodId, 200, 'ofgraduati-of');
 
-        $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'grad-class', null)['class_id'];
+        $this->classId = (string) app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $this->periodId, 10, 'grad-class', null, $this->bootstrapBranchId())['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'grad-teacher-1', new CarbonImmutable('2026-09-01'), null, 'grad-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'grad-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'grad-class-active');
@@ -271,8 +278,8 @@ final class GraduationIntegrityFeatureTest extends TestCase
 
         $manager = $this->personWithAuthority('grad.web.manager', ['students.manage']);
         $this->signInAs($manager->id, 'grad.web.manager');
-        $this->post("/students/students/{$studentId}/status/complete", ['reason' => 'web program finished'])->assertRedirect();
-        $this->post("/students/students/{$studentId}/status/graduate", ['reason' => 'web certified'])->assertRedirect();
+        $this->post("/students/{$studentId}/status/complete", ['reason' => 'web program finished'])->assertRedirect();
+        $this->post("/students/{$studentId}/status/graduate", ['reason' => 'web certified'])->assertRedirect();
         $this->assertSame('alumni', (new StudentRecordQuery)->studentRecord($studentId)['status']);
     }
 

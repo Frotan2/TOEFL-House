@@ -7,6 +7,7 @@ namespace Tests\Feature\Deployment;
 use App\Modules\Identity\Models\UserAccount;
 use Database\Seeders\FirstRunBootstrapSeeder;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -18,8 +19,9 @@ use Tests\TestCase;
  *
  * The .bat files themselves cannot execute in the development environment
  * (Linux), so this suite pins the contract that makes them safe and correct:
- * the files exist, the launcher uses Tailscale SERVE (never Funnel) and
- * verifies /health, no secret material ever ships in the deployment
+ * the files exist, the launcher uses Tailscale SERVE (never Funnel), builds
+ * the frontend before its health gate and verifies /health, no secret
+ * material ever ships in the deployment
  * artifacts, the backup/restore batch protocol matches the drilled
  * production tooling, the owner bootstrap covers EVERY capability defined
  * in the source (a new capability can never silently miss the bootstrap),
@@ -124,6 +126,37 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
         $this->assertStringContainsString('HTTPS certificates', $start);
     }
 
+    public function test_the_launcher_builds_the_frontend_before_its_health_gate(): void
+    {
+        // Finding FC-4, discovered on a REAL Windows run: production /health
+        // returns 503 until public/build/manifest.json exists, but the
+        // launcher had no frontend build step — so a fresh clone could never
+        // pass the launcher's own health gate (60 s timeout, STOPPED). The
+        // launcher must therefore build the console exactly like the
+        // production procedure does, and before it checks health.
+        $start = $this->read('START-TOEFL-HOUSE.bat');
+
+        // The pinned Node runtime (official permanent versioned dist URL,
+        // same pin as the locked runtime) and the CI-equivalent build chain.
+        $this->assertStringContainsString('set "NODE_VERSION=22.22.3"', $start);
+        $this->assertStringContainsString('https://nodejs.org/dist/v%NODE_VERSION%/%NODE_ZIP%', $start);
+        $this->assertStringContainsString('npm.cmd" ci --no-audit --no-fund --engine-strict', $start);
+        $this->assertStringContainsString('npm.cmd" run build', $start);
+
+        // Ordering is the contract: build first, health gate later.
+        $buildAt = mb_strpos($start, 'npm.cmd" run build');
+        $healthAt = mb_strpos($start, 'Verifying /health');
+        $this->assertNotFalse($buildAt, 'the launcher must run the Vite build');
+        $this->assertNotFalse($healthAt, 'the launcher must verify /health');
+        $this->assertLessThan($healthAt, $buildAt, 'the frontend build must complete before the health gate runs');
+
+        // The build result is verified, not assumed: a failed build must
+        // stop the launcher loudly at the manifest check.
+        $this->assertStringContainsString('public\\build\\manifest.json', $start);
+        $manifestCheckAt = mb_strpos($start, 'did not produce public\\build\\manifest.json');
+        $this->assertNotFalse($manifestCheckAt, 'a missing manifest after the build must fail the launcher');
+    }
+
     public function test_no_secret_material_ships_in_the_deployment_artifacts(): void
     {
         $files = array_merge(self::FILES, ['database/seeders/FirstRunBootstrapSeeder.php']);
@@ -188,8 +221,13 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
 
     public function test_the_owner_bootstrap_covers_every_capability_in_the_source(): void
     {
+        // Capabilities are declared as CAPABILITY* constants throughout the
+        // application source. Most live under app/Modules, but cross-cutting
+        // authority contracts (e.g. the organization structure separation-of-
+        // duties chain in App\Support\Authorization\StructureDecision) define
+        // theirs outside the module tree, so the scan must cover all of app/.
         $defined = [];
-        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app/Modules')));
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app')));
         foreach ($it as $file) {
             /** @var SplFileInfo $file */
             if ($file->getExtension() !== 'php') {
@@ -229,6 +267,34 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
         $this->assertAuthenticated();
     }
 
+    public function test_first_run_bootstrap_provisions_the_genesis_structure(): void
+    {
+        // Person intake (Person.home_branch_id) is branch-mandated, and every
+        // post-bootstrap structure change requires the four-actor structure
+        // SoD chain — impossible before a second person exists. The bootstrap
+        // therefore provisions the genesis campus + branch itself; without
+        // them a fresh installation cannot onboard its first employee or
+        // student (see the final certification report, finding FC-1).
+        $this->seedFirstRun('owner.one', 'Owner One');
+
+        $this->assertDatabaseCount('campuses', 1);
+        $this->assertDatabaseHas('campuses', ['name' => 'Main Campus', 'lifecycle_state' => 'active']);
+        $this->assertDatabaseCount('branches', 1);
+        $this->assertDatabaseHas('branches', ['name' => 'Central Branch', 'lifecycle_state' => 'active']);
+        $this->assertDatabaseCount('campus_assignments', 1);
+
+        $assignment = DB::table('campus_assignments')->first();
+        $this->assertNull($assignment->effective_to, 'the genesis branch attribution must be open-ended');
+        $this->assertSame(
+            DB::table('branches')->value('id'),
+            $assignment->branch_id,
+        );
+        $this->assertSame(
+            DB::table('campuses')->value('id'),
+            $assignment->campus_id,
+        );
+    }
+
     public function test_first_run_bootstrap_is_a_no_op_on_a_live_system(): void
     {
         $this->seedFirstRun('owner.one', 'Owner One');
@@ -243,6 +309,8 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
 
         $this->assertDatabaseCount('user_accounts', 1);
         $this->assertDatabaseCount('organizations', 1);
+        $this->assertDatabaseCount('campuses', 1);
+        $this->assertDatabaseCount('branches', 1);
         $this->assertDatabaseMissing('user_accounts', ['username' => 'intruder.two']);
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Audit\Models;
 
 use App\Support\Errors\BusinessRejection;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $correlation_id
  * @property array<string, mixed>|null $before_state
  * @property array<string, mixed>|null $after_state
- * @property \Carbon\CarbonImmutable|null $occurred_at
+ * @property CarbonImmutable|null $occurred_at
  * @property 'database_insert'|null $occurred_time_basis
  */
 final class AuditEvent extends Model

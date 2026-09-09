@@ -8,13 +8,14 @@ use App\Http\Controllers\Controller;
 use App\Modules\Academic\Commands\MaintainTeacherAssignment;
 use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Models\ClassModel;
-use App\Modules\Academic\Models\TeacherProfile;
-use App\Modules\Academic\Models\TeacherQualification;
 use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Academic\Models\TeacherAssignmentSkill;
+use App\Modules\Academic\Models\TeacherProfile;
+use App\Modules\Academic\Models\TeacherQualification;
 use App\Modules\Academic\Models\TeacherWorkloadLimit;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Hr\Models\Leave;
+use App\Modules\Identity\Models\Person;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,8 +69,9 @@ final class TeacherApiController extends Controller
                     $employmentState = $employment !== null ? (string) $employment->lifecycle_state : 'unknown';
                     $onLeave = Leave::query()->where('employment_id', $profile->employment_id)->where('lifecycle_state', 'approved')->where('date_from', '<=', now()->toDateString())->where('date_to', '>=', now()->toDateString())->exists();
                     $effectiveState = $profile->lifecycle_state !== TeacherProfile::STATE_ACTIVE ? 'profile_'.$profile->lifecycle_state : ($employmentState !== 'active' ? 'employment_'.$employmentState : ($onLeave ? 'on_leave' : 'operational'));
-                    /** @var \App\Modules\Identity\Models\Person|null $profilePerson */
+                    /** @var Person|null $profilePerson */
                     $profilePerson = $profile->person;
+
                     return [
                         'id' => (string) $profile->id,
                         'person_id' => (string) $profile->person_id,
@@ -162,6 +164,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['employment_id' => ['required', 'string'], 'professional_title' => ['required', 'string', 'max:160'], 'profile_summary' => ['nullable', 'string', 'max:4000']]);
         $result = app(MaintainTeacherProfile::class)->register($this->actor(), Employment::query()->findOrFail((string) $input['employment_id']), $input['professional_title'], $input['profile_summary'] ?? null, $this->idempotencyKey('academic.teacher.register'));
+
         return response()->json(['status' => 'registered', ...$result], 201);
     }
 
@@ -169,12 +172,14 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['qualification_type' => ['required', 'string', 'max:120'], 'title' => ['required', 'string', 'max:255'], 'issuer' => ['required', 'string', 'max:255'], 'evidence_ref' => ['required', 'string', 'max:255'], 'valid_from' => ['nullable', 'date'], 'valid_to' => ['nullable', 'date']]);
         $result = app(MaintainTeacherProfile::class)->addQualification($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['qualification_type'], $input['title'], $input['issuer'], $input['evidence_ref'], $input['valid_from'] ?? null, $input['valid_to'] ?? null, $this->idempotencyKey('academic.teacher.qualification.add'));
+
         return response()->json(['status' => 'recorded', ...$result], 201);
     }
 
     public function verifyQualification(string $qualificationId): JsonResponse
     {
         $result = app(MaintainTeacherProfile::class)->verifyQualification($this->actor(), TeacherQualification::query()->findOrFail($qualificationId), $this->idempotencyKey('academic.teacher.qualification.verify'));
+
         return response()->json(['status' => 'verified', ...$result]);
     }
 
@@ -182,6 +187,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['to_state' => ['required', 'in:active,suspended,retired'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainTeacherProfile::class)->transition($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['to_state'], $input['reason'], $this->idempotencyKey('academic.teacher.profile.transition'));
+
         return response()->json(['status' => 'transitioned', ...$result]);
     }
 
@@ -189,6 +195,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['branch_id' => ['required', 'string'], 'effective_from' => ['required', 'date'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainTeacherProfile::class)->transferBranch($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['branch_id'], $input['effective_from'], $input['reason'], $this->idempotencyKey('academic.teacher.branch.transfer'));
+
         return response()->json(['status' => 'transferred', ...$result]);
     }
 
@@ -196,13 +203,15 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['branch_id' => ['required', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainTeacherProfile::class)->authorizeBranch($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['branch_id'], $input['effective_from'], $input['effective_to'] ?? null, $input['reason'], $this->idempotencyKey('academic.teacher.branch.authorize'));
+
         return response()->json(['status' => 'authorized', ...$result], 201);
     }
 
     public function skill(Request $request, string $profileId): JsonResponse
     {
         $input = $request->validate(['skill_id' => ['required', 'string'], 'branch_id' => ['required', 'string'], 'authority_kind' => ['required', 'in:teach,assess,moderate'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date'], 'evidence_ref' => ['required', 'string', 'max:255']]);
-        $result = app(MaintainTeacherProfile::class)->authorizeSkill($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['skill_id'], $input['branch_id'], $input['authority_kind'],  $input['effective_from'], $input['effective_to'] ?? null, $input['evidence_ref'], $this->idempotencyKey('academic.teacher.skill.authorize'));
+        $result = app(MaintainTeacherProfile::class)->authorizeSkill($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['skill_id'], $input['branch_id'], $input['authority_kind'], $input['effective_from'], $input['effective_to'] ?? null, $input['evidence_ref'], $this->idempotencyKey('academic.teacher.skill.authorize'));
+
         return response()->json(['status' => 'authorized', ...$result], 201);
     }
 
@@ -210,6 +219,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['branch_id' => ['required', 'string'], 'weekday' => ['required', 'integer', 'between:1,7'], 'starts_at' => ['required', 'date_format:H:i'], 'ends_at' => ['required', 'date_format:H:i'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date']]);
         $result = app(MaintainTeacherProfile::class)->declareAvailability($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['branch_id'], (int) $input['weekday'], $input['starts_at'], $input['ends_at'], $input['effective_from'], $input['effective_to'] ?? null, 'available', $this->idempotencyKey('academic.teacher.availability.declare'));
+
         return response()->json(['status' => 'declared', ...$result], 201);
     }
 
@@ -217,6 +227,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['branch_id' => ['required', 'string'], 'max_hours_per_week' => ['required', 'numeric', 'gt:0', 'max:999.99'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date'], 'evidence_ref' => ['required', 'string', 'max:255']]);
         $result = app(MaintainTeacherProfile::class)->setWorkloadLimit($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['branch_id'], (string) $input['max_hours_per_week'], $input['effective_from'], $input['effective_to'] ?? null, $input['evidence_ref'], $this->idempotencyKey('academic.teacher.workload.set'));
+
         return response()->json(['status' => 'set', ...$result], 201);
     }
 
@@ -224,6 +235,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['class_id' => ['required', 'string'], 'teacher_person_id' => ['required', 'string'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after:effective_from']]);
         $result = app(MaintainTeacherAssignment::class)->assignTeacher($this->actor(), ClassModel::query()->findOrFail((string) $input['class_id']), $input['teacher_person_id'], CarbonImmutable::parse($input['effective_from']), ($input['effective_to'] ?? '') !== '' ? CarbonImmutable::parse($input['effective_to']) : null, $this->idempotencyKey('academic.teacher.assign'));
+
         return response()->json(['status' => 'assigned', ...$result], 201);
     }
 
@@ -231,6 +243,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['effective_to' => ['required', 'date'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainTeacherAssignment::class)->endAssignment($this->actor(), TeacherAssignment::query()->findOrFail($assignmentId), CarbonImmutable::parse($input['effective_to']), $input['reason'], $this->idempotencyKey('academic.teacher.end'));
+
         return response()->json(['status' => 'ended', ...$result]);
     }
 
@@ -238,6 +251,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['effective_to' => ['required', 'date'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainTeacherAssignment::class)->extendAssignment($this->actor(), TeacherAssignment::query()->findOrFail($assignmentId), CarbonImmutable::parse($input['effective_to']), $input['reason'], $this->idempotencyKey('academic.teacher.extend'));
+
         return response()->json(['status' => 'extended', ...$result]);
     }
 
@@ -245,6 +259,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['successor_teacher_person_id' => ['required', 'string'], 'handover_on' => ['required', 'date'], 'reason' => ['required', 'string', 'max:1000']]);
         $result = app(MaintainTeacherAssignment::class)->handoverAssignment($this->actor(), TeacherAssignment::query()->findOrFail($assignmentId), $input['successor_teacher_person_id'], CarbonImmutable::parse($input['handover_on']), $input['reason'], $this->idempotencyKey('academic.teacher.handover'));
+
         return response()->json(['status' => 'handed_over', ...$result]);
     }
 
@@ -252,6 +267,7 @@ final class TeacherApiController extends Controller
     {
         $input = $request->validate(['skill_id' => ['required', 'string']]);
         $result = app(MaintainTeacherAssignment::class)->assignSkill($this->actor(), TeacherAssignment::query()->findOrFail($assignmentId), $input['skill_id'], $this->idempotencyKey('academic.teacher.assign_skill'));
+
         return response()->json(['status' => 'attributed', ...$result], 201);
     }
 }

@@ -9,12 +9,14 @@ use App\Modules\Finance\Models\Discount;
 use App\Modules\Finance\Models\EmploymentSettlement;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\FinancialCorrection;
+use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Finance\Models\FundAllocation;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PayrollLiabilityFact;
 use App\Modules\Finance\Models\Refund;
 use App\Modules\Organization\Models\Branch;
+use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Support\Errors\BusinessRejection;
 
 /**
@@ -34,15 +36,25 @@ use App\Support\Errors\BusinessRejection;
 final class LedgerAccountResolver
 {
     public const ACCOUNT_CASH = '1000';
+
     public const ACCOUNT_RECEIVABLE = '1100';
+
     public const ACCOUNT_PAYABLE = '2000';
+
     public const ACCOUNT_PAYROLL_PAYABLE = '2010';
+
     public const ACCOUNT_OPENING_EQUITY = '3000';
+
     public const ACCOUNT_TUITION_REVENUE = '4000';
+
     public const ACCOUNT_FEES_REVENUE = '4100';
+
     public const ACCOUNT_SALARY_EXPENSE = '5000';
+
     public const ACCOUNT_FINANCIAL_AID_EXPENSE = '5100';
+
     public const ACCOUNT_DISCOUNT_EXPENSE = '5200';
+
     public const ACCOUNT_OPERATING_EXPENSE = '6000';
 
     /** Revenue classification for obligation sources. */
@@ -103,7 +115,7 @@ final class LedgerAccountResolver
             'credit_account_id' => $this->accountId(self::ACCOUNT_RECEIVABLE),
             'amount' => (string) $discount->amount,
             'period_id' => (string) $discount->period_id,
-            'organization_id' => $this->organizationForBranch($obligation?->current_home_branch_id ?? $obligation?->originating_branch_id),
+            'organization_id' => $this->organizationForBranch($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id)),
         ];
     }
 
@@ -162,7 +174,7 @@ final class LedgerAccountResolver
             'credit_account_id' => $this->accountId(self::ACCOUNT_RECEIVABLE),
             'amount' => (string) $allocation->amount,
             'period_id' => (string) $obligation?->period_id,
-            'organization_id' => $this->organizationForBranch($allocation->current_home_branch_id ?? $allocation->originating_branch_id ?? $obligation?->current_home_branch_id ?? $obligation?->originating_branch_id),
+            'organization_id' => $this->organizationForBranch($allocation->current_home_branch_id ?? $allocation->originating_branch_id ?? ($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id))),
         ];
     }
 
@@ -181,9 +193,40 @@ final class LedgerAccountResolver
             'debit_account_id' => $this->accountId(self::ACCOUNT_SALARY_EXPENSE),
             'credit_account_id' => $this->accountId(self::ACCOUNT_PAYROLL_PAYABLE),
             'amount' => $absoluteAmount,
-            'period_id' => (string) $liability->period_id,
+            'period_id' => $this->financePeriodForPayroll((string) $liability->period_id),
             'organization_id' => $this->organizationForBranch($liability->originating_branch_id),
         ];
+    }
+
+    /**
+     * The payroll liability fact is anchored to its Payroll period, but a
+     * journal books only into an open Finance financial period. Finance
+     * payroll/ledger cadence is one open Finance period per payroll window
+     * (MaintainFinancialPeriod::close refuses to close over open payroll
+     * periods), so the unique open Finance period whose window contains the
+     * payroll period window is the authoritative posting period.
+     */
+    private function financePeriodForPayroll(string $payrollPeriodId): string
+    {
+        /** @var PayrollPeriod|null $payroll */
+        $payroll = PayrollPeriod::query()->whereKey($payrollPeriodId)->first();
+        if ($payroll === null) {
+            throw BusinessRejection::forCode('finance.ledger_payroll_period_missing', 'the ledger payroll liability source references a missing payroll period');
+        }
+        $periods = FinancialPeriod::query()
+            ->where('lifecycle_state', 'open')
+            ->where('date_from', '<=', $payroll->date_from)
+            ->where('date_to', '>=', $payroll->date_to)
+            ->get();
+        if ($periods->count() !== 1) {
+            throw BusinessRejection::forCode('finance.ledger_payroll_period_unmapped', sprintf(
+                'payroll period %s must map to exactly one open Finance financial period containing its window (%d found)',
+                $payroll->period_key,
+                $periods->count(),
+            ));
+        }
+
+        return (string) $periods->first()->id;
     }
 
     /** @return array{debit_account_id: string, credit_account_id: string, amount: numeric-string, period_id: string, organization_id: string} */
@@ -260,7 +303,7 @@ final class LedgerAccountResolver
                 'credit_account_id' => $this->accountId(self::ACCOUNT_FINANCIAL_AID_EXPENSE),
                 'amount' => (string) $correction->amount,
                 'period_id' => (string) $correction->period_id,
-                'organization_id' => $this->organizationForBranch($obligation?->current_home_branch_id ?? $obligation?->originating_branch_id),
+                'organization_id' => $this->organizationForBranch($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id)),
             ];
         }
 

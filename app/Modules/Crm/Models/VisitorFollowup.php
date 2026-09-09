@@ -7,6 +7,7 @@ namespace App\Modules\Crm\Models;
 use App\Modules\Identity\Models\Person;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Scheduled next action on a visitor. Content is fixed at creation; only the
@@ -20,8 +21,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $notes
  * @property string $status
  * @property string $created_by
- * @property \Illuminate\Support\Carbon $created_at
- * @property \Illuminate\Support\Carbon $updated_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  * @property string|null $completed_by
  * @property string|null $completed_at
  * @property string $correlation_id

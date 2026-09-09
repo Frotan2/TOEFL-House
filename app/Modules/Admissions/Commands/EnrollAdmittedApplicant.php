@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Admissions\Commands;
 
+use App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder;
 use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Placement\Queries\AcademicEligibilitySnapshotQuery;
 use App\Modules\Admissions\Models\AdmissionDecision;
@@ -13,6 +14,7 @@ use App\Modules\Audit\AuditRecorder;
 use App\Modules\Crm\Domain\VisitorConversionRecorder;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Domain\StudentAdmissionRegistrar;
 use App\Modules\Students\Domain\StudentStatusRegistry;
 use App\Modules\Students\Models\Student;
@@ -89,7 +91,7 @@ final class EnrollAdmittedApplicant
                     if ($originatingBranchId === '') {
                         throw BusinessRejection::forCode('admissions.student_provenance_required', 'student conversion requires branch provenance from the applicant or placement profile');
                     }
-                    $branch = \App\Modules\Organization\Models\Branch::query()->whereKey($originatingBranchId)->first();
+                    $branch = Branch::query()->whereKey($originatingBranchId)->first();
                     if ($branch === null || $branch->lifecycle_state !== 'active' || $branch->structureScope()->organizationId === '') {
                         throw BusinessRejection::forCode('admissions.branch_inactive', 'student conversion requires an active provenance branch with organization topology');
                     }
@@ -192,13 +194,13 @@ final class EnrollAdmittedApplicant
         if ($snapshot === null || ($snapshot['verification']['valid'] ?? false) !== true) {
             throw BusinessRejection::forCode('admissions.eligibility_snapshot_unverified', 'the placement eligibility snapshot could not be verified at conversion');
         }
-        if ((string) ($snapshot['snapshot']['snapshot_schema_version'] ?? '') !== \App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION
-            || (string) ($snapshot['snapshot']['placement_recommendation_id'] ?? '') !== trim((string) $profile->placement_recommendation_id)) {
+        if (trim((string) ($snapshot['snapshot']['snapshot_schema_version'] ?? '')) !== AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION
+            || trim((string) ($snapshot['snapshot']['placement_recommendation_id'] ?? '')) !== trim((string) $profile->placement_recommendation_id)) {
             throw BusinessRejection::forCode('admissions.eligibility_snapshot_lineage_invalid', 'student conversion requires the v2 snapshot bound to the applicant placement recommendation');
         }
-        if ((string) ($snapshot['snapshot']['placement_profile_id'] ?? '') !== trim((string) $profile->id)
-            || (string) ($snapshot['snapshot']['person_id'] ?? '') !== trim((string) $applicant->person_id)
-            || (string) ($snapshot['snapshot']['originating_branch_id'] ?? '') !== trim((string) ($applicant->current_home_branch_id ?? $applicant->originating_branch_id ?? ''))) {
+        if (trim((string) ($snapshot['snapshot']['placement_profile_id'] ?? '')) !== trim((string) $profile->id)
+            || trim((string) ($snapshot['snapshot']['person_id'] ?? '')) !== trim((string) $applicant->person_id)
+            || trim((string) ($snapshot['snapshot']['originating_branch_id'] ?? '')) !== trim((string) ($applicant->current_home_branch_id ?? $applicant->originating_branch_id ?? ''))) {
             throw BusinessRejection::forCode('admissions.eligibility_snapshot_mismatch', 'the applicant eligibility snapshot does not match its person, placement profile, and branch lineage');
         }
     }

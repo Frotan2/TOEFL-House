@@ -24,6 +24,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -38,6 +39,7 @@ use Tests\TestCase;
 final class AssessmentWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -54,10 +56,15 @@ final class AssessmentWorkflowFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'boundary rules', 'awf-ver');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'awf-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'awf-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-assessmentworkflowfeatur', 1, 'Level', 'A1', 'canon-assessmentworkflowfeatur-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-assessmentworkflowfeatur-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-assessmentworkflowfeatur-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'awf-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 2, 'awf-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('awf-teacher-1', []);
+        $this->buildActiveTeacher('awf-teacher-1', null, 'assessme3ee');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'awf-teacher-1', new CarbonImmutable('2026-09-01'), null, 'awf-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'awf-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'awf-cls-act');
@@ -68,7 +75,7 @@ final class AssessmentWorkflowFeatureTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -102,7 +109,7 @@ final class AssessmentWorkflowFeatureTest extends TestCase
         $personId = 'awf-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('awf-clerk-2'), $personId, 'IELTS Preparation', 'awf-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('awf-clerk-2'), $personId, 'IELTS Preparation', 'awf-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 

@@ -382,7 +382,11 @@ final class AcademicEligibilitySnapshotQuery
             return is_bool($payloadValue) && is_bool($databaseValue) && $payloadValue === $databaseValue;
         }
 
-        return (string) $payloadValue === (string) $databaseValue;
+        // Identifier columns are char(36), so PostgreSQL blank-pads any value
+        // shorter than 36 characters. The signed payload stores the unpadded
+        // value, so a raw comparison reports a mismatch on trailing whitespace
+        // alone and every signed snapshot fails verification.
+        return trim((string) $payloadValue) === trim((string) $databaseValue);
     }
 
     private function sameSnapshotTimestamp(mixed $payloadValue, mixed $databaseValue): bool
@@ -405,5 +409,4 @@ final class AcademicEligibilitySnapshotQuery
             return false;
         }
     }
-
 }

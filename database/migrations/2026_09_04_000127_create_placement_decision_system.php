@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Crm\Domain\VisitorInteractionCatalog;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -428,7 +429,7 @@ return new class extends Migration
         DB::statement('ALTER TABLE visitor_interactions ADD COLUMN placement_attempt_id CHAR(36) NULL');
         DB::statement('ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_placement_attempt_foreign FOREIGN KEY (placement_attempt_id) REFERENCES placement_attempts (id)');
         DB::statement('ALTER TABLE visitor_interactions DROP CONSTRAINT IF EXISTS visitor_interactions_type_check');
-        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_type_check CHECK (type IN ('".implode("','", \App\Modules\Crm\Domain\VisitorInteractionCatalog::types())."'))");
+        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_type_check CHECK (type IN ('".implode("','", VisitorInteractionCatalog::types())."'))");
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION visitor_interaction_reference_guard() RETURNS trigger AS $fn$
             DECLARE
@@ -598,7 +599,7 @@ return new class extends Migration
         DB::statement('ALTER TABLE visitor_interactions DROP CONSTRAINT IF EXISTS visitor_interactions_type_check');
         DB::statement('ALTER TABLE visitor_interactions DROP CONSTRAINT IF EXISTS visitor_interactions_placement_attempt_foreign');
         DB::statement('ALTER TABLE visitor_interactions DROP COLUMN IF EXISTS placement_attempt_id');
-        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_type_check CHECK (type IN ('".implode("','", \App\Modules\Crm\Domain\VisitorInteractionCatalog::types())."'))");
+        DB::statement("ALTER TABLE visitor_interactions ADD CONSTRAINT visitor_interactions_type_check CHECK (type IN ('".implode("','", VisitorInteractionCatalog::types())."'))");
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION visitor_interaction_reference_guard() RETURNS trigger AS $fn$
             DECLARE

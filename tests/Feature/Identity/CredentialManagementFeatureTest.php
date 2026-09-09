@@ -34,6 +34,10 @@ final class CredentialManagementFeatureTest extends TestCase
                 'identity_evidence_ref' => 'evidence/fixture/'.$personId,
                 'verified_by' => 'fixture-verifier',
                 'verified_at' => now()->toDateTimeString(),
+                // Persons are immutable after verification, so branch
+                // provenance is stamped at creation like the canonical
+                // RegisterPerson command does.
+                'home_branch_id' => $this->bootstrapBranchId(),
             ]);
         }
 

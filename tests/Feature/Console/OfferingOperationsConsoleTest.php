@@ -20,6 +20,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -34,6 +35,7 @@ use Tests\TestCase;
 final class OfferingOperationsConsoleTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $branchId;
@@ -66,7 +68,7 @@ final class OfferingOperationsConsoleTest extends TestCase
         $this->levelId = $structure->defineLevel($officer, $this->programVersionId, 'starter', 1, 'Starter', 'A1', 'con-lvl')['level_id'];
         $this->secondLevelId = $structure->defineLevel($officer, $this->programVersionId, 'elementary', 2, 'Elementary', 'A2', 'con-lvl-2')['level_id'];
 
-        $this->periodId = $structure->definePeriod($officer, 'Console Term', new CarbonImmutable('2026-10-01'), new CarbonImmutable('2026-12-30'), 'con-period')['period_id'];
+        $this->periodId = $structure->definePeriod($officer, 'Console Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-30'), 'con-period')['period_id'];
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($this->periodId), 'published', 'con-period-pub');
 
         $this->makeEmployee('con-officer-1', ['academic.structure'], 'structure-officer');
@@ -136,7 +138,7 @@ final class OfferingOperationsConsoleTest extends TestCase
     {
         $this->signIn('structure-officer');
 
-        $this->get('/academic')->assertOk()->assertSee('Branch availability');
+        $this->get('/academic')->assertOk()->assertSee('data-view="academic"', false);
 
         $availabilityId = $this->declareAvailabilityViaConsole()['availability_id'];
 
@@ -193,9 +195,9 @@ final class OfferingOperationsConsoleTest extends TestCase
         $this->signOut();
 
         $officer = $this->academicOfficer('offering-console-teach');
-        $this->personWithAuthority('con-teacher-1', []);
+        $this->buildActiveTeacher('con-teacher-1', $this->branchId, 'offeringc43');
         $classId = app(MaintainClass::class)->defineClass(
-            $officer, $this->programVersionId, $this->periodId, 4, 'con-class', $this->levelId,
+            $officer, $this->programVersionId, $this->periodId, 4, 'con-class', $this->levelId, $this->branchId,
         )['class_id'];
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($classId), 'con-teacher-1', new CarbonImmutable('2026-09-01'), null, 'con-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($classId), 'published', 'con-class-pub');
@@ -238,7 +240,7 @@ final class OfferingOperationsConsoleTest extends TestCase
     private function newStudent(string $personId): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('con-clerk-'.$personId), $personId, 'Program', 'con-reg-'.$personId);
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('con-clerk-'.$personId), $personId, 'Program', 'con-reg-'.$personId, null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(

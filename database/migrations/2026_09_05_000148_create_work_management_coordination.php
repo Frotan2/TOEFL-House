@@ -73,7 +73,7 @@ return new class extends Migration
         });
         DB::statement("ALTER TABLE work_items ADD CONSTRAINT work_items_kind_check CHECK (kind IN ('task','approval','exception'))");
         DB::statement("ALTER TABLE work_items ADD CONSTRAINT work_items_state_check CHECK (lifecycle_state IN ('open','claimed','in_progress','completed','cancelled','expired'))");
-        DB::statement("ALTER TABLE work_items ADD CONSTRAINT work_items_assignment_check CHECK (assigned_to IS NOT NULL OR queue_key IS NOT NULL)");
+        DB::statement('ALTER TABLE work_items ADD CONSTRAINT work_items_assignment_check CHECK (assigned_to IS NOT NULL OR queue_key IS NOT NULL)');
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION work_items_provenance_guard() RETURNS trigger AS $fn$
             DECLARE

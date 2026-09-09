@@ -23,12 +23,14 @@ use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\AdmissionDecision;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Students\Models\Student;
+use App\Support\Identifiers\RandomIdentifier;
 use App\Support\Signing\AcademicEligibilitySigner;
 use App\Support\Signing\CanonicalJson;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsPlacementCatalog;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -42,6 +44,7 @@ use Tests\TestCase;
 final class AcademicEligibilitySnapshotFeatureTest extends TestCase
 {
     use BuildsPlacementCatalog;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     public function test_release_produces_signed_versioned_immutable_eligibility_snapshot(): void
@@ -121,12 +124,19 @@ final class AcademicEligibilitySnapshotFeatureTest extends TestCase
         $this->assertSame($profile->id, (string) $student->placement_profile_id);
         $this->assertSame($profile->academic_eligibility_snapshot_id, (string) $student->academic_eligibility_snapshot_id);
 
-        // Active class for the enrollment consumption path.
+        // Active class for the enrollment consumption path. The class must
+        // reference an open offering for its branch, level, and period
+        // (academic.class_offering_required), so open the level availability
+        // and offering the way a school opens delivery.
         $officer = $this->academicOfficer('elig2-officer');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Eligibility Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'elig2-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'elig2-period-pub');
-        $this->personWithAuthority('elig2-teacher-1', []);
-        $class = app(MaintainClass::class)->defineClass($officer, (string) $profile->program_version_id, $period['period_id'], 10, 'elig2-class');
+        $structure = app(MaintainAcademicStructure::class);
+        $entryLevel = ProgramVersionLevel::query()->where('program_version_id', $profile->program_version_id)->orderBy('ordinal')->firstOrFail();
+        $structure->declareBranchAvailability($officer, $this->bootstrapBranchId(), (string) $entryLevel->id, $period['period_id'], 'elig2-avail');
+        $structure->openOffering($officer, $this->bootstrapBranchId(), (string) $entryLevel->id, $period['period_id'], 200, 'elig2-offer');
+        $this->buildActiveTeacher('elig2-teacher-1', null, 'academicdaf');
+        $class = app(MaintainClass::class)->defineClass($officer, (string) $profile->program_version_id, $period['period_id'], 10, 'elig2-class', null, $this->bootstrapBranchId());
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($class['class_id']), 'elig2-teacher-1', new CarbonImmutable('2026-09-01'), null, 'elig2-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'published', 'elig2-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($class['class_id']), 'active', 'elig2-class-active');
@@ -229,7 +239,7 @@ final class AcademicEligibilitySnapshotFeatureTest extends TestCase
         // v2 INSERT/link guards were deployed. Disabling guards is strictly a
         // fixture operation; production direct-SQL attacks are covered in the
         // Placement authority test and the guards are restored immediately.
-        $legacyId = \App\Support\Identifiers\RandomIdentifier::new();
+        $legacyId = RandomIdentifier::new();
         $legacyPayload = [
             'legacy_snapshot' => $legacyId,
             'person_id' => $student->person_id,
@@ -295,6 +305,13 @@ final class AcademicEligibilitySnapshotFeatureTest extends TestCase
 
     private function withTriggerDisabled(string $table, string $trigger, callable $operation): void
     {
+        // Conversion of an admitted applicant queues the deferred
+        // initial-active-status guard on `students`, and PostgreSQL refuses
+        // ALTER TABLE while a table carries pending trigger events. Firing
+        // deferred events now is safe: every write of the scenario has
+        // already happened by the time a legacy fixture is installed, so an
+        // event that would fail here would fail identically at commit.
+        DB::statement('SET CONSTRAINTS ALL IMMEDIATE');
         DB::statement(sprintf('ALTER TABLE %s DISABLE TRIGGER %s', $table, $trigger));
         try {
             $operation();

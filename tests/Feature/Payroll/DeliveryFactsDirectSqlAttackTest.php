@@ -8,6 +8,7 @@ use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
 use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Commands\MaintainSkill;
+use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Commands\RecordAttendance;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\ClassModel;
@@ -15,11 +16,11 @@ use App\Modules\Academic\Models\ClassSession;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Hr\Commands\MaintainContractVersion;
-use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Models\ContractVersion;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Payroll\Commands\CalculatePayroll;
@@ -31,6 +32,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
@@ -43,6 +45,7 @@ use Tests\TestCase;
 final class DeliveryFactsDirectSqlAttackTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $teacherPersonId = 'p16atk-teacher-1';
@@ -63,8 +66,10 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
         parent::setUp();
 
         $hrManager = $this->grantedActor('p16atk-hr-1', ['hr.employ']);
-        $this->personWithAuthority($this->teacherPersonId, []);
-        $employment = app(MaintainEmployment::class)->employ($hrManager, $this->teacherPersonId, 'p16atk-emp-1');
+        $teacher = $this->buildActiveTeacher($this->teacherPersonId, null, 'delivery918');
+        $employment = ['employment_id' => (string) Employment::query()
+            ->where('person_id', $this->teacherPersonId)->where('lifecycle_state', '!=', 'terminated')
+            ->value('id')]; // buildActiveTeacher already opened this employment
         $this->employmentId = $employment['employment_id'];
 
         $skillRegistrar = $this->grantedActor('p16atk-skill-1', ['academic.skill']);
@@ -82,18 +87,56 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
         $commands->addRule($fm, $version, 'session_rate', '600.00', $this->skillIds['writing_grammar'], null, null, 'p16atk-r-wr');
         $commands->submit($fm, $version, 'p16atk-con-2');
         $commands->approve($this->generalManager(), $version, 'p16atk-con-3');
-        app(MaintainEmployment::class)->hire($hrManager, Employment::query()->findOrFail($this->employmentId), '2026-08-01', 'p16atk-emp-3');
 
         $officer = $this->academicOfficer();
         $program = app(MaintainAcademicStructure::class)->defineProgram($officer, 'TOEFL Intensive', 'p16atk-prog-1');
         $versionPub = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'rules', 'p16atk-prog-2');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-08-01'), new CarbonImmutable('2026-12-18'), 'p16atk-per-1');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'p16atk-per-2');
-        $class = app(MaintainClass::class)->defineClass($officer, $versionPub['version_id'], $period['period_id'], 4, 'p16atk-class-1');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $versionPub['version_id'], 'lvl-canon-deliveryfactsdirectsqlat', 1, 'Level', 'A1', 'canon-deliveryfactsdirectsqlat-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-deliveryfactsdirectsqlat-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-deliveryfactsdirectsqlat-offering');
+        $class = app(MaintainClass::class)->defineClass($officer, $versionPub['version_id'], $period['period_id'], 4, 'p16atk-class-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $assignment = app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-08-01'), null, 'p16atk-class-2');
+        // Delivery authority is approval-side: the teacher must hold an
+        // effective per-skill authority for the assignment window before the
+        // class may attribute a skill to them.
+        $teacherAssignment = TeacherAssignment::query()->findOrFail($assignment['assignment_id']);
+        $teacherApprover = $this->grantedActor('p16atk-ta-approve', ['academic.teacher_approve']);
         foreach ($this->skillIds as $skillId) {
-            app(MaintainClass::class)->assignSkill($officer, TeacherAssignment::query()->findOrFail($assignment['assignment_id']), $skillId, 'p16atk-sk-assign-'.$skillId);
+            app(MaintainTeacherProfile::class)->authorizeSkill(
+                $teacherApprover,
+                TeacherProfile::query()->findOrFail($teacherAssignment->teacher_profile_id),
+                $skillId,
+                $this->bootstrapBranchId(),
+                'teach',
+                '2026-01-01',
+                null,
+                'evidence/p16atk/skill',
+                'p16atk-auth-'.$skillId,
+            );
+            app(MaintainClass::class)->assignSkill($officer, $teacherAssignment, $skillId, 'p16atk-sk-assign-'.$skillId);
+        }
+        // Session scheduling requires the teacher to be available on the
+        // session weekday for its full window, so declare all weekdays.
+        $availabilityManager = $this->grantedActor('p16atk-avail-1', ['academic.teacher_manage']);
+        $teacherProfile = TeacherProfile::query()->findOrFail($teacher['teacher_profile_id']);
+        foreach (range(1, 7) as $weekday) {
+            app(MaintainTeacherProfile::class)->declareAvailability(
+                $availabilityManager,
+                $teacherProfile,
+                $this->bootstrapBranchId(),
+                $weekday,
+                '00:00',
+                '23:59',
+                '2026-01-01',
+                null,
+                'available',
+                'p16atk-avail-'.$weekday,
+            );
         }
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'p16atk-class-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'p16atk-class-4');
@@ -115,7 +158,7 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
     private function enrolledStudent(string $personId, string $keyPrefix): string
     {
         $this->personWithAuthority($personId, []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('p16atk-adm-clerk'), $personId, 'Program', $keyPrefix.'-reg');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('p16atk-adm-clerk'), $personId, 'Program', $keyPrefix.'-reg', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
@@ -169,11 +212,10 @@ final class DeliveryFactsDirectSqlAttackTest extends TestCase
         $this->schedule('2026-08-05', 'speaking_listening', 'p16atk-s3');
         $calculationId = $this->calculationId();
 
-        // A skill the teacher was never assigned to this class.
+        // A skill the teacher was never authorized to deliver: the schema
+        // refuses a delivery fact whose skill does not match its session.
         $foreignSkill = app(MaintainSkill::class)->register($this->grantedActor('p16atk-skill-1', ['academic.skill']), 'music_club', 'Music Club', 'p16atk-sk-fn')['skill_id'];
-        $officer = $this->academicOfficer();
-        $session = app(MaintainClass::class)->scheduleSession($officer, ClassModel::query()->findOrFail($this->classId), new CarbonImmutable('2026-08-07'), '09:00', '11:00', 'p16atk-s4', $foreignSkill)['session_id'];
-        app(RecordAttendance::class)->record($officer, ClassSession::query()->findOrFail($session), Enrollment::query()->findOrFail($this->enrollmentId), 'present', 'p16atk-s4-att');
+        $session = $this->schedule('2026-08-07', 'speaking_listening', 'p16atk-s4');
 
         $this->expectException(QueryException::class);
         DB::table('teaching_delivery_facts')->insert([

@@ -46,7 +46,7 @@ final class PrivacyWorkflowFeatureTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -368,12 +368,18 @@ final class PrivacyWorkflowFeatureTest extends TestCase
         ]);
 
         // The same person in both slots is refused at the boundary.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update([
                 'approver_two_id' => 'prv-approver-a', 'lifecycle_state' => 'approved', 'updated_at' => now(),
             ]);
             $this->fail('expected the boundary to refuse a non-distinct approver');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('two distinct approvers', $exception->getMessage());
         }
 
@@ -385,6 +391,9 @@ final class PrivacyWorkflowFeatureTest extends TestCase
 
         // Approver slots are written once — even on a legal transition,
         // rewriting a signed slot is refused.
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update([
                 'approver_one_id' => 'prv-approver-b',
@@ -394,17 +403,24 @@ final class PrivacyWorkflowFeatureTest extends TestCase
                 'updated_at' => now(),
             ]);
             $this->fail('expected the boundary to refuse rewriting an approver slot');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('written once', $exception->getMessage());
         }
 
         // Once executed, the request is closed to every change.
         app(ExportSubjectData::class)->execute($exporter, PrivacyExportRequest::query()->findOrFail($requestId), 'prv-dom-execute');
         $this->assertDatabaseHas($requests, ['id' => $requestId, 'lifecycle_state' => 'exported']);
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and later reads still work.
+        DB::beginTransaction();
         try {
             DB::table($requests)->where('id', $requestId)->update(['purpose' => 'rewritten', 'updated_at' => now()]);
             $this->fail('expected the boundary to refuse changing an executed request');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString('closed', $exception->getMessage());
         }
     }

@@ -33,8 +33,8 @@ final class ReportingScope
 
     /**
      * @return string|null Current organization provenance for every
-     *                    target-bound scope; null is reserved exclusively for
-     *                    global/institution-wide scope.
+     *                     target-bound scope; null is reserved exclusively for
+     *                     global/institution-wide scope.
      */
     public function authorize(Actor $actor, string $capability, string $scopeType, ?string $scopeId): ?string
     {
@@ -91,7 +91,7 @@ final class ReportingScope
         }
         /** @var FundingSource|null $fund */
         $fund = FundingSource::query()->whereKey($fundId)->first();
-        $organizationId = trim((string) ($fund?->organization_id ?? ''));
+        $organizationId = trim($fund === null ? '' : (string) ($fund->organization_id ?? ''));
         if ($fund === null || $organizationId === '' || ! Organization::query()
             ->whereKey($organizationId)
             ->where('lifecycle_state', 'active')

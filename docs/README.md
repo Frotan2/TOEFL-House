@@ -23,7 +23,26 @@ This is the single human/AI entry point to the TOEFL House engineering knowledge
 15. [`14-CURRENT-STATE-ROADMAP.md`](14-CURRENT-STATE-ROADMAP.md) — current implementation, target gaps and priorities.
 16. [`15-REQUIREMENT-TRACEABILITY.md`](15-REQUIREMENT-TRACEABILITY.md) — requirement traceability.
 17. [`16-DECISION-REGISTER.md`](16-DECISION-REGISTER.md) — decision authority index.
-18. [`ai/00-AI-ENTRYPOINT.md`](ai/00-AI-ENTRYPOINT.md) — mandatory AI engineering entry point.
+18. [`CODEBASE_HYGIENE_AND_STANDARDS.md`](CODEBASE_HYGIENE_AND_STANDARDS.md) — repository coding, cleanup, compatibility, naming, comment, testing and runtime-readiness standard.
+19. [`CANONICAL_TERMINOLOGY.md`](CANONICAL_TERMINOLOGY.md) — canonical domain vocabulary and semantic distinctions.
+20. [`RUNTIME_VERIFICATION_HANDOFF.md`](RUNTIME_VERIFICATION_HANDOFF.md) — pre-runtime state, blockers, verification order and handoff evidence template.
+21. [`ai/00-AI-ENTRYPOINT.md`](ai/00-AI-ENTRYPOINT.md) — mandatory AI engineering entry point.
+
+## Runtime, testing and operations documents
+
+- [`RUNTIME_ENVIRONMENT_LOCK.md`](RUNTIME_ENVIRONMENT_LOCK.md) — **the authoritative runtime specification** (locked versions, required extensions, verification chain, provisioner). Machine-checked by `npm run verify:environment`.
+- [`RUNTIME_VERIFICATION_HANDOFF.md`](RUNTIME_VERIFICATION_HANDOFF.md) (also in the authority chain above) — the session-by-session runtime evidence record (Parts I–L), ending in the 2026-09-09 final certification.
+- [`RUNTIME_ENVIRONMENT.md`](RUNTIME_ENVIRONMENT.md) — superseded 8.2-era build narrative, retained as the from-source fallback for the lock.
+- [`TESTING_STRATEGY_LOCK.md`](TESTING_STRATEGY_LOCK.md) — mandatory test-isolation strategy (enforced by an architecture test).
+- [`TEST_SUITE_ARCHITECTURE.md`](TEST_SUITE_ARCHITECTURE.md) — what each test layer proves and must not replace.
+- [`DATABASE_SCHEMA_CONSOLIDATION.md`](DATABASE_SCHEMA_CONSOLIDATION.md) — migration-chain integrity and the runtime-gated baseline decision.
+- [`operations/production-deployment.md`](operations/production-deployment.md) — the operator deployment/DR manual (nginx + PHP-FPM, `deploy/` scripts, first-install bootstrap, health, backup/restore, rollback doctrine).
+- [`reference/current-state-compliance-evidence.md`](reference/current-state-compliance-evidence.md) — supporting evidence snapshot (2026-09-07), not primary authority.
+- The root-level [`../SETUP.md`](../SETUP.md) — supported setup/verification procedure (Windows launcher, clean-environment provisioner, all verification commands).
+
+## Authority chain for implementation work
+
+For implementation/cleanup work, apply the canonical architecture and data/security decisions first, then the repository-wide hygiene and terminology standards. The hygiene and terminology standards never override a domain, security, database, or release decision.
 
 ## Three-state rule
 
@@ -35,12 +54,42 @@ This is the single human/AI entry point to the TOEFL House engineering knowledge
 
 Never treat a target capability as implemented merely because it is documented. Never treat implementation as release-certified without runtime evidence.
 
+## Terminology rule
+
+Use `CANONICAL_TERMINOLOGY.md` for current domain names. New synonyms for an existing concept require an explicit semantic distinction or an approved external-compatibility reason. Historical wording may remain only when needed to preserve historical truth.
+
+## Runtime handoff rule
+
+`RUNTIME_VERIFICATION_HANDOFF.md` is the canonical starting point for the next runtime-verification agent. It records the evidence boundary and must be updated with real command/output evidence rather than inferred success.
+
 ## Where to go next
 
-- Humans: read the numbered canonical documents in order, then consult `history/` only for provenance.
-- AI agents: start with `ai/00-AI-ENTRYPOINT.md`, then follow its mandatory reading sequence.
-- Operators: use `12-OPERATIONS-DEPLOYMENT-DR.md` and the current production procedure.
-- Auditors: use `15-REQUIREMENT-TRACEABILITY.md`, `16-DECISION-REGISTER.md`, and the evidence sources they point to.
+- Humans: read the numbered canonical documents in order, then `CODEBASE_HYGIENE_AND_STANDARDS.md` and `CANONICAL_TERMINOLOGY.md`, then consult `history/` only for provenance.
+- AI agents: start with `ai/00-AI-ENTRYPOINT.md`; when beginning runtime work, read `RUNTIME_VERIFICATION_HANDOFF.md` before executing or changing runtime-sensitive code.
+- Operators: use `12-OPERATIONS-DEPLOYMENT-DR.md` and `SETUP.md` for the actual deployment procedure.
+- Auditors: use `13-TESTING-QUALITY-RELEASE.md`, `15-REQUIREMENT-TRACEABILITY.md`, `16-DECISION-REGISTER.md`, `CANONICAL_TERMINOLOGY.md`, and the evidence sources they point to.
+
+## Audit and reconciliation records (non-normative)
+
+- [`AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](AUDIT-2026-09-09-FINAL-CERTIFICATION.md) —
+  **the current release authority.** Final principal-architect certification:
+  locked runtime re-provisioned, full CI-equivalent gate chain re-executed,
+  986-test suite green, and all three real-HTTP business journeys converged
+  and executed green from a true first boot (including the fixed first-run
+  genesis structure, finding FC-1).
+- [`AUDIT-2026-09-08-RECONCILIATION.md`](AUDIT-2026-09-08-RECONCILIATION.md) — the
+  branch reconciliation of the `01a0814a` certification line with the `01a080c8`
+  verified line, the corrections applied to it, and the fresh verification record
+  (all gates re-run, plus live browser E2E and a running-instance readiness check).
+  **Read this before treating any audit verdict as release authority.**
+- [`AUDIT-2026-09-08-GATE-EVIDENCE.md`](AUDIT-2026-09-08-GATE-EVIDENCE.md) —
+  the gate-by-gate evidence record behind the 2026-09-08 reconciliation
+  (deployment rehearsal, DR drill, volume fixtures; cited by the 2026-09-09
+  certification as carried-forward evidence).
+- `AUDIT-2026-09-08-PRODUCTION-READINESS.md` and the root-level
+  `FINAL-ENGINEERING-REPORT.md` / `AUDIT-SUMMARY.md` — the superseded certification
+  from `arena/01a0814a-toefl-house`, retained verbatim with inline `[R.n]`
+  corrections so the original claim and its refutation stay readable together.
 
 ## Historical archive
 

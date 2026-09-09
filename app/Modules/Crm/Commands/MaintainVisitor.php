@@ -221,5 +221,4 @@ final class MaintainVisitor
             'organization_id' => (string) $scope->organization_id,
         ];
     }
-
 }

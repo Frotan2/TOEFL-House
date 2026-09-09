@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Immutable catalog copy with originating branch/organization provenance; circulation state derived from issuances.
+ *
  * @property string $id
  * @property string|null $organization_id
  * @property string|null $originating_branch_id

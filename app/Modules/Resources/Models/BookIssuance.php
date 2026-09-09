@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Book issuance custody: issued, returned, or lost with evidence; one open issuance per copy.
+ *
  * @property string $id
  * @property string $copy_id
  * @property string $lifecycle_state

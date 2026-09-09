@@ -14,9 +14,11 @@ use Tests\TestCase;
 
 /**
  * API read-branch confinement (WP-ACAD-SCOPE): list endpoints disclose only
- * rows of the actor's visible branches (plus null-provenance rows to
- * authorized actors, empty output to bare sessions), and single-record reads
- * outside scope are refused with 403 and denial-audited.
+ * rows of the actor's visible branches (empty output to bare sessions), and
+ * single-record reads outside scope are refused with 403 and denial-audited.
+ * Students always carry stamped provenance: the admission chain fixes the
+ * conversion branch and home-branch changes go through the transfer fact
+ * guard, so no fixture can produce a null-home student row.
  */
 final class ApiBranchScopeTest extends TestCase
 {
@@ -30,7 +32,7 @@ final class ApiBranchScopeTest extends TestCase
 
     private string $studentB;
 
-    private string $studentNull;
+    private string $studentA2;
 
     protected function setUp(): void
     {
@@ -41,9 +43,10 @@ final class ApiBranchScopeTest extends TestCase
 
         $this->studentA = $this->makeStudent()['student']->id;
         $this->studentB = $this->makeStudent()['student']->id;
-        $this->studentNull = $this->makeStudent()['student']->id;
-        Student::query()->whereKey($this->studentA)->update(['current_home_branch_id' => $this->branchA]);
-        Student::query()->whereKey($this->studentB)->update(['current_home_branch_id' => $this->branchB]);
+        $this->studentA2 = $this->makeStudent()['student']->id;
+        $this->transferStudentHome($this->studentA, $this->branchA, 'hb1');
+        $this->transferStudentHome($this->studentB, $this->branchB, 'hb2');
+        $this->transferStudentHome($this->studentA2, $this->branchA, 'hb3');
 
         $this->makeLogin('api.a', 'api-officer-a', $this->branchA);
         $this->makeLogin('api.bare', 'api-officer-bare', null);
@@ -63,11 +66,9 @@ final class ApiBranchScopeTest extends TestCase
 
     private function makeLogin(string $username, string $personId, ?string $branchId): void
     {
-        if ($branchId === null) {
-            $this->personWithAuthority($personId, []);
-        } else {
-            $this->personWithAuthority($personId, []);
-            $this->grantScopeAuthority($personId, ['academic.enroll'], 'branch', $branchId);
+        $this->personWithAuthority($personId, []);
+        if ($branchId !== null) {
+            $this->grantScopeAuthority($personId, ['students.manage'], 'branch', $branchId);
         }
         UserAccount::query()->create([
             'id' => RandomIdentifier::new(),
@@ -102,7 +103,7 @@ final class ApiBranchScopeTest extends TestCase
         $ids = $this->listedStudentIds();
 
         $this->assertContains($this->studentA, $ids);
-        $this->assertContains($this->studentNull, $ids);
+        $this->assertContains($this->studentA2, $ids);
         $this->assertNotContains($this->studentB, $ids);
     }
 
@@ -128,6 +129,6 @@ final class ApiBranchScopeTest extends TestCase
         ]);
 
         $this->getJson('/api/v1/students/'.$this->studentA)->assertOk();
-        $this->getJson('/api/v1/students/'.$this->studentNull)->assertOk();
+        $this->getJson('/api/v1/students/'.$this->studentA2)->assertOk();
     }
 }

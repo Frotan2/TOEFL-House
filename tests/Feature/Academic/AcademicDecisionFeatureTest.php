@@ -31,12 +31,14 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\Concerns\DecidesAdmissions;
 use Tests\TestCase;
 
 final class AcademicDecisionFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
     use DecidesAdmissions;
 
     private string $classId;
@@ -53,15 +55,25 @@ final class AcademicDecisionFeatureTest extends TestCase
         $version = app(MaintainAcademicStructure::class)->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'v1', 'dec-prog-2');
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Decision Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'dec-period-1');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'dec-period-2');
-        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        // Two levels so an advance decision has a target; the appeal supersede
+        // below advances past the fixture level.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicdecisionfeaturet', 1, 'Level', 'A1', 'canon-academicdecisionfeaturet-lvl');
+        app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-academicdecisionfeaturet-2', 2, 'Level 2', 'A2', 'canon-academicdecisionfeaturet-lvl2');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-academicdecisionfeaturet-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-academicdecisionfeaturet-offering');
+        $class = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 5, 'dec-class-1', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
         $this->grantedActor('dec-teacher-1', []);
+        // assignTeacher requires an active canonical teacher profile.
+        $this->buildActiveTeacher('dec-teacher-1', null, 'academic731');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'dec-teacher-1', new CarbonImmutable('2026-09-01'), null, 'dec-class-2');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'dec-class-3');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'dec-class-4');
 
         $this->grantedActor('dec-person-1', []);
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('dec-clerk'), 'dec-person-1', 'Program', 'dec-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('dec-clerk'), 'dec-person-1', 'Program', 'dec-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision($this->admissionsClerk('dec-clerk'), $this->admissionsReviewer('dec-review'), $this->admissionsApprover('dec-approve'), $applicant, true, 'meets policy', 'ev/dec', 'dec-adm-1');
@@ -193,7 +205,7 @@ final class AcademicDecisionFeatureTest extends TestCase
         $reviewer = $this->grantedActor('dec-reviewer-x', ['academic.progression_review', 'academic.appeal_manage', 'academic.progression_approve']);
         $management = $this->grantedActor('dec-mgmt-x', ['academic.progression_approve']);
 
-        $decision = app(DecideProgression::class)->propose($teacher, $this->studentId, $this->classId, 'repeat', 'failed threshold components', 'dec-prog-1');
+        $decision = app(DecideProgression::class)->propose($teacher, $this->studentId, $this->classId, 'repeat', 'failed threshold components', 'dec-prog-1', null, 'assessed evidence on file');
 
         try {
             app(DecideProgression::class)->review($teacher, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'dec-prog-2');
@@ -214,7 +226,7 @@ final class AcademicDecisionFeatureTest extends TestCase
         $this->assertDatabaseHas('progression_decisions', ['id' => $decision['decision_id'], 'lifecycle_state' => 'approved', 'outcome' => 'repeat']);
 
         app(DecideProgression::class)->markAppealed($reviewer, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'dec-prog-6');
-        $superseding = app(DecideProgression::class)->supersede($reviewer, $management, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'advance', 'appeal evidence: moderated component score above threshold', 'dec-prog-7');
+        $superseding = app(DecideProgression::class)->supersede($reviewer, $management, ProgressionDecision::query()->findOrFail($decision['decision_id']), 'advance', 'appeal evidence: moderated component score above threshold', 'dec-prog-7', null, 'moderated component evidence on file');
 
         $this->assertDatabaseHas('progression_decisions', ['id' => $decision['decision_id'], 'lifecycle_state' => 'superseded', 'superseded_by_id' => $superseding['decision_id']]);
         $this->assertDatabaseHas('progression_decisions', ['id' => $superseding['decision_id'], 'lifecycle_state' => 'approved', 'outcome' => 'advance']);

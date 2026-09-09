@@ -9,10 +9,15 @@ use App\Support\Errors\BusinessRejection;
 final class WorkItemLifecycle
 {
     public const OPEN = 'open';
+
     public const CLAIMED = 'claimed';
+
     public const IN_PROGRESS = 'in_progress';
+
     public const COMPLETED = 'completed';
+
     public const CANCELLED = 'cancelled';
+
     public const EXPIRED = 'expired';
 
     /** @return list<string> */

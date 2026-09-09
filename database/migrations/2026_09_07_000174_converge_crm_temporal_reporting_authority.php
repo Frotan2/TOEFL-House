@@ -328,6 +328,6 @@ return new class extends Migration
     {
         // Removing these markers would relabel retained historical evidence as
         // ordinary caller-clocked data and reopen reporting/cohort bypasses.
-        throw new \RuntimeException('Audit and CRM temporal reporting authority are one-way; do not erase immutable event-time provenance.');
+        throw new RuntimeException('Audit and CRM temporal reporting authority are one-way; do not erase immutable event-time provenance.');
     }
 };

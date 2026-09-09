@@ -285,6 +285,10 @@ final class FinancialCoverageCommitmentFeatureTest extends TestCase
             'approved_at' => now(),
             'updated_at' => now(),
         ]);
+        // The completion guard is deferred so the command can attach its
+        // immutable commitment rows atomically; flush it to prove a direct
+        // approval without exact attributed commitments is refused.
+        DB::statement('SET CONSTRAINTS financial_credits_coverage_complete_trigger IMMEDIATE');
     }
 
     public function test_database_rejects_mutating_coverage_commitments(): void

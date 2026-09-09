@@ -100,7 +100,7 @@ final class ProgressionRulesConsoleTest extends TestCase
     public function test_progression_rule_lifecycle_through_console(): void
     {
         $this->signIn('rules-officer');
-        $this->get('/academic')->assertOk()->assertSee('Level progression rules');
+        $this->get('/academic')->assertOk()->assertSee('data-view="academic"', false);
 
         $this->post('/academic/levels/rules', [
             'program_version_level_id' => $this->starterId,

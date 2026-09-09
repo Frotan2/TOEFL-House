@@ -354,7 +354,7 @@ final class StudentsController extends Controller
     }
 
     /**
-     * @param list<string> $visible
+     * @param  list<string>  $visible
      * @return Builder<Student>
      */
     private function studentsWithStatus(array $visible): Builder

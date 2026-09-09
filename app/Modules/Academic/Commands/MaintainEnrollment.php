@@ -14,16 +14,17 @@ use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\ProgressionDecision;
-use App\Modules\Organization\Models\Branch;
+use App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder;
 use App\Modules\Academic\Placement\Models\AcademicEligibilitySnapshot;
 use App\Modules\Academic\Placement\Queries\AcademicEligibilitySnapshotQuery;
-use App\Modules\Enrollment\Domain\EnrollmentConstraints;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Audit\RejectedOperation;
+use App\Modules\Enrollment\Domain\EnrollmentConstraints;
 use App\Modules\Finance\Domain\FinancialCoverageLock;
 use App\Modules\Finance\Domain\FinancialGateEvidence;
 use App\Modules\Finance\Queries\FinancialGateQuery;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
@@ -191,9 +192,9 @@ final class MaintainEnrollment
                     EnrollmentLifecycle::requireTransition($locked->lifecycle_state, EnrollmentLifecycle::STATE_ACTIVE);
                     $this->assertStudentActive($locked->student_id);
                     $this->assertClassActive($locked->class_id);
-                    $this->assertCapacity($locked->class_id);
+                    $this->assertCapacity($locked->class_id, $locked->id);
                     if ($locked->offering_id !== null) {
-                        $this->assertOfferingCapacity($locked->offering_id);
+                        $this->assertOfferingCapacity($locked->offering_id, $locked->id);
                     }
                     $this->freezeFinancialGate($locked, $actor);
 
@@ -446,9 +447,9 @@ final class MaintainEnrollment
                             throw BusinessRejection::forCode('academic.enrollment_student_changed', 'the enrollment student changed while the financial coverage lock was acquired');
                         }
                         $this->assertClassActive($locked->class_id);
-                        $this->assertCapacity($locked->class_id);
+                        $this->assertCapacity($locked->class_id, $locked->id);
                         if ($locked->offering_id !== null) {
-                            $this->assertOfferingCapacity($locked->offering_id);
+                            $this->assertOfferingCapacity($locked->offering_id, $locked->id);
                         }
                         $this->freezeFinancialGate($locked, $actor);
                     }
@@ -630,7 +631,7 @@ final class MaintainEnrollment
      * stale or substituted array returned by an adapter could turn a signed
      * evidence format into an unauthenticated activation input.
      *
-     * @param array<string, mixed> $assessment
+     * @param  array<string, mixed>  $assessment
      * @return array<string, mixed>
      */
     private function verifiedFinancialGateAssessment(Enrollment $enrollment, array $assessment): array
@@ -690,7 +691,7 @@ final class MaintainEnrollment
         if (! $verification['valid']) {
             throw BusinessRejection::forCode('academic.eligibility_snapshot_unverified', 'the student eligibility snapshot could not be verified: '.$verification['reason']);
         }
-        if ($snapshot->snapshot_schema_version !== \App\Modules\Academic\Placement\Domain\AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION
+        if ($snapshot->snapshot_schema_version !== AcademicEligibilitySnapshotBuilder::SCHEMA_VERSION
             || trim((string) $snapshot->placement_profile_id) !== trim((string) $student->placement_profile_id)) {
             throw BusinessRejection::forCode('academic.eligibility_snapshot_lineage_invalid', 'new enrollment may consume only the Student-linked v2 placement eligibility snapshot');
         }
@@ -734,13 +735,13 @@ final class MaintainEnrollment
         $this->constraints->assertOfferingOpenAndMatchesClass($offeringId, $classId);
     }
 
-    private function assertOfferingCapacity(string $offeringId): void
+    private function assertOfferingCapacity(string $offeringId, ?string $excludeEnrollmentId = null): void
     {
-        $this->constraints->assertOfferingCapacity($offeringId);
+        $this->constraints->assertOfferingCapacity($offeringId, $excludeEnrollmentId);
     }
 
-    private function assertCapacity(string $classId): void
+    private function assertCapacity(string $classId, ?string $excludeEnrollmentId = null): void
     {
-        $this->constraints->assertCapacity($classId);
+        $this->constraints->assertCapacity($classId, $excludeEnrollmentId);
     }
 }

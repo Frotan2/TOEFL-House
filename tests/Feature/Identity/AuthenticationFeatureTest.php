@@ -123,6 +123,6 @@ final class AuthenticationFeatureTest extends TestCase
 
         $this->getJson('/api/v1/me')
             ->assertOk()
-            ->assertJsonPath('username', 'login.employee');
+            ->assertJsonPath('data.username', 'login.employee');
     }
 }

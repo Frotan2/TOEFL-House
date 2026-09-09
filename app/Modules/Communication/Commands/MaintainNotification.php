@@ -14,6 +14,7 @@ use App\Support\Authorization\Actor;
 use App\Support\Authorization\BranchScopedAccess;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -86,7 +87,7 @@ final class MaintainNotification
                         }
                     }
                     if (! in_array($toState, ['read', 'dismissed'], true) || $locked->lifecycle_state === 'dismissed') {
-                        throw \App\Support\Errors\BusinessRejection::forCode('communication.notification_transition', 'notification state can move from unread/read to read or dismissed');
+                        throw BusinessRejection::forCode('communication.notification_transition', 'notification state can move from unread/read to read or dismissed');
                     }
 
                     $before = ['lifecycle_state' => $locked->lifecycle_state, 'branch_id' => $locked->branch_id, 'organization_id' => $locked->organization_id];

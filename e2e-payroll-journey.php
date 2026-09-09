@@ -169,7 +169,14 @@ final class Browser
     }
 }
 
-$pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=$E2E_DB", 'postgres', 'postgres');
+// Connection details come from the environment so the journey runs against
+// whichever PostgreSQL instance is under verification (see
+// docs/RUNTIME_ENVIRONMENT_LOCK.md); the defaults match a stock local server.
+$E2E_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$E2E_PORT = getenv('DB_PORT') ?: '5432';
+$E2E_USER = getenv('DB_USERNAME') ?: 'postgres';
+$E2E_PASS = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : 'postgres';
+$pdo = new PDO("pgsql:host=$E2E_HOST;port=$E2E_PORT;dbname=$E2E_DB", $E2E_USER, $E2E_PASS);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 function q(string $sql, array $p = []): ?array
 {
@@ -218,12 +225,16 @@ qc('SELECT count(*) FROM user_accounts') === 1 ? pass('bootstrap: exactly 1 owne
 $owner = new Browser($BASE);
 $owner->prime();
 $owner->post('/login', ['username' => 'owner', 'password' => 'Owner-Pass-123']);
-$me = $owner->get('/api/me');
-($me['status'] === 200 && ($me['json']['username'] ?? '') === 'owner') ? pass('owner signed in') : fail('owner.login', "/api/me {$me['status']}");
+$me = $owner->get('/api/v1/me');
+($me['status'] === 200 && ($me['json']['data']['username'] ?? '') === 'owner') ? pass('owner signed in') : fail('owner.login', "/api/v1/me {$me['status']}");
 
 $positionId = qv('SELECT id FROM positions ORDER BY id LIMIT 1');
-$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId): Browser {
-    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1982-03-11']);
+// Genesis structure: the first-run bootstrap provisions the campus + branch
+// every branch-mandated intake needs (see the final certification report).
+$branchId = qv('SELECT id FROM branches ORDER BY created_at LIMIT 1');
+$branchId !== '' ? pass('bootstrap provisioned the genesis branch') : fail('bootstrap.structure', 'no branch');
+$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId, $branchId): Browser {
+    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1982-03-11', 'home_branch_id' => $branchId]);
     $pid = qv('SELECT id FROM people WHERE legal_name=? ORDER BY id DESC LIMIT 1', [$fullName]);
     $owner->post("/identity/people/$pid/verify", ['identity_key' => "nid-$username", 'evidence_ref' => "id/$username"]);
     $owner->post('/identity/accounts', ['person_id' => $pid, 'username' => $username]);
@@ -253,7 +264,7 @@ pass('staff provisioned: HR mgr, contract preparer/approver, payroll operator/ap
 // A TRULY unprivileged employee: a verified person + login account but NO position
 // assignment (the bootstrap position is role-derived all-capability, so it cannot be
 // used to test default-deny). Default-deny is the certified behavior.
-$owner->post('/identity/people', ['legal_name' => 'No Authority', 'date_of_birth' => '1992-02-02']);
+$owner->post('/identity/people', ['legal_name' => 'No Authority', 'date_of_birth' => '1992-02-02', 'home_branch_id' => $branchId]);
 $noAuthPerson = qv("SELECT id FROM people WHERE legal_name='No Authority'");
 $owner->post("/identity/people/$noAuthPerson/verify", ['identity_key' => 'nid-noauth', 'evidence_ref' => 'id/noauth']);
 $owner->post('/identity/accounts', ['person_id' => $noAuthPerson, 'username' => 'no_pay']);
@@ -267,7 +278,7 @@ pass('truly unprivileged user (no position) provisioned for default-deny checks'
 
 // ---------- Stage 2: employee ----------
 step('STAGE 2 — create a real employee (person → employment candidate) via HR workflow');
-$owner->post('/identity/people', ['legal_name' => 'Salaried Teacher', 'date_of_birth' => '1985-06-15']);
+$owner->post('/identity/people', ['legal_name' => 'Salaried Teacher', 'date_of_birth' => '1985-06-15', 'home_branch_id' => $branchId]);
 $empPersonId = qv("SELECT id FROM people WHERE legal_name='Salaried Teacher'");
 $owner->post("/identity/people/$empPersonId/verify", ['identity_key' => 'nid-SAL-TEACH', 'evidence_ref' => 'passport/SAL']);
 $hrMgr->post('/hr/employ', ['person_id' => $empPersonId], false, ['Referer' => "$BASE/hr"]);
@@ -329,18 +340,18 @@ $mathOk ? pass('Gross = Net = '.SAL_GROSS.' = base '.SAL_BASE.' + allowance '.SA
 // ---------- Stage 10-11: approval + SoD ----------
 step('STAGE 10-11 — approval lifecycle and segregation of duties');
 // Self-approval (operator A prepared it) over the JSON API → 403 independence denial.
-$rSelf = $payrollOp->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rSelf = $payrollOp->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 $stillPrepared = qv('SELECT lifecycle_state FROM payroll_calculations WHERE id=?', [$calculationId]);
 $selfErr = $rSelf['json']['error'] ?? '';
 info("self-approve by preparer → HTTP {$rSelf['status']} $selfErr (expect 403 payroll.approval_not_independent)");
 $selfOk = $rSelf['status'] === 403 && $selfErr === 'payroll.approval_not_independent' && $stillPrepared === 'prepared';
 // Unprivileged user cannot approve (JSON API → 403).
-$rNo = $nobody->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rNo = $nobody->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 $noErr = $rNo['json']['error'] ?? '';
 info("unprivileged approve → HTTP {$rNo['status']} $noErr (expect 403 payroll.approve_denied)");
 $noOk = $rNo['status'] === 403;
 // Independent approver B approves via the JSON API.
-$rAppr = $payrollAppr->post("/api/payroll/calculations/$calculationId/approve", [], true);
+$rAppr = $payrollAppr->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
 $resultState = qv('SELECT lifecycle_state FROM payroll_calculations WHERE id=?', [$calculationId]);
 $resultId = qv('SELECT id FROM payroll_results WHERE calculation_id=?', [$calculationId]);
 $resultAmount = qv('SELECT amount FROM payroll_results WHERE id=?', [$resultId]);
@@ -350,9 +361,13 @@ $selfOk ? pass('SoD: payroll operator cannot approve their own calculation (403 
 $noOk ? pass('RBAC: unprivileged user cannot approve payroll (403)') : fail('rbac.approve', "nobody {$rNo['status']} $noErr");
 $apprOk ? pass("independent approval persisted: payroll_result amount=$resultAmount (= net payable), calculation resulted") : fail('approval.persist', "status={$rAppr['status']} state=$resultState resultId=$resultId amount=$resultAmount");
 
-// ---------- Stage 12 & 17: disbursement via ledger ----------
-step('STAGE 12/17 — disburse salary via the finance ledger journal (source=payroll_result)');
-// Need an open FINANCIAL period and a chart of accounts (cash asset + salary payable/expense).
+// ---------- Stage 12 & 17: disbursement via Finance liability recognition ----------
+step('STAGE 12/17 — disburse salary via Finance liability recognition (payroll_result → payroll_liability fact → single balanced journal)');
+// Certified disbursement path (supersedes raw payroll-result journals):
+// Payroll supplies calculation evidence only; Finance independently recognizes
+// the liability, which posts the single balanced journal at once. The Finance
+// fact can then be disbursed exactly once — no further journal may source it.
+// Need an open FINANCIAL period and a chart of accounts for the probe stages.
 $financeCashier->post('/finance/periods', ['period_key' => 'FIN-2026-09', 'date_from' => '2026-09-01', 'date_to' => '2026-09-30'], false, ['Referer' => "$BASE/finance"]);
 $finPeriodId = qv("SELECT id FROM financial_periods WHERE period_key='FIN-2026-09'");
 $financeCashier->post('/finance/accounts', ['code' => '1010', 'name' => 'Cash at Bank', 'type' => 'asset'], false, ['Referer' => "$BASE/finance"]);
@@ -360,36 +375,30 @@ $financeCashier->post('/finance/accounts', ['code' => '5100', 'name' => 'Teacher
 $cashAcct = qv("SELECT id FROM accounts WHERE code='1010'");
 $expAcct = qv("SELECT id FROM accounts WHERE code='5100'");
 info("financial period + chart accounts ready (cash=$cashAcct expense=$expAcct)");
-// Balanced disbursement journal: debit salary expense, credit cash (money out), referencing the payroll result.
-$idemPay = 'payroll.pay.'.bin2hex(random_bytes(6));
-$payJournal = function (string $amount, string $key) use ($financeCashier, $finPeriodId, $cashAcct, $expAcct, $resultId, $BASE): array {
-    return $financeCashier->post('/finance/journals', [
-        'period_id' => $finPeriodId,
-        'source_type' => 'payroll_result',
-        'source_id' => $resultId,
-        'reason' => 'September salary disbursement',
-        'lines' => [
-            ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => $amount],
-            ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => $amount],
-        ],
-    ], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json', 'Idempotency-Key' => $key]);
-};
-$rPay = $payJournal(SAL_GROSS, $idemPay);
-$journalId = qv("SELECT id FROM journals WHERE source_type='payroll_result' AND source_id=?", [$resultId]);
-$lineCount = qc('SELECT count(*) FROM journal_lines WHERE journal_id=?', [$journalId]);
+$idemPay = 'payroll.liab.'.bin2hex(random_bytes(6));
+$rPay = $financeCashier->post('/finance/payroll-liabilities/recognize', [
+    'source_type' => 'payroll_result',
+    'source_id' => $resultId,
+    'amount' => SAL_GROSS,
+    'evidence_ref' => "payroll/result/$resultId",
+], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json', 'Idempotency-Key' => $idemPay]);
+$liabilityId = qv("SELECT id FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id=?", [$resultId]);
+$journalId = qv("SELECT id FROM journals WHERE source_type='payroll_liability' AND source_id=?", [$liabilityId]);
+$lineCount = $journalId === '' ? 0 : qc('SELECT count(*) FROM journal_lines WHERE journal_id=?', [$journalId]);
 $debit = qv("SELECT COALESCE(sum(amount),0) FROM journal_lines WHERE journal_id=? AND direction='debit'", [$journalId]);
 $credit = qv("SELECT COALESCE(sum(amount),0) FROM journal_lines WHERE journal_id=? AND direction='credit'", [$journalId]);
-info('disbursement journal HTTP '.(in_array($rPay['status'], [302, 303, 200, 201], true) ? 'OK' : $rPay['status']).": journal=$journalId lines=$lineCount debit=$debit credit=$credit");
-(in_array($rPay['status'], [302, 303, 200, 201], true) && $lineCount === 2 && bccomp($debit, SAL_GROSS, 2) === 0 && bccomp($credit, SAL_GROSS, 2) === 0)
-    ? pass('salary DISBURSED via balanced ledger journal: debit salary expense '.SAL_GROSS.' / credit cash '.SAL_GROSS.', referencing payroll result')
-    : fail('disbursement', "status={$rPay['status']} journalId=$journalId lines=$lineCount d=$debit c=$credit");
+info('liability recognition HTTP '.(in_array($rPay['status'], [302, 303, 200, 201], true) ? 'OK' : $rPay['status']).": liability=$liabilityId journal=$journalId lines=$lineCount debit=$debit credit=$credit");
+(in_array($rPay['status'], [302, 303, 200, 201], true) && $liabilityId !== '' && $journalId !== '' && $lineCount === 2 && bccomp($debit, SAL_GROSS, 2) === 0 && bccomp($credit, SAL_GROSS, 2) === 0)
+    ? pass('salary DISBURSED via Finance liability recognition: payroll_liability fact + exactly ONE balanced journal ('.SAL_GROSS.' debit == credit)')
+    : fail('disbursement', "status={$rPay['status']} liabilityId=$liabilityId journalId=$journalId lines=$lineCount d=$debit c=$credit");
 
 // ---------- Stage 14: audit trail ----------
 step('STAGE 14/16 — audit trail for the full lifecycle');
 $auditOps = [
     'payroll.calculation.prepare' => 'payroll.calculation.prepare',
     'payroll.result.approve' => 'payroll.result.approve',
-    'finance.journal.post' => 'finance.journal.post',
+    'finance.payroll_liability.recognize' => 'finance.payroll_liability.recognize',
+    'finance.journal.auto_post' => 'finance.journal.auto_post',
 ];
 $auditOk = true;
 foreach ($auditOps as $label => $op) {
@@ -419,28 +428,41 @@ $auditOk ? pass('all consequential lifecycle events + denials produce immutable 
 $tamperOk ? pass('approved payroll result is tamper-proof at the DB boundary (direct UPDATE rejected)') : fail('tamper.result', 'approved result was mutable via direct SQL');
 
 // ---------- Stage 15/16 (report): duplicate disbursement + idempotency ----------
-step('STAGE 15/16 — duplicate disbursement is prevented (one payroll → one paying journal)');
-$journalsBefore = qc("SELECT count(*) FROM journals WHERE source_type='payroll_result' AND source_id=?", [$resultId]);
-// (a) replay with SAME idempotency key + payload → cached (no second journal)
-$rReplay = $payJournal(SAL_GROSS, $idemPay);
+step('STAGE 15/16 — duplicate disbursement is prevented (one payroll liability → one paying journal)');
+$journalsBefore = qc("SELECT count(*) FROM journals WHERE source_type='payroll_liability' AND source_id=?", [$liabilityId]);
+// A journal that tries to source the ALREADY-PAID Finance liability fact is
+// rejected whatever its idempotency key or amount (finance.payroll_already_paid).
+$liabilityJournal = function (string $amount, string $key) use ($financeCashier, $finPeriodId, $cashAcct, $expAcct, $liabilityId, $BASE): array {
+    return $financeCashier->post('/finance/journals', [
+        'period_id' => $finPeriodId,
+        'source_type' => 'payroll_liability',
+        'source_id' => $liabilityId,
+        'reason' => 'September salary disbursement',
+        'lines' => [
+            ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => $amount],
+            ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => $amount],
+        ],
+    ], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json', 'Idempotency-Key' => $key]);
+};
+// (a) replay with SAME idempotency key + payload as the recognition → conflict
+$rReplay = $liabilityJournal(SAL_GROSS, $idemPay);
 // (b) same key with DIFFERENT payload (different amount) → idempotency conflict
-$rConflict = $financeCashier->post('/finance/journals', [
-    'period_id' => $finPeriodId, 'source_type' => 'payroll_result', 'source_id' => $resultId, 'reason' => 'September salary disbursement',
-    'lines' => [
-        ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => '5000.00'],
-        ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => '5000.00'],
-    ],
-], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json', 'Idempotency-Key' => $idemPay]);
-// (c) a SECOND, genuinely fresh disbursement for the same already-paid payroll result (new key)
-$rSecond = $payJournal(SAL_GROSS, 'payroll.pay.'.bin2hex(random_bytes(6)));
-$journalsAfter = qc("SELECT count(*) FROM journals WHERE source_type='payroll_result' AND source_id=?", [$resultId]);
+$rConflict = $liabilityJournal('5000.00', $idemPay);
+// (c) a SECOND, genuinely fresh disbursement for the same already-paid liability (new key)
+$rSecond = $liabilityJournal(SAL_GROSS, 'payroll.pay.'.bin2hex(random_bytes(6)));
+// (d) recognition replay for the same payroll result must not create a second fact
+$rReRecognize = $financeCashier->post('/finance/payroll-liabilities/recognize', [
+    'source_type' => 'payroll_result', 'source_id' => $resultId, 'amount' => SAL_GROSS, 'evidence_ref' => "payroll/result/$resultId",
+], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json', 'Idempotency-Key' => 'payroll.liab.'.bin2hex(random_bytes(6))]);
+$journalsAfter = qc("SELECT count(*) FROM journals WHERE source_type='payroll_liability' AND source_id=?", [$liabilityId]);
+$factsAfter = qc("SELECT count(*) FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id=?", [$resultId]);
 $idemRows = qc('SELECT count(*) FROM idempotency_keys WHERE idempotency_key=?', [$idemPay]);
-info("journals for payroll result: before=$journalsBefore after=$journalsAfter (expect 1); idem-key rows=$idemRows (expect 1)");
-info("replay HTTP {$rReplay['status']}; idem-conflict HTTP {$rConflict['status']}; fresh-duplicate HTTP {$rSecond['status']}");
-if ($journalsBefore === 1 && $journalsAfter === 1 && $idemRows === 1) {
-    pass('exactly ONE disbursement journal per payroll result: idempotent replay, key-conflict, and a fresh duplicate attempt are all blocked');
+info("journals for liability: before=$journalsBefore after=$journalsAfter (expect 1); liability facts=$factsAfter (expect 1); idem-key rows=$idemRows (expect 1)");
+info("replay HTTP {$rReplay['status']}; idem-conflict HTTP {$rConflict['status']}; fresh-duplicate HTTP {$rSecond['status']}; re-recognize HTTP {$rReRecognize['status']}");
+if ($journalsBefore === 1 && $journalsAfter === 1 && $factsAfter === 1 && $idemRows === 1) {
+    pass('exactly ONE disbursement journal per payroll liability: idempotent replay, key-conflict, fresh duplicate and re-recognition are all blocked');
 } else {
-    fail('duplicate.disbursement', "journals before=$journalsBefore after=$journalsAfter idem rows=$idemRows");
+    fail('duplicate.disbursement', "journals before=$journalsBefore after=$journalsAfter facts=$factsAfter idem rows=$idemRows");
 }
 
 // ---------- Stage 18: money adversarial ----------
@@ -450,7 +472,7 @@ $all422 = true;
 $any500 = false;
 foreach ($badAmounts as $bad) {
     $rr = $financeCashier->post('/finance/journals', [
-        'period_id' => $finPeriodId, 'source_type' => 'payroll_result', 'source_id' => $resultId, 'reason' => 'adversarial amount',
+        'period_id' => $finPeriodId, 'source_type' => 'other', 'reason' => 'adversarial amount',
         'lines' => [
             ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => $bad],
             ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => $bad === '' ? '1.00' : $bad],
@@ -467,7 +489,7 @@ foreach ($badAmounts as $bad) {
 }
 // an UNBALANCED journal (debit != credit) must also be rejected
 $rUnbal = $financeCashier->post('/finance/journals', [
-    'period_id' => $finPeriodId, 'source_type' => 'payroll_result', 'source_id' => $resultId, 'reason' => 'unbalanced',
+    'period_id' => $finPeriodId, 'source_type' => 'other', 'reason' => 'unbalanced',
     'lines' => [
         ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => '100.00'],
         ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => '90.00'],
@@ -490,19 +512,34 @@ $ppClosed = qv('SELECT lifecycle_state FROM payroll_periods WHERE id=?', [$payro
 // recalculation on closed payroll period rejected
 $rCalcClosed = $payrollOp->post("/payroll/periods/$payrollPeriodId/calculate", ['employment_id' => $employmentId], true);
 $calcClosedErr = $rCalcClosed['json']['error'] ?? '';
-// close financial period, then a disbursement journal into it rejected
+// close financial period, then a journal into it rejected
 $financeCashier->post("/finance/periods/$finPeriodId/close", [], false, ['Referer' => "$BASE/finance"]);
 $finClosed = qv('SELECT lifecycle_state FROM financial_periods WHERE id=?', [$finPeriodId]);
-$rJournalClosed = $payJournal(SAL_GROSS, 'closed.'.bin2hex(random_bytes(4)));
+$journalsBeforeClosed = qc('SELECT count(*) FROM journals');
+$rJournalClosed = $financeCashier->post('/finance/journals', [
+    'period_id' => $finPeriodId, 'source_type' => 'other', 'reason' => 'closed period journal probe',
+    'lines' => [
+        ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => '10.00'],
+        ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => '10.00'],
+    ],
+], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json']);
 $journalClosedErr = $rJournalClosed['json']['error'] ?? '';
-$closedJournals = qc("SELECT count(*) FROM journals WHERE source_type='payroll_result' AND source_id=? AND reason != 'September salary disbursement'", [$resultId]);
+// and a recognition landing in the closed period cannot create facts/journals either
+$factsBeforeClosed = qc('SELECT count(*) FROM payroll_liability_facts');
+$rRecClosed = $financeCashier->post('/finance/payroll-liabilities/recognize', [
+    'source_type' => 'payroll_result', 'source_id' => $resultId, 'amount' => SAL_GROSS, 'evidence_ref' => 'closed/probe',
+], false, ['Referer' => "$BASE/finance", 'Accept' => 'application/json']);
+$recClosedCode = $rRecClosed['status'];
+$closedJournals = qc('SELECT count(*) FROM journals') - $journalsBeforeClosed;
+$closedFacts = qc('SELECT count(*) FROM payroll_liability_facts') - $factsBeforeClosed;
 info("payroll closed=$ppClosed; calc on closed → HTTP {$rCalcClosed['status']} $calcClosedErr");
-info("financial closed=$finClosed; journal into closed → HTTP {$rJournalClosed['status']} $journalClosedErr; extra journals=$closedJournals");
+info("financial closed=$finClosed; journal into closed → HTTP {$rJournalClosed['status']} $journalClosedErr; recognition into closed → HTTP $recClosedCode; new journals=$closedJournals new facts=$closedFacts (expect 0/0)");
 if ($ppClosed === 'closed' && $rCalcClosed['status'] === 409 && $calcClosedErr === 'payroll.period_not_open'
-    && $finClosed === 'closed' && $rJournalClosed['status'] === 409 && $journalClosedErr === 'finance.period_not_open' && $closedJournals === 0) {
-    pass('closed payroll period rejects recalculation; closed financial period rejects disbursement journal; nothing persisted');
+    && $finClosed === 'closed' && $rJournalClosed['status'] === 409 && $journalClosedErr === 'finance.period_not_open'
+    && $recClosedCode >= 400 && $closedJournals === 0 && $closedFacts === 0) {
+    pass('closed payroll period rejects recalculation; closed financial period rejects journals and liability recognition; nothing persisted');
 } else {
-    fail('closed.period', "pp=$ppClosed calc={$rCalcClosed['status']}/$calcClosedErr fin=$finClosed jrn={$rJournalClosed['status']}/$journalClosedErr extra=$closedJournals");
+    fail('closed.period', "pp=$ppClosed calc={$rCalcClosed['status']}/$calcClosedErr fin=$finClosed jrn={$rJournalClosed['status']}/$journalClosedErr rec=$recClosedCode extra=$closedJournals/$closedFacts");
 }
 
 // ---------- Stage 20: invalid/inactive employee ----------
@@ -511,7 +548,7 @@ step('STAGE 20 — payroll for invalid / out-of-scope employment is rejected');
 $payrollOp->post('/payroll/periods', ['period_key' => 'PAY-2026-10', 'date_from' => '2026-10-01', 'date_to' => '2026-10-31'], false, ['Referer' => "$BASE/payroll"]);
 $octPeriodId = qv("SELECT id FROM payroll_periods WHERE period_key='PAY-2026-10'");
 // a second, never-hired employee
-$owner->post('/identity/people', ['legal_name' => 'Unsigned Candidate', 'date_of_birth' => '1990-01-01']);
+$owner->post('/identity/people', ['legal_name' => 'Unsigned Candidate', 'date_of_birth' => '1990-01-01', 'home_branch_id' => $branchId]);
 $candPersonId = qv("SELECT id FROM people WHERE legal_name='Unsigned Candidate'");
 $owner->post("/identity/people/$candPersonId/verify", ['identity_key' => 'nid-CAND', 'evidence_ref' => 'id/cand']);
 $hrMgr->post('/hr/employ', ['person_id' => $candPersonId], false, ['Referer' => "$BASE/hr"]);
@@ -536,7 +573,7 @@ step('STAGE 21 — RBAC: unprivileged / wrong-authority actors cannot calculate,
 $rbacOk = true;
 // unprivileged calculate via the JSON API (POST /api/payroll/calculations on the period) → 403, no mutation.
 $calcBefore = qc('SELECT count(*) FROM payroll_calculations WHERE period_id=? AND employment_id=?', [$octPeriodId, $employmentId]);
-$rNc = $nobody->post('/api/payroll/calculations', ['period_id' => $octPeriodId, 'employment_id' => $employmentId], true);
+$rNc = $nobody->post('/api/v1/payroll/calculations', ['period_id' => $octPeriodId, 'employment_id' => $employmentId], true);
 $calcAfter = qc('SELECT count(*) FROM payroll_calculations WHERE period_id=? AND employment_id=?', [$octPeriodId, $employmentId]);
 $ncErr = $rNc['json']['error'] ?? '';
 info("unprivileged calculate → HTTP {$rNc['status']} $ncErr; rows created=".($calcAfter - $calcBefore));
@@ -544,16 +581,26 @@ if ($rNc['status'] !== 403 || ($calcAfter - $calcBefore) !== 0) {
     $rbacOk = false;
     info('unprivileged calculate not properly denied');
 }
-// unprivileged approve (authoritative: must 403 and create no result)
-$rNa = $nobody->post("/api/payroll/calculations/$calculationId/approve", [], true);
-if ($rNa['status'] !== 403) {
+// unprivileged approve — the September calculation is already approved, so the
+// attempt must be denied either by authorization (403) or by the lifecycle
+// re-check (409); the authoritative fact is that no new result can appear.
+// (The clean 403 against a PREPARED calculation was asserted in STAGE 10-11.)
+$resultsBeforeNa = qc('SELECT count(*) FROM payroll_results');
+$rNa = $nobody->post("/api/v1/payroll/calculations/$calculationId/approve", [], true);
+$resultsAfterNa = qc('SELECT count(*) FROM payroll_results');
+if (! in_array($rNa['status'], [403, 409], true) || $resultsAfterNa !== $resultsBeforeNa) {
     $rbacOk = false;
-    info("nobody approve → {$rNa['status']}");
+    info("nobody approve → {$rNa['status']} results {$resultsBeforeNa}→{$resultsAfterNa}");
 }
-// Disbursement authority: the web journal console posts are authorized by finance.journal.
-// Assert the outcome authoritatively — unprivileged and payroll-operator attempts must NOT
-// produce a journal referencing the (already-paid September) result; the duplicate guard +
-// capability guard both protect this.
+// Disbursement authority: recognition needs finance.payroll_liability and
+// journals need finance.journal. Assert the outcomes authoritatively —
+// unprivileged and payroll-operator attempts must NOT produce facts/journals.
+$factsBeforeRbac = qc('SELECT count(*) FROM payroll_liability_facts');
+$nobody->post('/finance/payroll-liabilities/recognize', [
+    'source_type' => 'payroll_result', 'source_id' => $resultId, 'amount' => SAL_GROSS, 'evidence_ref' => 'rbac/probe',
+], false, ['Referer' => "$BASE/finance"]);
+$rbacProbeFacts = qc('SELECT count(*) FROM payroll_liability_facts') - $factsBeforeRbac;
+info("unprivileged liability-recognition attempts created facts: $rbacProbeFacts (expect 0)");
 $journalCountBefore = qc('SELECT count(*) FROM journals');
 $nobody->post('/finance/journals', [
     'period_id' => $finPeriodId, 'source_type' => 'other', 'source_id' => null, 'reason' => 'rbac probe',
@@ -566,17 +613,17 @@ $payrollOp->post('/finance/journals', [
 $journalCountAfter = qc('SELECT count(*) FROM journals');
 $rbacProbeJournals = qc("SELECT count(*) FROM journals WHERE reason IN ('rbac probe','rbac probe 2')");
 info("unprivileged + payroll-operator ledger attempts created journals: $rbacProbeJournals (expect 0)");
-if ($rbacProbeJournals !== 0) {
+if ($rbacProbeJournals !== 0 || $rbacProbeFacts !== 0) {
     $rbacOk = false;
 }
 // default-deny outcomes are audited as denied attempts when the command runs
 $journalDenied = qc("SELECT count(*) FROM audit_events WHERE operation='finance.journal.post.denied'");
 $calcDenied = qc("SELECT count(*) FROM audit_events WHERE operation='payroll.calculation.prepare.denied'");
 info("denial audits: finance.journal.post.denied=$journalDenied payroll.calculation.prepare.denied=$calcDenied");
-$rbacOk ? pass('RBAC default-deny: unprivileged users cannot calculate/approve (403) and neither unprivileged users nor payroll operators can disburse (no ledger mutation)') : fail('rbac.disburse', "probe journals=$rbacProbeJournals");
+$rbacOk ? pass('RBAC default-deny: unprivileged users cannot calculate/approve (403) and neither unprivileged users nor payroll operators can recognize liabilities or post journals (no ledger mutation)') : fail('rbac.disburse', "probe journals=$rbacProbeJournals facts=$rbacProbeFacts");
 
 // ---------- Stage 22: concurrency ----------
-step('STAGE 22 — concurrent disbursement attempts for the same payroll cannot double-pay');
+step('STAGE 22 — concurrent Finance recognition attempts for the same payroll cannot double-pay');
 // Use a NEW open financial period + a second approved payroll result for a clean race target.
 $financeCashier->post('/finance/periods', ['period_key' => 'FIN-2026-10', 'date_from' => '2026-10-01', 'date_to' => '2026-10-31'], false, ['Referer' => "$BASE/finance"]);
 $fin2Id = qv("SELECT id FROM financial_periods WHERE period_key='FIN-2026-10'");
@@ -606,18 +653,16 @@ curl_setopt_array($ch, [
 curl_exec($ch);
 echo (string) curl_getinfo($ch, CURLINFO_HTTP_CODE);
 PHP);
+// Six genuinely parallel Finance recognition attempts for the SAME payroll
+// result: exactly one may win (liability fact + its single balanced journal).
 $body = http_build_query([
-    'period_id' => $fin2Id, 'source_type' => 'payroll_result', 'source_id' => $octResultId, 'reason' => 'October salary disbursement',
-    'lines' => [
-        ['account_id' => $expAcct, 'direction' => 'debit', 'amount' => $octAmount],
-        ['account_id' => $cashAcct, 'direction' => 'credit', 'amount' => $octAmount],
-    ],
+    'source_type' => 'payroll_result', 'source_id' => $octResultId, 'amount' => $octAmount, 'evidence_ref' => "payroll/result/$octResultId",
 ]);
 $pipes = [];
 $procs = [];
 for ($i = 0; $i < 6; $i++) {
     $cmd = sprintf('%s %s %s %s %s %s %s', PHP_BINARY, escapeshellarg($workerScript), escapeshellarg($BASE),
-        escapeshellarg("$BASE/finance/journals"), escapeshellarg($cookies), escapeshellarg($xsrf), escapeshellarg($body));
+        escapeshellarg("$BASE/finance/payroll-liabilities/recognize"), escapeshellarg($cookies), escapeshellarg($xsrf), escapeshellarg($body));
     $procs[] = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes[]);
 }
 $codes = [];
@@ -625,14 +670,15 @@ foreach ($procs as $idx => $p) {
     $codes[] = trim((string) stream_get_contents($pipes[$idx][1]));
     proc_close($p);
 }
-$raceJournals = qc("SELECT count(*) FROM journals WHERE source_type='payroll_result' AND source_id=?", [$octResultId]);
-$raceDebit = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_id=? AND jl.direction='debit'", [$octResultId]);
-info('parallel disbursement responses: '.implode(',', $codes));
-info("paying journals for Oct result=$raceJournals (expect 1); total debited=$raceDebit (expect $octAmount)");
-if ($raceJournals === 1 && bccomp($raceDebit, $octAmount, 2) === 0) {
-    pass("concurrency: 6 parallel disbursements → exactly ONE journal, total paid = net payable $octAmount (no double pay)");
+$raceFacts = qc("SELECT count(*) FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id=?", [$octResultId]);
+$raceJournals = qc("SELECT count(*) FROM journals j WHERE j.source_type='payroll_liability' AND j.source_id IN (SELECT id FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id=?)", [$octResultId]);
+$raceDebit = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_liability' AND j.source_id IN (SELECT id FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id=?) AND jl.direction='debit'", [$octResultId]);
+info('parallel recognition responses: '.implode(',', $codes));
+info("liability facts=$raceFacts (expect 1); paying journals=$raceJournals (expect 1); total debited=$raceDebit (expect $octAmount)");
+if ($raceFacts === 1 && $raceJournals === 1 && bccomp($raceDebit, $octAmount, 2) === 0) {
+    pass("concurrency: 6 parallel recognitions → exactly ONE liability fact + ONE journal, total paid = net payable $octAmount (no double pay)");
 } else {
-    fail('concurrency.pay', "journals=$raceJournals debit=$raceDebit amount=$octAmount");
+    fail('concurrency.pay', "facts=$raceFacts journals=$raceJournals debit=$raceDebit amount=$octAmount");
 }
 
 // ---------- Stage 23: transaction atomicity ----------
@@ -661,12 +707,13 @@ step('STAGE 24 — independent reconciliation from authoritative tables');
 $totalGross = qv("SELECT COALESCE(sum(amount),0) FROM payroll_results WHERE employment_id=? AND lifecycle_state='approved'", [$employmentId]);
 $totalAdjustments = qv('SELECT COALESCE(sum(pa.amount),0) FROM payroll_adjustments pa JOIN payroll_results pr ON pr.id=pa.result_id WHERE pr.employment_id=?', [$employmentId]);
 $netPayable = bcadd($totalGross, $totalAdjustments, 2);
-// Successfully disbursed via ledger = sum of debit lines on journals sourced from those results.
-$disbursed = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_result' AND j.source_id IN (SELECT id FROM payroll_results WHERE employment_id=?) AND jl.direction='debit'", [$employmentId]);
-// Ledger conservation: total debits == total credits across payroll-sourced journals.
-$ledgerDebit = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_result' AND jl.direction='debit' AND j.source_id IN (SELECT id FROM payroll_results WHERE employment_id=?)", [$employmentId]);
-$ledgerCredit = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_result' AND jl.direction='credit' AND j.source_id IN (SELECT id FROM payroll_results WHERE employment_id=?)", [$employmentId]);
-$paidButOpen = qv("SELECT COALESCE(sum(pr.amount),0) FROM payroll_results pr WHERE pr.employment_id=? AND pr.lifecycle_state='approved' AND NOT EXISTS (SELECT 1 FROM journals j WHERE j.source_type='payroll_result' AND j.source_id=pr.id)", [$employmentId]);
+// Successfully disbursed via ledger = sum of debit lines on journals sourced
+// from the Finance liability facts recognized against those results.
+$disbursed = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_liability' AND j.source_id IN (SELECT id FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id IN (SELECT id FROM payroll_results WHERE employment_id=?)) AND jl.direction='debit'", [$employmentId]);
+// Ledger conservation: total debits == total credits across payroll-liability journals.
+$ledgerDebit = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_liability' AND jl.direction='debit' AND j.source_id IN (SELECT id FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id IN (SELECT id FROM payroll_results WHERE employment_id=?))", [$employmentId]);
+$ledgerCredit = qv("SELECT COALESCE(sum(jl.amount),0) FROM journal_lines jl JOIN journals j ON j.id=jl.journal_id WHERE j.source_type='payroll_liability' AND jl.direction='credit' AND j.source_id IN (SELECT id FROM payroll_liability_facts WHERE source_type='payroll_result' AND source_id IN (SELECT id FROM payroll_results WHERE employment_id=?))", [$employmentId]);
+$paidButOpen = qv("SELECT COALESCE(sum(pr.amount),0) FROM payroll_results pr WHERE pr.employment_id=? AND pr.lifecycle_state='approved' AND NOT EXISTS (SELECT 1 FROM payroll_liability_facts f WHERE f.source_type='payroll_result' AND f.source_id=pr.id)", [$employmentId]);
 info("gross(results)=$totalGross adjustments=$totalAdjustments net payable=$netPayable");
 info("disbursed(ledger debit)=$disbursed ledger debit=$ledgerDebit ledger credit=$ledgerCredit");
 info("approved-but-unpaid results total=$paidButOpen");

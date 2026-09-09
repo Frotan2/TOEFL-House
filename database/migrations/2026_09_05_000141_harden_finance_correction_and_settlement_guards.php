@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Completes the database boundary for the append-only Finance instruments.
@@ -623,6 +622,6 @@ return new class extends Migration
         // allocation balance semantics included). Do not perform a partial
         // rollback that leaves an earlier trigger name executing a hardened
         // body; rollback requires a reviewed baseline migration instead.
-        throw new \RuntimeException('Finance guard hardening is a one-way pre-production consolidation; restore from the reviewed baseline rather than partially rolling back.');
+        throw new RuntimeException('Finance guard hardening is a one-way pre-production consolidation; restore from the reviewed baseline rather than partially rolling back.');
     }
 };

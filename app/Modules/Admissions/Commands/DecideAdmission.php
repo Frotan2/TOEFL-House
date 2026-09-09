@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Admissions\Commands;
 
+use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Admissions\Domain\ApplicantLifecycle;
 use App\Modules\Admissions\Models\AdmissionDecision;
 use App\Modules\Admissions\Models\Applicant;
-use App\Modules\Organization\Models\Branch;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Organization\Models\Branch;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
@@ -221,7 +222,7 @@ final class DecideAdmission
     {
         $branchId = trim((string) ($applicant->current_home_branch_id ?? $applicant->originating_branch_id ?? ''));
         if ($branchId === '' && $applicant->placement_profile_id !== null) {
-            /** @var \App\Modules\Academic\Placement\Models\PlacementProfile|null $profile */
+            /** @var PlacementProfile|null $profile */
             $profile = $applicant->placementProfile;
             $branchId = $profile !== null ? trim((string) ($profile->current_home_branch_id ?? $profile->originating_branch_id ?? '')) : '';
         }

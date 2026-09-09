@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workspace\Queries;
 
 use App\Modules\Crm\Models\Visitor;
+use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Support\Authorization\AccessDecision;
@@ -58,7 +59,7 @@ final class SearchQuery
                 ->orderBy('student_code')
                 ->limit($limit)
                 ->get(['id', 'person_id', 'student_code', 'current_home_branch_id', 'originating_branch_id']) as $student) {
-                /** @var \App\Modules\Identity\Models\Person|null $studentPerson */
+                /** @var Person|null $studentPerson */
                 $studentPerson = $student->person;
                 $results[] = [
                     'type' => 'student',
@@ -103,8 +104,7 @@ final class SearchQuery
     }
 
     /**
-     * @param list<string> $candidateBranchIds
-     *
+     * @param  list<string>  $candidateBranchIds
      * @return list<string>
      */
     private function authorizedBranches(Actor $actor, array $candidateBranchIds, string $capability): array

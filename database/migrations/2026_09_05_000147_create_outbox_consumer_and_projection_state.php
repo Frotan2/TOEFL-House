@@ -31,7 +31,7 @@ return new class extends Migration
             $table->index(['status', 'next_attempt_at']);
         });
         DB::statement("ALTER TABLE event_consumer_receipts ADD CONSTRAINT event_consumer_receipts_status_check CHECK (status IN ('pending','processing','succeeded','failed','dead_letter'))");
-        DB::statement("ALTER TABLE event_consumer_receipts ADD CONSTRAINT event_consumer_receipts_attempts_check CHECK (attempts >= 0 AND max_attempts BETWEEN 1 AND 20)");
+        DB::statement('ALTER TABLE event_consumer_receipts ADD CONSTRAINT event_consumer_receipts_attempts_check CHECK (attempts >= 0 AND max_attempts BETWEEN 1 AND 20)');
         DB::statement("ALTER TABLE event_consumer_receipts ADD CONSTRAINT event_consumer_receipts_state_check CHECK ((status = 'processing' AND lease_until IS NOT NULL AND next_attempt_at IS NULL AND processed_at IS NULL) OR (status = 'succeeded' AND lease_until IS NULL AND next_attempt_at IS NULL AND processed_at IS NOT NULL) OR (status IN ('pending','failed','dead_letter') AND lease_until IS NULL AND processed_at IS NULL))");
 
         Schema::create('projection_invalidations', function (Blueprint $table): void {

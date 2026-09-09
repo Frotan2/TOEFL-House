@@ -4,6 +4,14 @@
 
 This is a historical/current-state evidence snapshot produced during the prior convergence phase. It is preserved because it contains detailed implementation-vs-target evidence. It may cite paths that existed at the time of the snapshot; those paths are historical provenance, not live navigation. For current rules use `../README.md` and the canonical documents at the docs root.
 
+> **Status note (2026-09-09):** where this snapshot says *runtime certification
+> status: NOT READY — ENVIRONMENT BLOCKER*, that blocker no longer exists: the
+> locked runtime is reproducible via `scripts/runtime/provision.sh` and the
+> system is **certified production-ready at commit `96925d3`** — see
+> [`../AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](../AUDIT-2026-09-09-FINAL-CERTIFICATION.md).
+> The rows below remain the 2026-09-07 documentation-vs-implementation
+> snapshot and are not a release statement.
+
 ---
 
 # TOEFL House — Current-State Documentation → Implementation Compliance

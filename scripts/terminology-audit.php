@@ -1,3 +1,4 @@
+```php
 <?php
 
 declare(strict_types=1);
@@ -6,7 +7,10 @@ declare(strict_types=1);
  * Advisory repository-wide terminology audit.
  *
  * It reports known competing terms, but does not fail merely because an
- * occurrence exists. The canonical vocabulary document itself is a glossary,
+ * occurrence exists. Historical documentation and explicit compatibility
+ * boundaries may legitimately retain a legacy term.
+ *
+ * The canonical vocabulary document itself is a glossary,
  * and the runtime handoff contains historical evidence, so those two authored
  * documents are excluded from the semantic scan.
  */
@@ -33,6 +37,7 @@ $terms = [
     '\bCourse Offering\b' => 'Offering',
     '\bPlacement Test\b' => 'Placement',
     '\bPromotion\b' => 'Progression',
+    '\bSalary Payment\b' => 'Settlement',
     '\bBill\b' => 'Invoice',
     '\bBills\b' => 'Invoices',
     '\bOutstanding\b' => 'Balance',
@@ -64,7 +69,21 @@ $allowedLineMarkers = [
 ];
 
 $extensions = [
-    'php', 'ts', 'tsx', 'js', 'jsx', 'vue', 'blade.php', 'md', 'mdx', 'json', 'yaml', 'yml', 'css', 'scss', 'html',
+    'php',
+    'ts',
+    'tsx',
+    'js',
+    'jsx',
+    'vue',
+    'blade.php',
+    'md',
+    'mdx',
+    'json',
+    'yaml',
+    'yml',
+    'css',
+    'scss',
+    'html',
 ];
 
 $violations = 0;
@@ -76,7 +95,7 @@ $iterator = new RecursiveIteratorIterator(
 );
 
 foreach ($iterator as $fileInfo) {
-    if (!$fileInfo instanceof SplFileInfo || !$fileInfo->isFile()) {
+    if (! $fileInfo instanceof SplFileInfo || ! $fileInfo->isFile()) {
         continue;
     }
 
@@ -87,12 +106,14 @@ foreach ($iterator as $fileInfo) {
     }
 
     $skip = false;
+
     foreach ($excludedPathFragments as $fragment) {
         if (str_contains($path, $fragment)) {
             $skip = true;
             break;
         }
     }
+
     if ($skip) {
         continue;
     }
@@ -103,6 +124,7 @@ foreach ($iterator as $fileInfo) {
             break;
         }
     }
+
     if ($skip) {
         continue;
     }
@@ -110,12 +132,14 @@ foreach ($iterator as $fileInfo) {
     $relative = ltrim(str_replace($root, '', $path), DIRECTORY_SEPARATOR);
     $extension = strtolower($fileInfo->getExtension());
     $isBlade = str_ends_with(strtolower($relative), '.blade.php');
-    if (!$isBlade && !in_array($extension, $extensions, true)) {
+
+    if (! $isBlade && ! in_array($extension, $extensions, true)) {
         continue;
     }
 
     $content = file_get_contents($path);
-    if ($content === false || !mb_check_encoding($content, 'UTF-8')) {
+
+    if ($content === false || ! mb_check_encoding($content, 'UTF-8')) {
         continue;
     }
 
@@ -129,6 +153,7 @@ foreach ($iterator as $fileInfo) {
             }
 
             $isAllowed = false;
+
             foreach ($allowedLineMarkers as $marker) {
                 if (stripos($line, $marker) !== false) {
                     $isAllowed = true;
@@ -138,12 +163,27 @@ foreach ($iterator as $fileInfo) {
 
             if ($isAllowed) {
                 $allowed++;
-                printf("ALLOWED %s:%d `%s` → `%s`\n", $relative, $lineNumber + 1, trim($line), $replacement);
+
+                printf(
+                    "ALLOWED %s:%d `%s` → `%s`\n",
+                    $relative,
+                    $lineNumber + 1,
+                    trim($line),
+                    $replacement
+                );
+
                 continue;
             }
 
             $violations++;
-            printf("REVIEW  %s:%d detected `%s`; canonical replacement: `%s`\n", $relative, $lineNumber + 1, trim($line), $replacement);
+
+            printf(
+                "REVIEW  %s:%d detected `%s`; canonical replacement: `%s`\n",
+                $relative,
+                $lineNumber + 1,
+                trim($line),
+                $replacement
+            );
         }
     }
 }
@@ -151,6 +191,9 @@ foreach ($iterator as $fileInfo) {
 printf("FILES SCANNED: %d\n", $filesScanned);
 printf("REVIEW FINDINGS: %d\n", $violations);
 printf("ALLOWED FINDINGS: %d\n", $allowed);
+
 echo "RESULT: ADVISORY REVIEW (historical and compatibility terminology must be judged semantically)\n";
 
 exit(0);
+```
+

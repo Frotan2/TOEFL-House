@@ -6,8 +6,8 @@ namespace App\Modules\Payroll\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
-use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Finance\Models\EmploymentSettlement;
+use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
@@ -36,7 +36,6 @@ final class SettleEmployment
     public const CAPABILITY_CLEAR_FINANCE = 'payroll.clear_finance';
 
     public const CAPABILITY_SETTLE = 'payroll.settle';
-
 
     public function __construct(
         private readonly AccessDecision $access,

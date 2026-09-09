@@ -15,12 +15,13 @@ use App\Modules\Crm\Commands\MaintainVisitorCatalog;
 use App\Modules\Crm\Commands\ManageVisitorFollowup;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorAutomationRule;
-use App\Modules\Organization\Models\Branch;
 use App\Modules\Crm\Models\VisitorCampaign;
 use App\Modules\Crm\Models\VisitorFollowup;
 use App\Modules\Crm\Models\VisitorSource;
 use App\Modules\Crm\Queries\VisitorListQuery;
 use App\Modules\Crm\Queries\VisitorTimelineQuery;
+use App\Modules\Organization\Models\Branch;
+use App\Support\Authorization\AccessDecision;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,7 +56,7 @@ final class CrmApiController extends Controller
     public function branches(): JsonResponse
     {
         $actor = $this->actor();
-        $organizationScope = app(\App\Support\Authorization\AccessDecision::class)->decide($actor, 'crm.visitor', null)->allowed;
+        $organizationScope = app(AccessDecision::class)->decide($actor, 'crm.visitor', null)->allowed;
         $branchIds = $this->authorizedBranches('crm.visitor');
         if (! $organizationScope && $branchIds === []) {
             $this->requireOrganizationRead('crm.visitor', 'api.crm.branches');
@@ -183,7 +184,7 @@ final class CrmApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         $actor = $this->actor();
-        $organizationScope = app(\App\Support\Authorization\AccessDecision::class)->decide($actor, 'crm.visitor', null)->allowed;
+        $organizationScope = app(AccessDecision::class)->decide($actor, 'crm.visitor', null)->allowed;
         $authorizedBranches = $this->authorizedBranches('crm.visitor');
         if (! $organizationScope && $authorizedBranches === []) {
             $this->requireOrganizationRead('crm.visitor', 'api.crm.visitors');

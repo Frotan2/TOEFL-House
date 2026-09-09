@@ -199,6 +199,6 @@ return new class extends Migration
     {
         // Reconciliation evidence without its compared projection and tenant
         // anchor cannot be safely reconstructed after downgrade.
-        throw new \RuntimeException('Metric-reconciliation provenance convergence is one-way; do not erase linked reporting evidence.');
+        throw new RuntimeException('Metric-reconciliation provenance convergence is one-way; do not erase linked reporting evidence.');
     }
 };

@@ -10,42 +10,42 @@ use App\Modules\Academic\Commands\DecideProgression;
 use App\Modules\Academic\Commands\IssueTranscript;
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
-use App\Modules\Academic\Commands\MaintainTeacherAssignment;
 use App\Modules\Academic\Commands\MaintainEnrollment;
-use App\Modules\Academic\Commands\ManageAcademicAppeal;
-use App\Modules\Academic\Commands\ManageAssessmentResult;
-use App\Modules\Academic\Commands\ManageClassWaitlist;
 use App\Modules\Academic\Commands\MaintainRoom;
 use App\Modules\Academic\Commands\MaintainSkill;
+use App\Modules\Academic\Commands\MaintainTeacherAssignment;
+use App\Modules\Academic\Commands\ManageAcademicAppeal;
 use App\Modules\Academic\Commands\ManageAcademicOffering;
+use App\Modules\Academic\Commands\ManageAssessmentResult;
+use App\Modules\Academic\Commands\ManageClassWaitlist;
 use App\Modules\Academic\Commands\RecordAttendance;
 use App\Modules\Academic\Domain\ClassLifecycle;
 use App\Modules\Academic\Models\AcademicAppeal;
 use App\Modules\Academic\Models\AcademicPeriod;
 use App\Modules\Academic\Models\AcademicRoom;
+use App\Modules\Academic\Models\AssessmentAttempt;
+use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\AttendanceFact;
 use App\Modules\Academic\Models\BranchAvailability;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSection;
 use App\Modules\Academic\Models\ClassSession;
 use App\Modules\Academic\Models\ClassWaitlistEntry;
-use App\Modules\Academic\Models\AssessmentAttempt;
-use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\Enrollment;
-use App\Modules\Academic\Models\Offering;
-use App\Modules\Academic\Models\ProgressionDecision;
-use App\Modules\Academic\Models\Program;
-use App\Modules\Academic\Models\ProgramVersion;
 use App\Modules\Academic\Models\GraduationDecision;
 use App\Modules\Academic\Models\LevelPrerequisite;
 use App\Modules\Academic\Models\LevelProgressionRule;
+use App\Modules\Academic\Models\Offering;
+use App\Modules\Academic\Models\Program;
+use App\Modules\Academic\Models\ProgramVersion;
+use App\Modules\Academic\Models\ProgramVersionLevel;
+use App\Modules\Academic\Models\ProgressionDecision;
 use App\Modules\Academic\Models\ResultCorrection;
+use App\Modules\Academic\Models\Skill;
 use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\Transcript;
 use App\Modules\Academic\Placement\Models\PlacementProfile;
-use App\Modules\Academic\Models\ProgramVersionLevel;
-use App\Modules\Academic\Models\Skill;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
@@ -428,8 +428,9 @@ final class AcademicApiController extends Controller
                 })
                 ->with(['person:id,legal_name', 'branchAuthorizations'])
                 ->orderBy('id')->limit(500)->get()->flatMap(function (TeacherProfile $profile) use ($branchScopes): array {
-                    /** @var \App\Modules\Identity\Models\Person|null $profilePerson */
+                    /** @var Person|null $profilePerson */
                     $profilePerson = $profile->person;
+
                     return $profile->branchAuthorizations->filter(static fn ($authorization): bool => $authorization->lifecycle_state === 'active' && in_array((string) $authorization->branch_id, $branchScopes['schedule'], true) && (string) $authorization->effective_from <= now()->toDateString() && ($authorization->effective_to === null || (string) $authorization->effective_to > now()->toDateString()))->map(static fn ($authorization): array => [
                         'id' => (string) $profile->person_id,
                         'teacher_profile_id' => (string) $profile->id,
@@ -918,6 +919,7 @@ final class AcademicApiController extends Controller
             'basis' => ['nullable', 'string', 'max:1000'],
             'repeat_count' => ['nullable', 'integer', 'min:1'],
         ]);
+
         return $command->supersedeByApprover(
             $this->actor(), $decision, $input['outcome'], $input['reason'], $key,
             $this->optional($input['assessment_result_id'] ?? null), $this->optional($input['basis'] ?? null),

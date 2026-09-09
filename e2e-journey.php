@@ -8,15 +8,22 @@ declare(strict_types=1);
  * Drives the complete prospective-student lifecycle with distinct
  * authenticated employee sessions for every Separation-of-Duties signature:
  *
- *   fresh DB -> owner bootstrap
- *   -> staff provisioning (person intake, verify, account, password, position)
+ *   fresh DB -> owner bootstrap (incl. genesis campus + branch)
+ *   -> staff provisioning (person intake w/ home branch, verify, account,
+ *      password, position)
  *   -> student registration -> 3-signature admission -> enrollment(student)
  *   -> open finance period -> placement fee obligation -> payment -> allocate
+ *   -> full academic chain (program -> version -> level -> published period
+ *      -> branch availability -> open offering)
+ *   -> canonical teacher chain (HR employ -> contract draft+sign -> hire
+ *      -> teacher profile -> qualification + verification -> activation)
  *   -> active class -> seat request -> approval -> ACTIVE enrollment
  *   -> placement assessment attempt -> score -> moderate -> approve -> release
  *   -> final financial + student-state verification over HTTP AND PostgreSQL
  *
  * No mocks: every state change is a real HTTP request (cookie jar + CSRF).
+ * Contracts were re-converged against the current controllers on 2026-09-09
+ * (see the final certification report, journey convergence section).
  */
 
 require __DIR__.'/vendor/autoload.php';
@@ -121,23 +128,39 @@ final class Browser
     }
 }
 
-$pdo = new PDO("pgsql:host=127.0.0.1;port=5432;dbname=$E2E_DB", 'postgres', 'postgres');
+// Connection details come from the environment so the journey runs against
+// whichever PostgreSQL instance is under verification (see
+// docs/RUNTIME_ENVIRONMENT_LOCK.md §3). Defaults match the sandbox runtime.
+$E2E_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$E2E_PORT = getenv('DB_PORT') ?: '5432';
+$E2E_USER = getenv('DB_USERNAME') ?: 'postgres';
+$E2E_PASS = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : 'postgres';
+$pdo = new PDO("pgsql:host=$E2E_HOST;port=$E2E_PORT;dbname=$E2E_DB", $E2E_USER, $E2E_PASS);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-function q(string $sql, array $p = []): ?array
+
+/** Run a read query and return the first row as array (or []). */
+function q(string $sql, array $p = []): array
 {
     global $pdo;
     $st = $pdo->prepare($sql);
     $st->execute($p);
-    $r = $st->fetch(PDO::FETCH_ASSOC);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
 
-    return $r === false ? null : $r;
+    return $row === false ? [] : $row;
 }
+
+/** Run a read query and return the first column of the first row as string. */
 function qv(string $sql, array $p = []): string
 {
-    $r = q($sql, $p);
+    global $pdo;
+    $st = $pdo->prepare($sql);
+    $st->execute($p);
+    $v = $st->fetchColumn();
 
-    return $r ? (string) array_values($r)[0] : '';
+    return $v === false ? '' : (string) $v;
 }
+
+/** Run a read query and return the first column as int. */
 function qc(string $sql, array $p = []): int
 {
     global $pdo;
@@ -156,7 +179,21 @@ function mustRedirect(Browser $b, string $label, string $path, array $params, ?s
     if ($redir && $toOk) {
         ok("$label → {$r['status']}");
     } else {
-        finding("transport.$label", "HTTP {$r['status']} loc=".($r['location'] ?? '-').' body='.substr(strip_tags($r['body']), 0, 100));
+        finding("transport.$label", "HTTP {$r['status']} loc=".($r['location'] ?? '-').' body='.substr(strip_tags($r['body']), 0, 160));
+    }
+
+    return $r;
+}
+
+/** Assert an API POST succeeds (2xx); prints the domain error on failure. */
+function mustApi(Browser $b, string $label, string $path, array $params): array
+{
+    $r = $b->post($path, $params);
+    if ($r['status'] >= 200 && $r['status'] < 300) {
+        ok("$label → {$r['status']}");
+    } else {
+        $err = is_array($r['json']) ? json_encode(array_intersect_key($r['json'], array_flip(['error', 'message', 'errors']))) : substr(strip_tags($r['body']), 0, 160);
+        finding("api.$label", "HTTP {$r['status']} $err");
     }
 
     return $r;
@@ -180,8 +217,19 @@ $owner = new Browser($BASE);
 $owner->prime();
 $r = $owner->post('/login', ['username' => 'owner', 'password' => 'Owner-Pass-123']);
 in_array($r['status'], [302, 303], true) ? ok('owner login → '.$r['status']) : finding('login.owner', "{$r['status']}");
-$me = $owner->get('/api/me');
-($me['status'] === 200 && ($me['json']['username'] ?? '') === 'owner') ? ok('GET /api/me over console session → owner (API session stack)') : finding('api.session', "/api/me → {$me['status']}");
+$me = $owner->get('/api/v1/me');
+($me['status'] === 200 && ($me['json']['data']['username'] ?? '') === 'owner') ? ok('GET /api/me over console session → owner (API session stack)') : finding('api.session', "/api/v1/me → {$me['status']}");
+
+// Genesis structure: the bootstrap provisions the first campus + branch
+// (person intake is branch-mandated; structure SoD needs 4 actors that do
+// not exist yet). Everything below homes itself in this branch.
+$branchId = qv('SELECT id FROM branches ORDER BY created_at LIMIT 1');
+$campusCount = qc('SELECT count(*) FROM campuses');
+$branchCount = qc('SELECT count(*) FROM branches');
+$assignmentCount = qc('SELECT count(*) FROM campus_assignments');
+($branchId !== '' && $campusCount === 1 && $branchCount === 1 && $assignmentCount === 1)
+    ? ok('bootstrap provisioned genesis structure: 1 campus + 1 active branch + 1 open attribution')
+    : finding('bootstrap.structure', "campuses=$campusCount branches=$branchCount assignments=$assignmentCount");
 
 // ---------- STAGE 2: provision staff ----------
 step('STAGE 2 — owner provisions distinct staff accounts (intake→verify→account→password→position)');
@@ -191,8 +239,8 @@ $positionId = qv('SELECT id FROM positions ORDER BY id LIMIT 1');
  * assign+activate the bootstrap all-capability position (role-derived
  * authority in the organization). Returns a signed-in Browser.
  */
-$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId): Browser {
-    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1985-07-07']);
+$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId, $branchId): Browser {
+    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1985-07-07', 'home_branch_id' => $branchId]);
     $personId = qv('SELECT id FROM people WHERE legal_name=? ORDER BY id DESC LIMIT 1', [$fullName]);
     $owner->post("/identity/people/$personId/verify", ['identity_key' => "nid-$username", 'evidence_ref' => "id/$username"]);
     $owner->post('/identity/accounts', ['person_id' => $personId, 'username' => $username]);
@@ -208,8 +256,8 @@ $provision = function (string $fullName, string $username, string $password) use
     $b = new Browser($GLOBALS['BASE']);
     $b->prime();
     $lr = $b->post('/login', ['username' => $username, 'password' => $password]);
-    if (! in_array($lr['status'], [302, 303], true)) {
-        finding('staff.login', "$username login → {$lr['status']}");
+    if (! in_array($lr['status'], [302, 303], true) || str_contains((string) $lr['location'], '/login')) {
+        finding('staff.login', "$username login → {$lr['status']} loc=".($lr['location'] ?? '-'));
     }
 
     return $b;
@@ -225,10 +273,11 @@ $staffScore = $provision('Placement Scorer', 'staff_score', 'Staff-Pass-123');
 $staffMod = $provision('Result Moderator', 'staff_mod', 'Staff-Pass-123');
 $staffRapp = $provision('Result Approver', 'staff_rapp', 'Staff-Pass-123');
 $staffRel = $provision('Result Releaser', 'staff_rel', 'Staff-Pass-123');
-ok('10 distinct staff provisioned with active authority (position assigned+activated)');
+$staffHr = $provision('HR Officer', 'staff_hr', 'Staff-Pass-123');
+$fail === 0 ? ok('11 distinct staff provisioned with active authority (position assigned+activated)') : finding('staff.provision', 'see staff.* findings above');
 
 // Default-deny spot check: a session with no authority is rejected (use fresh, unpositioned person)
-$owner->post('/identity/people', ['legal_name' => 'No Authority', 'date_of_birth' => '1992-02-02']);
+$owner->post('/identity/people', ['legal_name' => 'No Authority', 'date_of_birth' => '1992-02-02', 'home_branch_id' => $branchId]);
 $noAuthPerson = qv("SELECT id FROM people WHERE legal_name='No Authority'");
 $owner->post("/identity/people/$noAuthPerson/verify", ['identity_key' => 'nid-noauth', 'evidence_ref' => 'id/noauth']);
 $owner->post('/identity/accounts', ['person_id' => $noAuthPerson, 'username' => 'noauth']);
@@ -237,17 +286,19 @@ $owner->post("/identity/accounts/$noAuthAcct/password", ['password' => 'NoAuth-P
 $nobody = new Browser($BASE);
 $nobody->prime();
 $nobody->post('/login', ['username' => 'noauth', 'password' => 'NoAuth-Pass-123']);
-$deny = $nobody->post('/students/applicants', ['person_id' => $noAuthPerson, 'program_interest' => 'x']);
+$deny = $nobody->post('/students/applicants', ['person_id' => $noAuthPerson, 'program_interest' => 'x', 'branch_id' => $branchId]);
 in_array($deny['status'], [302, 303, 403], true) ? ok('default-deny: staff without authority cannot register applicants') : finding('access.default_deny', "noauth register → {$deny['status']}");
+$noAuthApplicant = qc('SELECT count(*) FROM applicants WHERE person_id=?', [$noAuthPerson]);
+$noAuthApplicant === 0 ? ok('default-deny wrote nothing: no applicant row for the unauthorized attempt') : finding('access.default_deny.wrote', "applicants=$noAuthApplicant");
 
 // ---------- STAGE 3: student registration ----------
 step('STAGE 3 — student person intake + verify + applicant registration');
-$owner->post('/identity/people', ['legal_name' => 'Prospective Student', 'date_of_birth' => '2007-04-22']);
+$owner->post('/identity/people', ['legal_name' => 'Prospective Student', 'date_of_birth' => '2007-04-22', 'home_branch_id' => $branchId]);
 $studentPersonId = qv("SELECT id FROM people WHERE legal_name='Prospective Student'");
 $owner->post("/identity/people/$studentPersonId/verify", ['identity_key' => 'nid-PS-001', 'evidence_ref' => 'passport/PS-001']);
 q('SELECT verification_state FROM people WHERE id=?', [$studentPersonId])['verification_state'] === 'verified' ? ok('student person verified') : finding('identity.verify', 'not verified');
 
-mustRedirect($staffReg, 'register applicant (reception)', '/students/applicants', ['person_id' => $studentPersonId, 'program_interest' => 'TOEFL Preparation'], '/students/applicants');
+mustRedirect($staffReg, 'register applicant (reception)', '/students/applicants', ['person_id' => $studentPersonId, 'program_interest' => 'TOEFL Preparation', 'branch_id' => $branchId], '/students/applicants');
 $applicantId = qv('SELECT id FROM applicants WHERE person_id=?', [$studentPersonId]);
 $applicantId !== '' ? ok('applicant registered: '.substr($applicantId, 0, 8)) : finding('admissions.register', 'no applicant');
 
@@ -301,31 +352,84 @@ mustRedirect($staffFin, 'allocate payment to obligation', "/finance/obligations/
 $allocCount = qc('SELECT count(*) FROM payment_allocations WHERE payment_id=? AND obligation_id=?', [$paymentId, $obligationId]);
 $allocCount === 1 ? ok('payment fully allocated to the placement-fee obligation') : finding('finance.allocate', "allocations=$allocCount");
 
-// ---------- STAGE 7: class structure + active class (academic officer) ----------
-step('STAGE 7 — academic structure: program/version/period + active class with a teacher');
+// ---------- STAGE 7: full academic chain + canonical teacher + active class ----------
+step('STAGE 7 — academic chain: program → version → level → published period → availability → open offering');
 mustRedirect($staffAcad, 'define program', '/academic/programs', ['name' => 'TOEFL Preparation'], '/academic');
 $programId = qv("SELECT id FROM programs WHERE name='TOEFL Preparation'");
 mustRedirect($staffAcad, 'publish version', "/academic/programs/$programId/versions", ['summary' => 'placement rules v1'], '/academic');
 $versionId = qv('SELECT id FROM program_versions WHERE program_id=?', [$programId]);
+mustRedirect($staffAcad, 'define level', '/academic/levels', [
+    'program_version_id' => $versionId, 'level_key' => 'toefl-core', 'ordinal' => 1, 'title' => 'TOEFL Core', 'cefr_ref' => 'B2',
+], '/academic');
+$levelId = qv('SELECT id FROM program_version_levels WHERE program_version_id=?', [$versionId]);
 mustRedirect($staffAcad, 'define period', '/academic/periods', ['name' => 'Fall 2026', 'starts_on' => '2026-09-01', 'ends_on' => '2026-12-18'], '/academic');
 $acadPeriodId = qv("SELECT id FROM academic_periods WHERE name='Fall 2026'");
 mustRedirect($staffAcad, 'publish period', "/academic/periods/$acadPeriodId/transition", ['to_state' => 'published'], '/academic');
+mustRedirect($staffAcad, 'declare branch availability', '/academic/availabilities', [
+    'branch_id' => $branchId, 'program_version_level_id' => $levelId, 'academic_period_id' => $acadPeriodId,
+], '/academic');
+mustRedirect($staffAcad, 'open offering (capacity 25)', '/academic/offerings', [
+    'branch_id' => $branchId, 'program_version_level_id' => $levelId, 'academic_period_id' => $acadPeriodId, 'capacity' => 25,
+], '/academic');
+$offeringId = qv('SELECT id FROM offerings WHERE program_version_level_id=?', [$levelId]);
+$offeringState = qv('SELECT lifecycle_state FROM offerings WHERE id=?', [$offeringId]);
+($offeringId !== '' && $offeringState === 'open') ? ok('offering open for branch/level/period') : finding('offering.open', "offering=$offeringId state=$offeringState");
 
-// a verified teacher person
-$owner->post('/identity/people', ['legal_name' => 'Class Teacher', 'date_of_birth' => '1983-03-03']);
-$teacherId = qv("SELECT id FROM people WHERE legal_name='Class Teacher'");
-$owner->post("/identity/people/$teacherId/verify", ['identity_key' => 'nid-teacher', 'evidence_ref' => 'id/teacher']);
+step('STAGE 7b — canonical teacher: HR employ → contract draft+sign → hire → profile → qualification (verified) → activation');
+$owner->post('/identity/people', ['legal_name' => 'Class Teacher', 'date_of_birth' => '1983-03-03', 'home_branch_id' => $branchId]);
+$teacherPersonId = qv("SELECT id FROM people WHERE legal_name='Class Teacher'");
+$owner->post("/identity/people/$teacherPersonId/verify", ['identity_key' => 'nid-teacher', 'evidence_ref' => 'id/teacher']);
 
-mustRedirect($staffAcad, 'define class (planned)', '/academic/classes', ['program_version_id' => $versionId, 'period_id' => $acadPeriodId, 'capacity' => 20], '/academic');
+mustRedirect($staffHr, 'HR employ (opens candidate employment)', '/hr/employ', ['person_id' => $teacherPersonId], '/hr');
+$employmentId = qv('SELECT id FROM employments WHERE person_id=?', [$teacherPersonId]);
+mustRedirect($staffHr, 'draft contract', '/hr/contracts/draft', [
+    'employment_id' => $employmentId, 'terms_summary' => 'Instructor terms', 'effective_from' => '2025-09-01',
+], '/hr');
+$contractId = qv('SELECT id FROM contracts WHERE employment_id=?', [$employmentId]);
+mustRedirect($staffHr, 'sign contract', "/hr/contracts/$contractId/sign", ['signed_ref' => 'evidence/contract-signed'], '/hr');
+mustRedirect($staffHr, 'hire (employment active today)', '/hr/employments/hire', [
+    'employment_id' => $employmentId, 'effective_from' => date('Y-m-d'),
+], '/hr');
+$empState = qv('SELECT lifecycle_state FROM employments WHERE id=?', [$employmentId]);
+$empState === 'active' ? ok('employment active (contract signed, hire effective today)') : finding('hr.hire', "employment state=$empState");
+
+mustApi($staffAcad, 'register teacher profile', '/api/v1/teachers/profiles', [
+    'employment_id' => $employmentId, 'professional_title' => 'Instructor',
+]);
+$profileId = qv('SELECT id FROM teacher_profiles WHERE employment_id=?', [$employmentId]);
+mustApi($staffAcad, 'add qualification', "/api/v1/teachers/profiles/$profileId/qualifications", [
+    'qualification_type' => 'degree', 'title' => 'BA English', 'issuer' => 'State University',
+    'evidence_ref' => 'evidence/teacher-qualification', 'valid_from' => '2025-01-01',
+]);
+$qualificationId = qv('SELECT id FROM teacher_qualifications WHERE teacher_profile_id=?', [$profileId]);
+// SoD: qualification verification is an approval-side capability and must be a distinct actor.
+mustApi($staffRapp, 'verify qualification (distinct approver)', "/api/v1/teachers/qualifications/$qualificationId/verify", []);
+mustApi($staffRapp, 'activate teacher profile (distinct approver)', "/api/v1/teachers/profiles/$profileId/transition", [
+    'to_state' => 'active', 'reason' => 'canonical activation facts complete',
+]);
+$profileState = qv('SELECT lifecycle_state FROM teacher_profiles WHERE id=?', [$profileId]);
+$profileState === 'active' ? ok('teacher profile ACTIVE (verified identity + active employment + verified qualification + branch authorization)') : finding('teacher.activate', "profile state=$profileState");
+
+step('STAGE 7c — class: define (level+branch+offering) → teacher assignment → publish → activate');
+mustRedirect($staffAcad, 'define class (planned)', '/academic/classes', [
+    'program_version_id' => $versionId, 'period_id' => $acadPeriodId, 'capacity' => 20,
+    'program_version_level_id' => $levelId, 'branch_id' => $branchId, 'offering_id' => $offeringId,
+], '/academic');
 $classId = qv('SELECT id FROM classes WHERE program_version_id=?', [$versionId]);
-mustRedirect($staffAcad, 'assign teacher', '/academic/teacher-assignments', ['class_id' => $classId, 'teacher_person_id' => $teacherId, 'effective_from' => '2026-09-01'], '/academic');
+// The register() step authorizes the teacher's home branch effective TODAY,
+// so the assignment is dated today — inside the class period, matching how
+// an operator actually staffs a running term. (Backdating the branch
+// authorization is possible via the governed approval path but unnecessary.)
+mustApi($staffAcad, 'assign teacher (effective today, inside the period)', '/api/v1/teachers/assignments', [
+    'class_id' => $classId, 'teacher_person_id' => $teacherPersonId, 'effective_from' => date('Y-m-d'),
+]);
 mustRedirect($staffAcad, 'publish class', "/academic/classes/$classId/transition", ['to_state' => 'published'], '/academic');
 mustRedirect($staffAcad, 'activate class', "/academic/classes/$classId/transition", ['to_state' => 'active'], '/academic');
 q('SELECT lifecycle_state FROM classes WHERE id=?', [$classId])['lifecycle_state'] === 'active' ? ok('class active and staffed') : finding('class.activate', 'class not active');
 
 // ---------- STAGE 8: seat request + approval (SoD) ----------
-step('STAGE 8 — enrollment: seat request (clerk) → activation (academic approver)');
-mustRedirect($staffEnr, 'request seat', '/academic/enrollments', ['student_id' => $studentId, 'class_id' => $classId], '/academic');
+step('STAGE 8 — enrollment: seat request (clerk) → activation (academic approver) — financial gate pre-settled');
+mustRedirect($staffEnr, 'request seat', '/academic/enrollments', ['student_id' => $studentId, 'class_id' => $classId, 'offering_id' => $offeringId], '/academic');
 $enrollmentId = qv('SELECT id FROM enrollments WHERE student_id=? AND class_id=?', [$studentId, $classId]);
 q('SELECT lifecycle_state FROM enrollments WHERE id=?', [$enrollmentId])['lifecycle_state'] === 'requested' ? ok('seat requested') : finding('enrollment.request', 'not requested');
 // A seat is requested by one session and activated by another governed
@@ -333,7 +437,7 @@ q('SELECT lifecycle_state FROM enrollments WHERE id=?', [$enrollmentId])['lifecy
 // capability boundary itself is proven by the default-deny actor in STAGE 2
 // and the API 403; here the two distinct staff sessions complete the chain.
 mustRedirect($staffAcad, 'activate enrollment (approver)', "/academic/enrollments/$enrollmentId/activate", [], '/');
-q('SELECT lifecycle_state FROM enrollments WHERE id=?', [$enrollmentId])['lifecycle_state'] === 'active' ? ok('enrollment ACTIVE (requested then approved in separate sessions)') : finding('enrollment.activate', 'not active');
+q('SELECT lifecycle_state FROM enrollments WHERE id=?', [$enrollmentId])['lifecycle_state'] === 'active' ? ok('enrollment ACTIVE (requested then approved in separate sessions; fee settled before activation)') : finding('enrollment.activate', 'not active');
 
 // ---------- STAGE 9: placement assessment chain ----------
 step('STAGE 9 — placement assessment: submit → score → moderate → approve → release (independent actors)');
@@ -350,7 +454,7 @@ mustRedirect($staffMod, 'moderate result', "/academic/results/$resultId/moderate
 q('SELECT lifecycle_state FROM assessment_results WHERE id=?', [$resultId])['lifecycle_state'] === 'moderated' ? ok('result moderated') : finding('result.moderate', 'not moderated');
 mustRedirect($staffRapp, 'approve result', "/academic/results/$resultId/approve", [], '/academic');
 q('SELECT lifecycle_state FROM assessment_results WHERE id=?', [$resultId])['lifecycle_state'] === 'approved' ? ok('result approved') : finding('result.approve', 'not approved');
-// approver (without release capability role... here same broad role) — release by distinct releaser
+// release by distinct releaser
 mustRedirect($staffRel, 'release result', "/academic/results/$resultId/release", [], '/academic');
 q('SELECT lifecycle_state FROM assessment_results WHERE id=?', [$resultId])['lifecycle_state'] === 'released' ? ok('placement result RELEASED') : finding('result.release', 'not released');
 

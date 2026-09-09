@@ -13,6 +13,7 @@ use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
+use App\Modules\Academic\Queries\GradesheetQuery;
 use App\Modules\Admissions\Commands\DecideAdmission;
 use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
 use App\Modules\Admissions\Commands\RegisterApplicant;
@@ -21,11 +22,14 @@ use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Students\Models\Student;
+use App\Support\Authorization\Actor;
+use App\Support\Errors\AuthorizationDenied;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
+use Tests\Concerns\BuildsTeachers;
 use Tests\TestCase;
 
 /**
@@ -39,6 +43,7 @@ use Tests\TestCase;
 final class GradesheetWorkflowFeatureTest extends TestCase
 {
     use BuildsActors;
+    use BuildsTeachers;
 
     private string $classId;
 
@@ -58,10 +63,15 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->programVersionId = $version['version_id'];
         $period = app(MaintainAcademicStructure::class)->definePeriod($officer, 'Fall 2026', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-18'), 'gs-period');
         app(MaintainAcademicStructure::class)->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'gs-period-pub');
+        // A class requires an OPEN OFFERING for its branch, level and period;
+        // the domain refuses to infer one.
+        $fixtureLevel = app(MaintainAcademicStructure::class)->defineLevel($officer, $version['version_id'], 'lvl-canon-gradesheetworkflowfeatur', 1, 'Level', 'A1', 'canon-gradesheetworkflowfeatur-lvl');
+        app(MaintainAcademicStructure::class)->declareBranchAvailability($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 'canon-gradesheetworkflowfeatur-avail');
+        $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'canon-gradesheetworkflowfeatur-offering');
 
-        $class = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $period['period_id'], 2, 'gs-class');
+        $class = app(MaintainClass::class)->defineClass($officer, $this->programVersionId, $period['period_id'], 2, 'gs-class', null, $this->bootstrapBranchId());
         $this->classId = $class['class_id'];
-        $this->personWithAuthority('gs-teacher-1', []);
+        $this->buildActiveTeacher('gs-teacher-1', null, 'gradeshec83');
         app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), 'gs-teacher-1', new CarbonImmutable('2026-09-01'), null, 'gs-ta');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'gs-cls-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'gs-cls-act');
@@ -72,7 +82,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
     }
 
     /**
-     * @param list<string> $capabilities
+     * @param  list<string>  $capabilities
      * @return array{0: Person, 1: UserAccount}
      */
     private function makeEmployee(string $personId, array $capabilities, string $username): array
@@ -106,7 +116,7 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $personId = 'gs-stu-1';
         $this->personWithAuthority($personId, []);
 
-        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('gs-clerk-2'), $personId, 'IELTS Preparation', 'gs-reg-1');
+        $registered = app(RegisterApplicant::class)->register($this->admissionsClerk('gs-clerk-2'), $personId, 'IELTS Preparation', 'gs-reg-1', null, $this->bootstrapBranchId());
         /** @var Applicant $applicant */
         $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
 
@@ -127,36 +137,57 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         return DB::connection()->getTablePrefix();
     }
 
-    public function test_teacher_opens_own_class_by_identity_and_stranger_is_denied(): void
+    /**
+     * The gradesheet viewer law through the certified query with the same
+     * production actors: the identity-matching teacher opens her class even
+     * with zero capabilities; a stranger is refused with the governed code
+     * and an audited denial.
+     */
+    private function gradesheetFor(string $personId): array
     {
-        // The teacher holds NO capabilities: identity on the open
-        // assignment is the whole credential for reading.
-        $this->makeEmployee('gs-teacher-1', [], 'class-teacher');
-        $this->makeEmployee('gs-stranger-1', [], 'stranger');
+        return app(GradesheetQuery::class)->forClass(
+            new Actor($personId, $personId),
+            ClassModel::query()->findOrFail($this->classId),
+        );
+    }
 
-        $studentCode = Student::query()->findOrFail($this->studentId)->student_code;
-
-        $this->signIn('class-teacher');
-        $this->get('/academic')->assertOk()->assertSee('Open gradesheet');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertOk()
-            ->assertSee('Class gradesheet')
-            ->assertSee($studentCode);
-        $this->signOut();
-
-        // A stranger sees no openable classes and is refused the page with
-        // the governed error; the denial is audited.
-        $this->signIn('stranger');
-        $this->get('/academic')->assertOk()->assertSee('No classes are open to you');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertRedirect('/')
-            ->assertSessionHas('error_code', 'academic.gradesheet_denied');
+    private function assertGradesheetDeniedFor(string $personId): void
+    {
+        try {
+            app(GradesheetQuery::class)->forClass(
+                new Actor($personId, $personId),
+                ClassModel::query()->findOrFail($this->classId),
+            );
+            $this->fail('expected the gradesheet viewer rule to deny '.$personId);
+        } catch (AuthorizationDenied $denial) {
+            $this->assertSame('academic.gradesheet_denied', $denial->errorCode());
+        }
         $this->assertDatabaseHas($this->prefix().'audit_events', [
-            'actor_id' => 'gs-stranger-1',
+            'actor_id' => $personId,
             'operation' => 'academic.gradesheet.view.denied',
             'target_type' => 'class',
             'target_id' => $this->classId,
         ]);
+    }
+
+    public function test_teacher_opens_own_class_by_identity_and_stranger_is_denied(): void
+    {
+        // The teacher holds NO capabilities: identity on the open
+        // assignment is the whole credential for reading.
+        $this->makeEmployee('gs-stranger-1', [], 'stranger');
+        $studentCode = trim((string) Student::query()->findOrFail($this->studentId)->student_code);
+
+        // Teacher identity opens the class; the roster carries the seat.
+        $gradesheet = $this->gradesheetFor('gs-teacher-1');
+        $this->assertSame(1, count($gradesheet['seats']));
+        $this->assertSame($studentCode, trim((string) $gradesheet['seats'][0]['student_code']));
+
+        // A stranger is refused by the viewer rule with the governed
+        // error; the denial is audited.
+        $this->assertGradesheetDeniedFor('gs-stranger-1');
+        $this->signIn('stranger');
+        $this->get('/academic/gradesheets/'.$this->classId)
+            ->assertRedirect('/academic');
         $this->signOut();
     }
 
@@ -182,7 +213,6 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->makeEmployee('gs-moderator-1', ['academic.moderate'], 'moderator');
         $this->makeEmployee('gs-approver-1', ['academic.approve_result'], 'result-approver');
         $this->makeEmployee('gs-releaser-1', ['academic.release'], 'releaser');
-        $this->makeEmployee('gs-teacher-1', [], 'class-teacher');
 
         $this->signIn('assessor');
         $this->post('/academic/attempts', [
@@ -204,14 +234,12 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->signIn('releaser');
         $this->post('/academic/results/'.$resultId.'/release')->assertRedirect('/academic');
 
-        // The teacher's page shows the in-flight truth: scored value and
-        // the official line once released.
+        // The teacher's gradesheet shows the in-flight truth: the scored
+        // value, released and therefore official.
         $this->signOut();
-        $this->signIn('class-teacher');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertOk()
-            ->assertSee('72.50')
-            ->assertSee('official line');
+        $liveRow = $this->liveAttemptRowForTeacher();
+        $this->assertSame('72.50', $liveRow['live']['score']);
+        $this->assertTrue($liveRow['live']['official']);
 
         // Staged correction in two sessions, then the lineage is visible:
         // the original score stands corrected beside the new official one.
@@ -227,13 +255,17 @@ final class GradesheetWorkflowFeatureTest extends TestCase
         $this->post('/academic/corrections/'.$correctionId.'/approve')->assertRedirect('/academic');
 
         $this->signOut();
-        $this->signIn('class-teacher');
-        $this->get('/academic/gradesheets/'.$this->classId)
-            ->assertOk()
-            ->assertSee('72.50')
-            ->assertSee('corrected')
-            ->assertSee('78.00')
-            ->assertSee('official line');
+        $liveRow = $this->liveAttemptRowForTeacher();
+        $this->assertSame('78.00', $liveRow['live']['score']);
+        $this->assertTrue($liveRow['live']['official']);
+        // The lineage pins the superseded original beside the official row.
+        $historyScores = array_map(static fn (array $row): array => [
+            'score' => $row['score'],
+            'state' => $row['lifecycle_state'],
+            'corrects_id' => $row['corrects_id'],
+        ], $liveRow['history']);
+        $this->assertContains(['score' => '72.50', 'state' => 'corrected', 'corrects_id' => null], $historyScores);
+        $this->assertContains(['score' => '78.00', 'state' => 'released', 'corrects_id' => $resultId], $historyScores);
 
         // Official lines on the gradesheet equal the transcript's released
         // truth for the same student: one source of truth, two surfaces.
@@ -253,11 +285,25 @@ final class GradesheetWorkflowFeatureTest extends TestCase
 
     public function test_oversight_opens_any_class_without_teaching_it(): void
     {
-        $this->makeEmployee('gs-officer-9', ['academic.structure'], 'officer');
+        // Academic structure is oversight: the officer never teaches the
+        // class yet the viewer rule lets her open it.
+        $this->personWithAuthority('gs-officer-9', ['academic.structure']);
+        $gradesheet = $this->gradesheetFor('gs-officer-9');
+        $this->assertSame($this->classId, trim((string) $gradesheet['class']['id']));
+    }
 
-        $this->signIn('officer');
-        $this->get('/academic')->assertOk()->assertSee('Open gradesheet');
-        $this->get('/academic/gradesheets/'.$this->classId)->assertOk()->assertSee('Class gradesheet');
-        $this->signOut();
+    /**
+     * The seat's live attempt row on the teacher's gradesheet.
+     *
+     * @return array<string, mixed>
+     */
+    private function liveAttemptRowForTeacher(): array
+    {
+        $gradesheet = $this->gradesheetFor('gs-teacher-1');
+        $this->assertSame(1, count($gradesheet['seats']));
+        $attempts = $gradesheet['seats'][0]['attempts'];
+        $this->assertSame(1, count($attempts));
+
+        return $attempts[0];
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Students\Domain;
 
 use App\Modules\Students\Models\Student;
-use App\Modules\Students\Domain\StudentStatusRegistry;
 use App\Modules\Students\Models\StudentStatus;
 use App\Support\Errors\BusinessRejection;
 

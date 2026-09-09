@@ -41,7 +41,7 @@ final class PlacementProfileQuery
     }
 
     /**
-     * @param list<string>|null $branchIds
+     * @param  list<string>|null  $branchIds
      * @return Collection<int, PlacementProfile>
      */
     public function search(?string $term, ?string $lifecycleState, ?string $programVersionId, ?array $branchIds = null): Collection

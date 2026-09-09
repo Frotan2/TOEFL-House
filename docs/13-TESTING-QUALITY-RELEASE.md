@@ -40,3 +40,23 @@ Target-state completeness and runtime certification are independent judgments. T
 
 # Consolidated Governing Evidence
 
+## Canonical Testing Strategy
+
+`docs/TESTING_STRATEGY_LOCK.md` is the mandatory testing strategy and takes
+precedence over any older guidance in this file.
+
+Key points:
+
+- `tests/TestCase.php` uses `RefreshDatabase` (migrate once per process, then
+  roll back a transaction per test). `DatabaseMigrations` replays all 185
+  migrations per test and is prohibited; it made the suite unrunnable.
+- The rule is enforced by `tests/Unit/Architecture/TestStrategyLockTest.php`,
+  not by convention.
+- Concurrency, database-invariant and browser verification deliberately live
+  outside PHPUnit because they need committed state:
+  `npm run verify:concurrency`, `npm run verify:invariants`,
+  `npm run verify:browser`.
+- Runtime versions are locked by `docs/RUNTIME_ENVIRONMENT_LOCK.md` and checked
+  by `npm run verify:environment`.
+
+CI runs all of the above (`.github/workflows/verification.yml`).

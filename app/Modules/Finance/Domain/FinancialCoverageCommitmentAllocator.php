@@ -76,7 +76,7 @@ final class FinancialCoverageCommitmentAllocator
     }
 
     /**
-     * @param numeric-string $amount
+     * @param  numeric-string  $amount
      * @return list<array{commitment_id: string, obligation_id: string, amount: numeric-string}>
      */
     private function commit(string $sourceType, string $sourceId, string $studentId, string $amount, ?string $offeringId, string $exceedsCode, string $exceedsMessage): array

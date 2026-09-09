@@ -8,6 +8,7 @@ use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Audit\Models\AuditEvent;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Students\Models\Student;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $student_id
  * @property string $converted_by
  * @property string $authority_audit_event_id
- * @property \Carbon\CarbonImmutable $converted_at
+ * @property CarbonImmutable $converted_at
  * @property string|null $conversion_time_basis
  * @property string $correlation_id
  */

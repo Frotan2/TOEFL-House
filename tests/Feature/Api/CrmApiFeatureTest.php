@@ -37,6 +37,7 @@ final class CrmApiFeatureTest extends TestCase
             'phone' => '+93 777 000 111',
             'preferred_channel' => 'phone',
             'visitor_type' => 'walk_in',
+            'origin_branch_id' => $staff->home_branch_id,
         ])->assertCreated()
             ->assertJsonStructure(['visitor_id', 'visitor_code', 'status', 'correlation_id']);
 

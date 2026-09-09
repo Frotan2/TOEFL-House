@@ -195,6 +195,6 @@ return new class extends Migration
         // Removing this boundary would make current, organization-bound fund
         // sources allocatable across tenants again. It is intentionally
         // forward-only; restore a reviewed pre-convergence snapshot instead.
-        throw new \RuntimeException('Funding source organization convergence is one-way; do not erase Finance tenant provenance or reopen cross-organization allocation.');
+        throw new RuntimeException('Funding source organization convergence is one-way; do not erase Finance tenant provenance or reopen cross-organization allocation.');
     }
 };

@@ -128,14 +128,18 @@ final class PlacementEvidenceAuthorityDirectSqlTest extends TestCase
         // The lifecycle transition itself is valid. It must nevertheless be
         // rolled back at commit because there is no exact signed snapshot.
         $this->assertSqlRejected(
-            fn (): mixed => DB::transaction(function () use ($approved, $releaser): int {
-                return DB::table('placement_profiles')
+            fn (): mixed => DB::transaction(function () use ($approved, $releaser): void {
+                DB::table('placement_profiles')
                     ->where('id', $approved->id)
                     ->update([
                         'lifecycle_state' => PlacementProfile::STATE_RELEASED,
                         'released_by' => $releaser->actorId,
                         'updated_at' => now(),
                     ]);
+                // The snapshot guard is deferred so the authoritative command
+                // can materialize the signed snapshot in the same transaction;
+                // flush it to prove a raw release without one cannot commit.
+                DB::statement('SET CONSTRAINTS placement_v2_released_profile_snapshot_guard_trigger IMMEDIATE');
             }),
             'requires an exact signed v2 eligibility snapshot before commit',
         );
@@ -279,10 +283,16 @@ final class PlacementEvidenceAuthorityDirectSqlTest extends TestCase
 
     private function assertSqlRejected(callable $write, string $expectedMessage): void
     {
+        // A rejected statement aborts the surrounding transaction, so this
+        // attempt runs in its own savepoint and the assertions after it can
+        // still read.
+        DB::beginTransaction();
         try {
             DB::transaction(static fn (): mixed => $write());
             $this->fail('the direct SQL evidence rewrite unexpectedly succeeded');
+            DB::rollBack();
         } catch (QueryException $exception) {
+            DB::rollBack();
             $this->assertStringContainsString($expectedMessage, $exception->getMessage());
         }
     }
