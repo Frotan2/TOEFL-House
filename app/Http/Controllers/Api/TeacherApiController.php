@@ -81,7 +81,7 @@ final class TeacherApiController extends Controller
                 'profiles' => $profiles->map(function (TeacherProfile $profile) use ($assignments, $branchIds, $own): array {
                     $rows = $assignments->get($profile->id, collect());
                     $isOwnProfile = $own !== null && (string) $own->id === (string) $profile->id;
-                    $branchVisible = static function (string|null $branchId) use ($branchIds, $isOwnProfile): bool {
+                    $branchVisible = static function (?string $branchId) use ($branchIds, $isOwnProfile): bool {
                         return $isOwnProfile || ($branchId !== null && in_array((string) $branchId, array_map('strval', $branchIds), true));
                     };
                     $qualifications = $profile->qualifications;
@@ -251,7 +251,7 @@ final class TeacherApiController extends Controller
     public function workload(Request $request, string $profileId): JsonResponse
     {
         $input = $request->validate(['branch_id' => ['required', 'string'], 'max_hours_per_week' => ['required', 'numeric', 'gt:0', 'max:999.99'], 'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date'], 'evidence_ref' => ['required', 'string', 'max:255']]);
-        $result = app(MaintainTeacherProfile::class)->setWorkloadLimit($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['branch_id'], (string) $input['max_hours_per_week'], $input['effective_from'], $input['effective_to'] ?? null, $input['evidence_ref'], $this->idempotencyKey('academic.teacher.workload.set'));
+        $result = app(MaintainTeacherProfile::class)->setWorkloadLimit($this->actor(), TeacherProfile::query()->findOrFail($profileId), $input['branch_id'], (string) $input['max_hours_per_week'], $input['effective_from'], $input['effective_to'] ?? null, $input['effective_to'] ?? null, $input['evidence_ref'], $this->idempotencyKey('academic.teacher.workload.set'));
 
         return response()->json(['status' => 'set', ...$result], 201);
     }
