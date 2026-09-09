@@ -35,6 +35,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - run: npm install --global npm@${{ env.NPM_VERSION }}
+      - run: npm --version
       - run: npm ci --engine-strict
       - run: npm run typecheck
       - run: npm run build
@@ -52,6 +54,7 @@ jobs:
           tools: composer:${{ env.COMPOSER_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
+      - run: composer --version --no-ansi
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer check-platform-reqs
@@ -96,6 +99,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - run: npm install --global npm@${{ env.NPM_VERSION }}
+      - run: npm --version
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: npm ci --engine-strict
       - name: Prepare application
@@ -155,6 +160,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      - run: npm install --global npm@${{ env.NPM_VERSION }}
+      - run: npm --version
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: npm ci --engine-strict
       - run: cp .env.example .env && php artisan key:generate
