@@ -63,7 +63,7 @@ final class PrivacyApiController extends Controller
                 ->whereIn('subject_person_id', $personIds)
                 ->orderByDesc('id')
                 ->limit(300)
-                ->get(),
+                ->get(['id', 'subject_person_id', 'purpose', 'organization_id', 'lifecycle_state', 'requested_by', 'approver_one_id', 'approver_two_id', 'exported_by', 'disclosure_id', 'created_at', 'updated_at']),
             'policy' => [
                 'authority' => 'server_access_decision',
                 'history' => 'append_only_evidence',
@@ -76,7 +76,8 @@ final class PrivacyApiController extends Controller
     {
         $scope = PersonBranchScope::resolve($subjectId);
         $this->requireBranchCapability('privacy.disclose', $scope->branchId, 'privacy.api.subject', 'person', $subjectId);
-        $asOf = $request->query('as_of');
+        $validated = $request->validate(['as_of' => ['nullable', 'date']]);
+        $asOf = $validated['as_of'] ?? null;
         $date = is_string($asOf) && $asOf !== '' ? CarbonImmutable::parse($asOf) : null;
 
         return response()->json(['data' => app(SubjectPrivacyQuery::class)->subjectProfile($subjectId, $date) + [
