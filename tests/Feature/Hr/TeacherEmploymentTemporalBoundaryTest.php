@@ -73,6 +73,6 @@ final class TeacherEmploymentTemporalBoundaryTest extends TestCase
             $this->assertSame('academic.teacher_employment_inactive', $rejection->errorCode());
         }
 
-        $this->assertDatabaseCount('teacher_profiles', 0);
+        $this->assertDatabaseMissing('teacher_profiles', ['person_id' => $person->id]);
     }
 }
