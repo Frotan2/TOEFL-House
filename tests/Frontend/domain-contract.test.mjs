@@ -32,6 +32,29 @@ for (const [domain, filename] of Object.entries(domainEntrypoints)) {
 
 const app = fs.readFileSync(path.join(jsRoot, 'app.tsx'), 'utf8');
 assert.match(app, /react-console/, 'app.tsx: canonical React console mount must remain present');
+assert.match(app, /AppErrorBoundary/, 'app.tsx: root render must be protected by the application error boundary');
+assert.match(app, /function resolveContent/, 'app.tsx: view resolution must be centralized');
+assert.match(app, /switch \(view as ConsoleView \| null\)/, 'app.tsx: view resolution must use an explicit typed switch');
+assert.doesNotMatch(app, /\?\s*<AcademicSetupApp.*?:\s*studentJourneyRequested/s, 'app.tsx: deeply nested ternary routing must not return');
+
+const navigation = fs.readFileSync(path.join(jsRoot, 'core', 'navigation.ts'), 'utf8');
+assert.match(navigation, /export const navigation:/, 'navigation contract: shared registry missing');
+assert.match(navigation, /navigationGroups/, 'navigation contract: shared group registry missing');
+for (const route of ['/workspace', '/crm?view=front-office', '/students', '/academic', '/placement', '/teachers', '/hr', '/crm', '/finance', '/payroll', '/library', '/communication', '/reporting', '/documents', '/organization', '/identity', '/access', '/privacy', '/audit', '/management']) {
+  assert.match(navigation, new RegExp(`href: '${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`), `navigation contract: ${route} is missing from the shared registry`);
+}
+
+const boundary = fs.readFileSync(path.join(jsRoot, 'core', 'error-boundary.tsx'), 'utf8');
+assert.match(boundary, /componentDidCatch/, 'error boundary: production error capture missing');
+assert.match(boundary, /console\.error/, 'error boundary: diagnostic logging missing');
+assert.match(boundary, /window\.location\.reload/, 'error boundary: full reload recovery missing');
+assert.match(boundary, /Reference:/, 'error boundary: support reference must be visible');
+
+const api = fs.readFileSync(path.join(jsRoot, 'core', 'api.ts'), 'utf8');
+assert.match(api, /credentials: 'same-origin'/, 'API client: session credentials must remain same-origin');
+assert.match(api, /X-CSRF-TOKEN/, 'API client: CSRF boundary missing');
+assert.match(api, /Idempotency-Key/, 'API client: mutation idempotency boundary missing');
+assert.match(api, /correlation_id/, 'API client: server correlation diagnostics missing');
 
 const ui = fs.readFileSync(path.join(jsRoot, 'ui.tsx'), 'utf8');
 assert.match(ui, /metaKey\s*\|\|\s*event\.ctrlKey/, 'shell: Ctrl/⌘+K command palette shortcut missing');
