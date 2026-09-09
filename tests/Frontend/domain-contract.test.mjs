@@ -55,6 +55,16 @@ assert.match(api, /credentials: 'same-origin'/, 'API client: session credentials
 assert.match(api, /X-CSRF-TOKEN/, 'API client: CSRF boundary missing');
 assert.match(api, /Idempotency-Key/, 'API client: mutation idempotency boundary missing');
 assert.match(api, /correlation_id/, 'API client: server correlation diagnostics missing');
+assert.match(api, /DEFAULT_TIMEOUT_MS\s*=\s*30_000/, 'API client: bounded request timeout missing');
+assert.match(api, /request_timeout/, 'API client: timeout must surface a typed retryable error');
+assert.match(api, /AbortController/, 'API client: requests must be abortable by timeout');
+
+const designSystem = fs.readFileSync(path.join(jsRoot, 'design-system.tsx'), 'utf8');
+assert.match(designSystem, /role="tablist"/, 'design system: tabs must expose tablist semantics');
+assert.match(designSystem, /aria-controls/, 'design system: tabs must reference their tabpanels');
+assert.match(designSystem, /tabIndex=\{selected \? 0 : -1\}/, 'design system: tabs must use roving tabindex');
+assert.match(designSystem, /event\.key === 'Home'/, 'design system: Home tab navigation missing');
+assert.match(designSystem, /event\.key === 'End'/, 'design system: End tab navigation missing');
 
 const ui = fs.readFileSync(path.join(jsRoot, 'ui.tsx'), 'utf8');
 assert.match(ui, /metaKey\s*\|\|\s*event\.ctrlKey/, 'shell: Ctrl/⌘+K command palette shortcut missing');
