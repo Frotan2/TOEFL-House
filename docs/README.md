@@ -1,77 +1,55 @@
-# TOEFL House Documentation — Start Here
+# TOEFL House Documentation System
 
-**STATUS: CURRENT CANONICAL INDEX — NORMATIVE**  
-**Authority branch:** `main`  
+**STATUS: ACTIVE / CANONICAL / NORMATIVE**  
+**Authority:** `main`  
 **Last reconciled:** 2026-09-09
 
-This is the single human/AI entry point to the TOEFL House engineering knowledge system. Read the canonical set before consulting historical evidence.
+This repository uses a **single-source documentation architecture**. Each subject has exactly one canonical document. Current status, runtime evidence and agent instructions must not be duplicated across competing files.
 
-## Mandatory authority chain
+## Canonical control plane
 
-1. `MASTER_ENGINEERING_CONTRACT.md` — permanent engineering constitution.
-2. `01-ULTIMATE-GOAL.md` — North Star.
-3. `02-TARGET-ARCHITECTURE.md` — accepted architecture.
-4. `03-DOMAIN-CAPABILITY-MODEL.md` — domain ownership and capability model.
-5. `04-DATA-AUTHORITY-PROVENANCE.md` — source-of-truth and provenance doctrine.
-6. `05-SECURITY-RBAC-GOVERNANCE.md` — authorization, scope, delegation and SoD.
-7. `06-ACADEMIC-SYSTEM.md` — academic lifecycle authority.
-8. `07-FINANCE-PAYROLL-COMMERCIAL.md` — financial authority.
-9. `08-PEOPLE-HR-CRM-OPERATIONS.md` — people, HR, CRM, operations.
-10. `09-REPORTING-INTEGRATION-PROJECTIONS.md` — reporting, projections, events and integrations.
-11. `10-FRONTEND-API-UX.md` — frontend/API/UX boundary.
-12. `11-PRIVACY-AUDIT-DOCUMENTS.md` — privacy, documents and audit governance.
-13. `12-OPERATIONS-DEPLOYMENT-DR.md` — deployment and recovery.
-14. `13-TESTING-QUALITY-RELEASE.md` — verification and release gates.
-15. `14-CURRENT-STATE-ROADMAP.md` — current domain/state register.
-16. `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` — current parity contract.
-17. `DOMAIN-REASSESSMENT-2026-09-09.md` — second-pass domain reassessment.
-18. `15-REQUIREMENT-TRACEABILITY.md` — requirement traceability.
-19. `16-DECISION-REGISTER.md` — decision authority index.
-20. `CODEBASE_HYGIENE_AND_STANDARDS.md` — codebase hygiene and compatibility rules.
-21. `CANONICAL_TERMINOLOGY.md` — vocabulary authority.
-22. `RUNTIME_ENVIRONMENT_LOCK.md` — authoritative runtime version specification.
-23. `RUNTIME_VERIFICATION_HANDOFF.md` — current runtime handoff/evidence contract.
-24. `TESTING_STRATEGY_LOCK.md` and `TEST_SUITE_ARCHITECTURE.md` — test architecture.
-25. `ai/00-AI-ENTRYPOINT.md` — mandatory AI entry point.
-26. `ai/09-NEXT-AGENT-MANDATORY-HANDOFF.md` — blocking operating contract for the next agent.
+| Document | Sole responsibility | Status |
+|---|---|---|
+| `OPERATING-CONTROL.md` | Current HEAD, active domain, execution protocol, handoff, documentation governance | ACTIVE / CANONICAL |
+| `MASTER_ENGINEERING_CONTRACT.md` | Permanent project constitution and business/engineering principles | ACTIVE / CANONICAL |
+| `02-TARGET-ARCHITECTURE.md` | Accepted architecture and system boundaries | ACTIVE / CANONICAL |
+| `DOMAIN-REGISTRY.md` | Domain ownership, maturity, backend↔frontend parity, requirements and closure gaps | ACTIVE / CANONICAL |
+| `RUNTIME-RELEASE.md` | Runtime, verification, evidence semantics and release certification | ACTIVE / CANONICAL |
+| `04-DATA-AUTHORITY-PROVENANCE.md` | Data ownership, provenance and correction doctrine | ACTIVE / CANONICAL |
+| `05-SECURITY-RBAC-GOVERNANCE.md` | Authorization, scope, delegation and separation of duties | ACTIVE / CANONICAL |
+| `06-ACADEMIC-SYSTEM.md` | Academic lifecycle authority | ACTIVE / CANONICAL |
+| `07-FINANCE-PAYROLL-COMMERCIAL.md` | Finance/payroll/commercial authority | ACTIVE / CANONICAL |
+| `08-PEOPLE-HR-CRM-OPERATIONS.md` | People, HR, CRM and operational domain rules | ACTIVE / CANONICAL |
+| `09-REPORTING-INTEGRATION-PROJECTIONS.md` | Reporting, projections and integration boundaries | ACTIVE / CANONICAL |
+| `10-FRONTEND-API-UX.md` | Frontend/API/UX boundary | ACTIVE / CANONICAL |
+| `11-PRIVACY-AUDIT-DOCUMENTS.md` | Privacy, audit and documents authority | ACTIVE / CANONICAL |
+| `12-OPERATIONS-DEPLOYMENT-DR.md` | Deployment, operations and disaster recovery | ACTIVE / CANONICAL |
+| `13-TESTING-QUALITY-RELEASE.md` | Test/quality contract; current runtime/release conclusions defer to `RUNTIME-RELEASE.md` | ACTIVE / CANONICAL |
+| `16-DECISION-REGISTER.md` | Current architecture/governance decision index | ACTIVE / CANONICAL |
+| `CODEBASE_HYGIENE_AND_STANDARDS.md` | Cleanup, coding and repository hygiene | ACTIVE / CANONICAL |
+| `CANONICAL_TERMINOLOGY.md` | Canonical vocabulary | ACTIVE / CANONICAL |
 
-## Non-negotiable state model
+## Authority map
 
-**CURRENT STATE** = what the repository implements now.  
-**TARGET STATE** = approved intended product/architecture state.  
-**RELEASE STATE** = what the current authoritative commit has actually proven through the release gates.
+Use exactly one source for each subject:
 
-Documentation alone never promotes a capability to RELEASE STATE.
+`Operating state → OPERATING-CONTROL.md`  
+`Domain maturity/parity/requirements → DOMAIN-REGISTRY.md`  
+`Runtime/verification/release → RUNTIME-RELEASE.md`  
+`Architecture constitution → MASTER_ENGINEERING_CONTRACT.md`  
+`Accepted architecture → 02-TARGET-ARCHITECTURE.md`  
+`Material decisions → 16-DECISION-REGISTER.md`
 
-## Current release warning
+Domain-specific documents own only their declared domain subject. They must link to, not duplicate, current state or release evidence.
 
-`AUDIT-2026-09-09-FINAL-CERTIFICATION.md` is historical evidence for its own execution line and commit. Its production-readiness statement must not be applied to later `main` commits.
+## One-domain rule
 
-The current release state is always determined from the latest non-superseded Verification workflow attached to the current `main` HEAD. Frontend/static/backend/browser results from older or superseded runs do not certify the current commit.
-
-## Current domain state
-
-- **Covered/strong:** Organization, Identity.
-- **Implementation complete but current runtime certification pending:** Library & Resources.
-- **Partial:** Access/RBAC, Applicants & Students, CRM/Front Office, Academic, Placement, Teachers, HR, Finance, Payroll/settlement, Documents, Privacy, Audit, Communication, Reporting, Management/Work.
-- **Backend-only/operator:** Integration transport, workers/queues/scheduling, projections/materialization internals, database/migration machinery, accounting authority, audit/outbox internals, concurrency/idempotency enforcement.
-
-The authoritative workflow-by-workflow matrix is `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md`; current planning is `14-CURRENT-STATE-ROADMAP.md`; the second-pass assessment is `DOMAIN-REASSESSMENT-2026-09-09.md`.
-
-## Domain execution rule
-
-**ONE DOMAIN AT A TIME.** Do not advance to the next material domain until the current one passes its applicable implementation, authority, database, security/scope, API, frontend, UX, testing, browser/runtime, audit/provenance and documentation gates.
-
-For every domain, use:
-
-`Requirement → Authority → Lifecycle → DB → Command → Authorization → Scope → API → React → UX → Audit → Idempotency → Concurrency → Tests → E2E → Documentation`
-
-Endpoint count is not parity.
+**ONE MATERIAL DOMAIN AT A TIME.** The active domain must pass implementation, authority, database, security/scope, API, frontend, UX, audit/provenance, idempotency, concurrency, testing, browser/E2E and operational evidence gates before another material domain starts.
 
 ## Historical evidence
 
-`history/` and dated audit files preserve provenance. They must remain identifiable as historical evidence and do not silently override current canonical documents.
+Dated audits and `history/` are immutable provenance. Mark them `HISTORICAL` and never use them as current release authority. A prior green run or certification does not certify a later `main` commit.
 
-## Operations
+## Agent entry
 
-Use `12-OPERATIONS-DEPLOYMENT-DR.md`, `RUNTIME_ENVIRONMENT_LOCK.md`, `RUNTIME_VERIFICATION_HANDOFF.md`, and the root `SETUP.md` for actual runtime/deployment operations.
+Start with `OPERATING-CONTROL.md`, then inspect the master contract, the relevant domain authority, `DOMAIN-REGISTRY.md`, and `RUNTIME-RELEASE.md` before material implementation.
