@@ -106,6 +106,13 @@ final class RecordAttendance
                     }
                     if ($correctsId === null) {
                         $this->studentEligibility->assertActive((string) $lockedEnrollment->student_id, 'academic.attendance_student_not_active');
+                        if (AttendanceFact::query()
+                            ->where('session_id', $session->id)
+                            ->where('enrollment_id', $lockedEnrollment->id)
+                            ->whereNull('corrects_id')
+                            ->exists()) {
+                            throw BusinessRejection::forCode('academic.attendance_exists', 'attendance for this student and session is already recorded; use a correction');
+                        }
                     }
                     if ($correctsId !== null) {
                         if ($reason === null || $reason === '') {
