@@ -32,6 +32,8 @@ use Illuminate\Support\Facades\DB;
  *
  * No single person, however many capabilities they hold, can carry more
  * than one stage. The decision is append-only and retains prior decisions.
+ * Only one proposed/reviewed decision chain may be in flight for an
+ * applicant at a time; final decisions remain immutable history.
  */
 final class DecideAdmission
 {
@@ -67,6 +69,18 @@ final class DecideAdmission
                     $this->requireCapability($initiator, self::CAPABILITY_INITIATE, 'admissions.initiator_denied', $locked);
                     if ($reason === '' || $evidenceRef === '') {
                         throw BusinessRejection::forCode('admissions.decision_evidence', 'a decision requires reason and evidence');
+                    }
+
+                    $inFlight = AdmissionDecision::query()
+                        ->where('applicant_id', $locked->id)
+                        ->whereIn('lifecycle_state', [self::STATE_PROPOSED, self::STATE_REVIEWED])
+                        ->lockForUpdate()
+                        ->first();
+                    if ($inFlight !== null) {
+                        throw BusinessRejection::forCode(
+                            'admissions.decision_in_progress',
+                            'this applicant already has an admission decision chain in progress',
+                        );
                     }
 
                     $toState = $admit ? ApplicantLifecycle::STATE_ADMITTED : ApplicantLifecycle::STATE_REJECTED;
