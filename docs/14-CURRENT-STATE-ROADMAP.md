@@ -69,7 +69,7 @@ Historical work-package roadmaps remain historical evidence and must not overrid
 | CRM / Workspace | CURRENT / TARGET GAP | Core capability exists; richer automation/SLA/portal depth remains. |
 | Reporting / integration | CURRENT / TARGET GAP | Read-only projections/outbox/consumers exist; richer replay/DLQ/snapshot depth remains. |
 | Frontend | CURRENT / TARGET GAP | React boundary exists; remaining interactive Blade retirement remains. |
-| Operations / DR | CURRENT | Hardened deployment and recovery procedures exist; deployment-rehearsal and DR-drill evidence was executed 2026-09-08 and carried forward by the 2026-09-09 certification; periodic re-drills remain operational policy. |
+| Operations / DR | CURRENT | Hardened deployment and recovery procedures exist; the timed backup→drop→restore→verify drill and the migrate→rollback→re-apply cycle were executed 2026-09-08 and re-executed 2026-09-09 on the locked runtime; periodic re-drills remain operational policy. |
 | Codebase hygiene | CURRENT | Standards, naming, comment, compatibility and cleanup policy are canonical; all gates executed on the official locked runtime and certified 2026-09-09. |
 
 ## Release-state separation

@@ -1410,11 +1410,14 @@ a freshly re-provisioned locked runtime. Full record and per-gate evidence:
 ## L.3 Evidence boundary (do not overstate)
 
 - Executed fresh in this session: everything in L.1.
-- **Carried forward** from the 2026-09-08 line, not re-executed: live
-  browser E2E (Chromium 152, 21/21) and the deployment-rehearsal + DR-drill
-  gates (A–F in `AUDIT-2026-09-08-RECONCILIATION.md`). The deploy scripts
-  were unchanged by the certification session, so the carried evidence
-  remains applicable; periodic re-drills are operational policy.
+- **Carried forward** from the 2026-09-08 line, then partially re-executed:
+  the **DR drill and the migrate→rollback→re-apply cycle were re-executed
+  2026-09-09** on the locked runtime (backup 0.4 s → full DROP → restore
+  0.99 s → facts/triggers/functions/invariants verified → live HTTP sign-in
+  on the restored database; see the certification §10 addendum). Live
+  browser E2E (Chromium, 21/21) and the full nginx + php-fpm rehearsal
+  remain carried prior-session evidence — no Chromium and no nginx exist in
+  the certification sandbox — and periodic re-drills are operational policy.
 - **Environment-limited** in the certification sandbox: Chromium-based
   `verify:browser`, and the PHP-mirror URL liveness probe.
 

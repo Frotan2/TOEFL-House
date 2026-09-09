@@ -41,17 +41,18 @@ executed evidence:**
   input and a 6-way parallel double-pay race.
 
 This certifies up to and including **real-HTTP E2E business-journey evidence**
-on the locked runtime. Two levels above it on the evidence ladder are carried
-as prior-session evidence, clearly labelled, not re-executed here:
+on the locked runtime, plus **re-executed deployment/DR evidence** (below).
+One level above the journeys on the evidence ladder is carried as
+prior-session evidence, clearly labelled, not re-executed here:
 
 - **Real-browser E2E** (Chromium 149, 21/21) — executed 2026-09-08, recorded
   in `AUDIT-2026-09-08-GATE-EVIDENCE.md` §Gate D; no Chromium binary exists
   in this sandbox, so it could not be re-run (labelled limitation, not a
   substituted result).
-- **Deployment rehearsal + DR drill** (Gates A–F) — executed 2026-09-08,
-  recorded in the same document. The deploy scripts were not modified by this
-  session beyond documentation, so that evidence remains applicable; it is
-  cited, not claimed as new.
+- **Deployment rehearsal + DR drill** (Gates A–F) were executed 2026-09-08
+  and then **re-executed 2026-09-09 with fresh evidence on the locked
+  runtime** — see the addendum at the end of §10. The 2026-09-08 record
+  remains the provenance; the 2026-09-09 drill is the operative evidence.
 
 One environment blocker is reported rather than hidden, per the evidence
 standard: `WindowsLauncherContractTest::test_php_urls_resolve_over_http` skips
@@ -300,12 +301,11 @@ result`.
 
 Stated per the evidence standard, so the boundary is explicit:
 
-1. **Real-browser E2E and deployment/DR rehearsal** were executed on
-   2026-09-08 (see `AUDIT-2026-09-08-GATE-EVIDENCE.md`, Gates A–F) and are
-   carried as prior-session evidence. This session modified no deploy script
-   logic and no frontend bundle inputs other than what the green typecheck /
-   build / mount re-run covers, but the rehearsal itself was not repeated
-   here.
+1. **Real-browser E2E** was executed on 2026-09-08 (see
+   `AUDIT-2026-09-08-GATE-EVIDENCE.md`, Gate D) and is carried as
+   prior-session evidence (no Chromium in this sandbox). The deployment/DR
+   items of Gates A–F are no longer merely carried: they were re-executed
+   2026-09-09 — see the addendum at the end of §10.
 2. The PHP-mirror live-URL check remains network-gated in this sandbox
    (single suite skip).
 3. Windows launcher `.bat` behaviour is certified by its contract suite (the
@@ -393,6 +393,41 @@ migration, lockfile or route changed, so the journey evidence above
 (77/77 · 29/29 · 27/27) remains valid for the tip; the `.bat` cannot execute
 in this Linux environment and is pinned instead by the two contract suites,
 per the repository's established discipline for Windows artifacts.
+
+### Addendum — DR drill and schema-compatibility cycle re-executed (same day)
+
+The deployment/DR evidence carried from 2026-09-08 was re-executed on the
+locked runtime with the committed `deploy/` scripts, against a live
+journey database holding real business data (1 organization, 13 accounts,
+15 people, payments, liability facts):
+
+1. **Backup** — `deploy/backup.sh`: custom-format dump written, verified by
+   `pg_restore --list` before acceptance, 1.3 MB, **0.4 s** wall clock.
+2. **Disaster** — `DROP DATABASE … WITH (FORCE)`: the database ceased to
+   exist (verified via `pg_database`).
+3. **Restore** — `deploy/restore.sh --latest --confirm` (the explicit
+   operator confirmation honored): recreated the database and restored
+   **168 tables in 0.99 s** wall clock, end to end.
+4. **Verification** — post-restore facts byte-for-byte against the pre-drill
+   snapshot (1 organization · 13 accounts · 15 people · 1 payment),
+   **285 user triggers and 525 functions** intact, database invariants
+   **6/6** re-enforced on the restored schema, and the restored instance
+   served over real HTTP: `/health` 200 with `database=ok`, login page
+   rendered, CSRF issued, **owner login accepted on restored data**, and an
+   authenticated route answered (probe: 6/6).
+5. **Schema-compatibility cycle** — `deploy/schema-compatibility.sh
+   --count` reported 185 applied migrations; `--check` confirmed the release
+   compatible; `migrate:rollback --step=1` took the live schema to 184 and
+   `migrate --force` re-applied to 185 cleanly (expand/contract-safe).
+
+Recovery objectives demonstrated: an operator can lose the entire database
+and be back to a verified, sign-in-able system in about one second of
+restore time plus scripted verification, using only committed tooling. This
+closes, with fresh executed evidence, the two 2026-09-08 carried items
+(timed backup→drop→restore→verify drill; migrate→rollback→re-apply cycle).
+Still carried or environment-limited: real-browser E2E (no Chromium here),
+the full nginx+php-fpm rehearsal (no nginx in this sandbox), CSP and
+observability depth (product gaps recorded in the reconciliation K.4).
 
 The certification of §1 therefore stands unchanged at the tip of this
 branch: no executed result differed from the certifying run.

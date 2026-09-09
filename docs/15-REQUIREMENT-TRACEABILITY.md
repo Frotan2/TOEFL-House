@@ -23,7 +23,7 @@ forward unchanged by that certification.
 | R-08 | Transactional outbox and idempotent consumers | 09 | `Outbox/*`, `Integrations/*` | outbox/consumer tests | **Verified in suite**; live relay intentionally not enabled by the synchronous deployment (`operations/production-deployment.md` §9–10) |
 | R-09 | Workspace composes, never owns, domain truth | 08 | `Workspace/*` | workspace tests | **Verified** — suite green; console mount 8/8; browser E2E carried (2026-09-08) |
 | R-10 | React is the target operator frontend | 11 | `resources/js/*`; API v1 | frontend/E2E tests | **Verified** — typecheck/build/mount green; browser E2E 21/21 carried (2026-09-08) |
-| R-11 | Production deployment is schema-aware | 12 | `deploy/deploy.sh`; production docs | deployment tests/procedures | **Verified** — deployment rehearsal + DR drill carried (2026-09-08, gates A–F); launcher contract green in suite |
+| R-11 | Production deployment is schema-aware | 12 | `deploy/deploy.sh`; production docs | deployment tests/procedures | **Verified** — deployment rehearsal (2026-09-08) + DR drill and schema-compatibility cycle re-executed 2026-09-09; launcher contract green in suite |
 | R-12 | Release certification requires official runtime | 13 | release process + environment docs | certification procedure | **Satisfied** — certification executed on the official runtime 2026-09-09 (`AUDIT-2026-09-09-FINAL-CERTIFICATION.md`) |
 
 ## Evidence rules
