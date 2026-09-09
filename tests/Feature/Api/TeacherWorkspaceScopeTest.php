@@ -27,6 +27,7 @@ final class TeacherWorkspaceScopeTest extends TestCase
     use BuildsTeachers;
 
     private string $branchA;
+
     private string $branchB;
 
     private function branch(string $name): string
