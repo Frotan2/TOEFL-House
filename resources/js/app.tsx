@@ -19,6 +19,7 @@ import { StudentJourneyApp } from './student-journey';
 import { StudentsApp } from './students';
 import { WorkspaceApp } from './workspace';
 import { IdentityApp } from './identity';
+import { LibraryApp } from './library';
 import { createApiClient, type ApiClient } from './core/api';
 import { AppErrorBoundary } from './core/error-boundary';
 
@@ -31,7 +32,8 @@ type ConsoleView =
   | 'teachers'
   | 'crm'
   | 'management'
-  | 'identity';
+  | 'identity'
+  | 'library';
 
 function resolveContent(view: string | null, query: URLSearchParams, props: ConsoleProps) {
   switch (view as ConsoleView | null) {
@@ -50,6 +52,8 @@ function resolveContent(view: string | null, query: URLSearchParams, props: Cons
       return <ManagementApp {...props} />;
     case 'identity':
       return <IdentityApp {...props} />;
+    case 'library':
+      return <LibraryApp {...props} />;
     case 'workspace':
     default:
       return <WorkspaceApp {...props} />;
