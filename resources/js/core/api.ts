@@ -68,7 +68,11 @@ async function request<T>(url: string, init: RequestInit, timeoutMs: number): Pr
     return await readResponse<T>(await fetch(url, { ...init, signal: controller.signal }));
   } catch (reason: unknown) {
     if (reason instanceof DOMException && reason.name === 'AbortError') {
-      throw new ApiError(408, { error: 'request_timeout', message: 'The request took too long. Please retry.' }, 'Request timed out');
+      throw new ApiError(408, {
+        error: 'request_timeout',
+        message: 'The request took too long. Please retry.',
+        retryable: true,
+      }, 'Request timed out');
     }
     throw reason;
   } finally {
