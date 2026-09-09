@@ -17,8 +17,6 @@ concurrency:
   group: verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# The locked runtime. Changing these requires updating the lock documents and
-# re-running the full verification chain.
 env:
   PHP_VERSION: '8.4.14'
   NODE_VERSION: '22.22.3'
@@ -63,7 +61,6 @@ jobs:
     name: Backend (migrations, suite, invariants, concurrency)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     services:
       postgres:
         image: postgres:18.4
@@ -77,7 +74,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     env:
       DB_CONNECTION: pgsql
       DB_HOST: 127.0.0.1
@@ -85,7 +81,6 @@ jobs:
       DB_DATABASE: toefl_house_test
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -158,15 +153,22 @@ jobs:
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: npm ci --engine-strict
       - run: cp .env.example .env && php artisan key:generate
+      - run: npm run verify:environment
       - run: php artisan migrate:fresh --force
       - run: php artisan db:seed --class=StandardFinanceChartSeeder --force
       - run: npm run build
       - name: Provision isolated E2E owner credentials
+        shell: bash
         run: |
-          echo "BOOTSTRAP_OWNER_NAME=CI E2E Owner" >> "$GITHUB_ENV"
-          echo "BOOTSTRAP_OWNER_BIRTHDATE=1990-01-01" >> "$GITHUB_ENV"
-          echo "BOOTSTRAP_OWNER_USERNAME=ci.e2e.owner" >> "$GITHUB_ENV"
-          echo "BOOTSTRAP_OWNER_PASSWORD=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          E2E_PASSWORD="$(openssl rand -hex 32)"
+          {
+            echo "BOOTSTRAP_OWNER_NAME=CI E2E Owner"
+            echo "BOOTSTRAP_OWNER_BIRTHDATE=1990-01-01"
+            echo "BOOTSTRAP_OWNER_USERNAME=ci.e2e.owner"
+            echo "BOOTSTRAP_OWNER_PASSWORD=$E2E_PASSWORD"
+            echo "E2E_USERNAME=ci.e2e.owner"
+            echo "E2E_PASSWORD=$E2E_PASSWORD"
+          } >> "$GITHUB_ENV"
       - name: Bootstrap owner account
         run: php artisan db:seed --class=FirstRunBootstrapSeeder --force
       - name: Install Chromium
