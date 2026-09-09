@@ -33,8 +33,8 @@ function exact(version, expected) {
 }
 
 const LOCK = {
-  php: { exact: '8.4.14', min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
-  composer: { exact: '2.9.2', min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
+  php: { exact: '8.4.25', min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
+  composer: { exact: '2.10.3', min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
   node: { exact: '22.22.3', min: { major: 22, minor: 0, patch: 0 }, max: { major: 23, minor: 0, patch: 0 } },
   npm: { exact: '10.9.8', min: { major: 10, minor: 0, patch: 0 }, max: { major: 11, minor: 0, patch: 0 } },
   postgres: { exact: '18.4', min: { major: 18, minor: 0, patch: 0 }, max: { major: 19, minor: 0, patch: 0 } },
