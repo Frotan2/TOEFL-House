@@ -9,7 +9,6 @@ use App\Modules\Academic\Commands\MaintainTeacherAssignment;
 use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\TeacherProfile;
-use App\Support\Authorization\Actor;
 use App\Support\Errors\BusinessRejection;
 use Carbon\CarbonImmutable;
 use Tests\Concerns\BuildsAcademicStructure;
@@ -36,7 +35,9 @@ final class TeacherWorkloadLimitFeatureTest extends TestCase
     public function test_assigned_sessions_count_toward_the_weekly_teacher_workload_limit(): void
     {
         $branchId = $this->bootstrapBranchId();
-        $structureOfficer = $this->academicOfficer('workload-structure-officer');
+        $structureOfficerId = 'workload-structure-officer';
+        $structureOfficer = $this->academicOfficer($structureOfficerId);
+        $this->grantScopeAuthority($structureOfficerId, ['academic.schedule'], 'branch', $branchId);
         $chain = $this->buildAcademicChain($structureOfficer, 'teacher-workload', 25, $branchId);
 
         $class = app(MaintainClass::class)->defineClass(
