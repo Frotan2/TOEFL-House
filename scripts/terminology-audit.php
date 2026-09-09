@@ -13,7 +13,6 @@ declare(strict_types=1);
  * and the runtime handoff contains historical evidence, so those two authored
  * documents are excluded from the semantic scan.
  */
-
 $root = dirname(__DIR__);
 
 /** @var array<string, string> $terms */
