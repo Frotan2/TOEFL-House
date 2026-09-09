@@ -82,6 +82,42 @@ final class ResourceLifecycleDatabaseTest extends TestCase
         ]);
     }
 
+    public function test_database_rejects_custody_before_asset_acquisition(): void
+    {
+        $this->ensureBootstrapAuthority();
+        $assetId = $this->newAsset('2026-09-10');
+
+        $this->expectException(QueryException::class);
+        DB::table('custodies')->insert([
+            'id' => RandomIdentifier::new(),
+            'asset_id' => $assetId,
+            'custodian_person_id' => 'person-a',
+            'assigned_on' => '2026-09-09',
+            'assigned_by' => 'actor-a',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function test_database_rejects_returned_issuance_without_a_valid_return_date(): void
+    {
+        $this->ensureBootstrapAuthority();
+        $copyId = $this->newCopy('2026-09-10');
+
+        $this->expectException(QueryException::class);
+        DB::table('book_issuances')->insert([
+            'id' => RandomIdentifier::new(),
+            'copy_id' => $copyId,
+            'borrower_person_id' => 'person-a',
+            'issued_on' => '2026-09-10',
+            'due_on' => '2026-09-20',
+            'lifecycle_state' => 'returned',
+            'issued_by' => 'actor-a',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     private function newAsset(string $acquiredOn): string
     {
         $id = RandomIdentifier::new();
@@ -95,6 +131,23 @@ final class ResourceLifecycleDatabaseTest extends TestCase
             'location' => 'library',
             'acquired_on' => $acquiredOn,
             'lifecycle_state' => 'in_service',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $id;
+    }
+
+    private function newCopy(string $acquiredOn): string
+    {
+        $id = RandomIdentifier::new();
+        DB::table('book_copies')->insert([
+            'id' => $id,
+            'organization_id' => $this->bootstrapOrganizationId,
+            'originating_branch_id' => $this->bootstrapBranchId,
+            'code' => 'COPY-'.RandomIdentifier::new(),
+            'title' => 'Lifecycle Invariant Copy',
+            'acquired_on' => $acquiredOn,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
