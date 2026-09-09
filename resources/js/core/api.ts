@@ -35,7 +35,15 @@ export type ApiClient = {
 type ApiClientConfig = {
   apiBase: string;
   csrfToken: string;
+  timeoutMs?: number;
 };
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+function requestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 async function readResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type') ?? '';
@@ -53,14 +61,30 @@ async function readResponse<T>(response: Response): Promise<T> {
   throw new ApiError(response.status, {}, text.trim() || `Request returned a non-JSON response (${response.status})`);
 }
 
+async function request<T>(url: string, init: RequestInit, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await readResponse<T>(await fetch(url, { ...init, signal: controller.signal }));
+  } catch (reason: unknown) {
+    if (reason instanceof DOMException && reason.name === 'AbortError') {
+      throw new ApiError(408, { error: 'request_timeout', message: 'The request took too long. Please retry.' }, 'Request timed out');
+    }
+    throw reason;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export function createApiClient(config: ApiClientConfig): ApiClient {
-  const getJson = async <T>(path: string): Promise<T> => readResponse<T>(await fetch(`${config.apiBase}${path}`, {
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const getJson = async <T>(path: string): Promise<T> => request<T>(`${config.apiBase}${path}`, {
     credentials: 'same-origin',
     cache: 'no-store',
     headers: { Accept: 'application/json' },
-  }));
+  }, timeoutMs);
 
-  const postJson = async <T>(path: string, body?: Record<string, unknown>, idempotencyKey?: string): Promise<T> => readResponse<T>(await fetch(`${config.apiBase}${path}`, {
+  const postJson = async <T>(path: string, body?: Record<string, unknown>, idempotencyKey?: string): Promise<T> => request<T>(`${config.apiBase}${path}`, {
     method: 'POST',
     credentials: 'same-origin',
     cache: 'no-store',
@@ -69,10 +93,10 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       'X-CSRF-TOKEN': config.csrfToken,
       'X-Requested-With': 'XMLHttpRequest',
-      'Idempotency-Key': idempotencyKey ?? `${path.replaceAll('/', '.')}-${crypto.randomUUID()}`,
+      'Idempotency-Key': idempotencyKey ?? `${path.replaceAll('/', '.')}-${requestId()}`,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
-  }));
+  }, timeoutMs);
 
   return { getJson, postJson };
 }
