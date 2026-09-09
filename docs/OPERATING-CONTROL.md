@@ -10,14 +10,14 @@
 ## 1. Current control state
 
 - **Authoritative branch:** `main`
-- **Current HEAD:** `99c2b70b944e4365349e6c9ce25eb9c66d825af0`
+- **Current HEAD:** `e4e058f34df0f10055929be704ce1f734bbc5f9e`
 - **Active domain:** Library & Resources
 - **Active domain status:** IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED
-- **Current Verification:** run #457 / workflow id `34368019057` — QUEUED for the current HEAD at the time of this reconciliation.
+- **Latest Verification:** run #464 / workflow id `34369529127` — PENDING for the current HEAD at reconciliation time.
 - **Next allowed domain:** Documents, but only after Library is closed and a fresh reassessment is performed.
-- **Release status:** NOT CURRENTLY CERTIFIED; the current HEAD must be proven by the latest non-superseded verification evidence.
+- **Release status:** NOT CURRENTLY CERTIFIED; current HEAD must be proven by the latest non-superseded verification evidence.
 
-Never convert `QUEUED`, `IN PROGRESS`, `STATICALLY VERIFIED`, historical evidence, or documentation claims into `VERIFIED` or `RELEASE CERTIFIED`.
+Never convert `PENDING`, `QUEUED`, `IN PROGRESS`, `STATICALLY VERIFIED`, historical evidence, or documentation claims into `VERIFIED` or `RELEASE CERTIFIED`.
 
 ## 2. State vocabulary
 
@@ -49,40 +49,13 @@ Only materially applicable stages are required, but omissions must be explicit.
 
 **Library & Resources is the only active material domain.**
 
-It may be declared closed only after current-main evidence proves its applicable:
-
-- backend lifecycle and database invariants;
-- authorization and organization/campus/branch/class/own scope behavior;
-- API and canonical command paths;
-- React parity and workspace mounting;
-- UX for loading, empty, invalid, forbidden, pending and irreversible actions;
-- audit/provenance, idempotency and concurrency behavior;
-- unit/feature/integration tests;
-- browser/E2E behavior against the locked runtime;
-- security/adversarial behavior;
-- documentation consistency.
+It may be declared closed only after current-main evidence proves its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates.
 
 Do not begin Documents while this gate is unresolved.
 
 ## 5. Security and adversarial checklist
 
-For every applicable workflow, explicitly test:
-
-- organization isolation;
-- campus scope;
-- branch scope;
-- class scope;
-- own-record/own-action scope;
-- manager cross-branch denial;
-- valid campus-scoped manager access;
-- owner/global access where authorized;
-- teacher/employee own-record access and cross-record denial;
-- unauthorized mutation denial;
-- invalid lifecycle transition denial;
-- separation-of-duties and self-approval rules;
-- idempotency conflict/replay behavior;
-- concurrency/race behavior;
-- auditability of successful and rejected sensitive actions.
+For every applicable workflow, explicitly test organization, campus, branch, class and own-record scope; manager cross-branch denial; valid campus-scoped manager access; owner/global access where authorized; teacher/employee own-record and cross-record behavior; unauthorized mutation; invalid lifecycle transition; separation-of-duties/self-approval; idempotency conflict/replay; concurrency/race behavior; and auditability of success and rejection.
 
 A UI hiding a control is never a substitute for server authorization.
 
@@ -94,61 +67,36 @@ A UI hiding a control is never a substitute for server authorization.
 - Backend/domain commands own business truth, authorization, scope, lifecycle, accounting, audit, idempotency and concurrency.
 - Do not recreate server lifecycle or accounting rules in React.
 - Consequential actor choices must be explicit; never silently use the first record returned by the API.
-- Irreversible actions require an explicit confirmation and, where required, server-driven workflow stages.
-- Blade is a transport/compatibility boundary; new normal operational work belongs in React unless a specific exception is approved.
+- Irreversible actions require explicit confirmation and, where required, server-driven workflow stages.
+- Blade is a transport/compatibility boundary; new normal operational work belongs in React unless explicitly approved.
 
 ## 7. Agent execution protocol
 
-Before changing code:
-
-1. read this document;
-2. read `MASTER_ENGINEERING_CONTRACT.md`;
-3. read the relevant architecture/domain authority document;
-4. read `DOMAIN-REGISTRY.md` for current maturity and the selected workflow;
-5. read `RUNTIME-RELEASE.md` before interpreting verification or release state;
-6. inspect the current `main` HEAD and actual source/tests before trusting documentation;
-7. identify the single active domain and the exact closure gap;
-8. make the smallest coherent change that preserves established authorities;
-9. run the strongest applicable verification;
-10. update this control document and the domain registry in the same work package.
+Before changing code: read this document; read the master contract; inspect the relevant architecture/domain authority; inspect `DOMAIN-REGISTRY.md`; inspect `RUNTIME-RELEASE.md`; inspect current `main` source/tests; identify the single active domain and exact closure gap; make the smallest coherent change; run strongest applicable verification; then update canonical status/evidence documents.
 
 A material change may invalidate older evidence. The current commit controls current truth.
 
 ## 8. Forbidden behavior
 
-Never:
-
-- invent a business authority or duplicate an existing one;
-- weaken a correct invariant, security check or test to obtain green output;
-- create fake migrations or guessed database baselines;
-- add secrets or sensitive logs;
-- perform blind whole-file rewrites from stale content;
-- claim runtime verification that was not executed;
-- start the next material domain early;
-- preserve duplicate documentation merely because it is convenient;
-- silently turn historical evidence into current status.
+Never invent a business authority, duplicate an existing one, weaken a correct invariant/security check/test, create fake migrations, add secrets or sensitive logs, perform blind whole-file rewrites, claim runtime verification that was not executed, start the next material domain early, or preserve duplicate current-state documentation.
 
 ## 9. Documentation operating model
 
-The repository uses **one source of truth per subject**:
-
-| Subject | Canonical document |
+| Subject | Single canonical document |
 |---|---|
-| Project constitution, architecture principles and permanent business rules | `MASTER_ENGINEERING_CONTRACT.md` |
-| Accepted target architecture | `02-TARGET-ARCHITECTURE.md` |
-| Domain maturity, backend/frontend parity and requirement status | `DOMAIN-REGISTRY.md` |
-| Current execution state, active domain and agent rules | `OPERATING-CONTROL.md` |
-| Runtime, verification, testing and release evidence rules | `RUNTIME-RELEASE.md` |
-| Material architecture/governance decisions | `16-DECISION-REGISTER.md` |
-| Code cleanup and repository standards | `CODEBASE_HYGIENE_AND_STANDARDS.md` |
-| Canonical vocabulary | `CANONICAL_TERMINOLOGY.md` |
-| Domain-specific authoritative contracts | the relevant domain document only |
+| Project constitution | `MASTER_ENGINEERING_CONTRACT.md` |
+| Accepted architecture | `02-TARGET-ARCHITECTURE.md` |
+| Domain maturity/parity/requirements | `DOMAIN-REGISTRY.md` |
+| Current execution state and agent rules | `OPERATING-CONTROL.md` |
+| Runtime/verification/release | `RUNTIME-RELEASE.md` |
+| Material decisions | `16-DECISION-REGISTER.md` |
+| Cleanup/coding hygiene | `CODEBASE_HYGIENE_AND_STANDARDS.md` |
+| Vocabulary | `CANONICAL_TERMINOLOGY.md` |
+| Domain-specific contract | The relevant domain document only |
 
-No document may restate another document's full subject. Cross-document references should point to the authority instead.
+No document may restate another document's full subject. Link to the owner instead.
 
 ## 10. Completion formula
-
-A material domain is `DONE` only when:
 
 `Implementation + Authority + DB + Authorization + Scope + API + React + UX + Audit/Provenance + Idempotency + Concurrency + Tests + Browser/E2E + Security + Operational Evidence + Documentation = PASS`
 
@@ -158,6 +106,6 @@ A material domain is `DONE` only when:
 
 `DOCUMENTED ≠ EXECUTED`.
 
-## 11. Handoff requirement
+## 11. Handoff
 
-The next agent must start from this document, not from an old audit or a remembered task list. It must inspect current `main`, continue Library closure only, and update the canonical status/evidence documents after every material change.
+The next agent starts here, inspects current `main`, continues Library closure only, and updates the canonical control documents after every material change. Historical audits are never the execution authority.
