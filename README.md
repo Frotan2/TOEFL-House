@@ -41,11 +41,13 @@ invariants, concurrency) on PHP 8.4 / Node 22 / PostgreSQL 18.
 
 ### Windows one-click (supported convenience path)
 
-Run `START-TOEFL-HOUSE.bat`. It provisions its pinned runtime under
-`.runtime\`, installs dependencies from the committed lockfiles, creates and
-migrates a local PostgreSQL 18 cluster, performs the guarded first-run
-bootstrap (prompting for the owner account), serves the app at
-`http://127.0.0.1:8080` and checks `/health`. Companion launchers:
+Run `START-TOEFL-HOUSE.bat`. It provisions its pinned runtimes under
+`.runtime\` (PHP, Composer, Node, PostgreSQL), installs dependencies from
+the committed lockfiles, **builds the employee console** (`npm ci` + Vite —
+required by the production `/health` gate), creates and migrates a local
+PostgreSQL 18 cluster, performs the guarded first-run bootstrap (prompting
+for the owner account), serves the app at `http://127.0.0.1:8080` and
+checks `/health`. Companion launchers:
 `STOP-TOEFL-HOUSE.bat`, `BACKUP-TOEFL-HOUSE.bat`, `RESTORE-TOEFL-HOUSE.bat`,
 `DIAG-PHP-CRASH.bat`. Full detail in [`SETUP.md`](SETUP.md).
 

@@ -1398,6 +1398,14 @@ a freshly re-provisioned locked runtime. Full record and per-gate evidence:
    (`ServeCommand::$passthroughVariables`), so the launcher contract does
    not hold there. Recorded in `RUNTIME_ENVIRONMENT_LOCK.md` §6 with the
    direct built-in-server recipe.
+4. **FC-4 (deployment):** found by a real Windows one-click run after
+   certification — the launcher had no frontend build step, so its
+   production `/health` gate (which requires the built Vite manifest)
+   answered 503 until timeout. Fixed: the launcher now pins Node 22.22.3
+   and runs `npm ci --engine-strict` + `npm run build` as a mandatory step
+   before the health gate; pinned by
+   `test_the_launcher_builds_the_frontend_before_its_health_gate`
+   (contract suite 11 tests / 150 assertions). See the certification §6.
 
 ## L.3 Evidence boundary (do not overstate)
 

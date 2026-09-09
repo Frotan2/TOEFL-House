@@ -200,6 +200,30 @@ the journeys run), and recorded as a verified exception in
 `RUNTIME_ENVIRONMENT_LOCK.md` §6. No product change: the production topology
 is nginx + php-fpm, not `artisan serve`.
 
+### FC-4 — Windows launcher never built the frontend; its own health gate could never pass (DEPLOYMENT DEFECT, FIXED)
+
+**Discovered by** a real Windows one-click run after certification: the
+launcher stopped at step 9 with `/health` answering 503 every two seconds
+for the full 60-second window.
+
+**Evidence.** The launcher creates `.env` from the production template
+(`APP_ENV=production`). In production, `/health` refuses 200 until
+`public/build/manifest.json` exists and is valid JSON (`HealthController`),
+and a fresh clone has no `public/build` (git-ignored). `START-TOEFL-HOUSE.bat`
+contained no Node/npm/build step at all, so the manifest could never exist
+and the launcher could never pass its own health gate.
+
+**Fix.** The launcher now pins Node 22.22.3 (the locked version, official
+permanent versioned `nodejs.org` dist URL, downloaded once into `.runtime\`
+like the other runtimes) and runs `npm ci --engine-strict` + `npm run build`
+from the committed lockfile as a mandatory step 4, before `.env`, before the
+server, and before the health gate — exactly the production procedure of
+`operations/production-deployment.md` §6. A failed build fails loudly; a
+successful build is verified by the manifest check. Pinned by
+`WindowsOneClickDeploymentContractTest::test_the_launcher_builds_the_frontend_before_its_health_gate`
+(build commands present, official URL pin, ordering before the health gate,
+manifest verification; suite re-run green: 11 tests, 150 assertions).
+
 ### Advisory carry-overs (unchanged, re-confirmed)
 
 - Resource-existence probing (404 vs 403) — design decision, access still denied.
@@ -353,6 +377,22 @@ invariants **6/6** · concurrency **4/4** · journeys from four freshly
 dropped/created/migrated/seeded databases: **77/77, 29/29, 27/27** ·
 `bash -n` clean on every `deploy/` and `scripts/runtime/` shell script ·
 `php -l` clean on the Windows launcher helper.
+
+### Postscript — the FC-4 launcher fix (same day, after a real Windows run)
+
+The FC-4 fix (§6) is the one code-artifact change since the certifying
+commit: `START-TOEFL-HOUSE.bat` gained the mandatory frontend-build step
+(pinned Node 22.22.3, `npm ci --engine-strict`, `npm run build`, manifest
+verification) and both launcher contract suites were extended/updated to pin
+it. Re-executed after that change: Pint 878 files PASS · PHPStan level 6 OK
+· migration audit PASS · terminology audit exit 0 · full suite
+**987 tests / 7,410 assertions / 0 failures / 1 network-gated skip** ·
+launcher contract suites **132 tests / 718 assertions green** · batch
+statics clean (every `goto`/`call` target resolves). No application code,
+migration, lockfile or route changed, so the journey evidence above
+(77/77 · 29/29 · 27/27) remains valid for the tip; the `.bat` cannot execute
+in this Linux environment and is pinned instead by the two contract suites,
+per the repository's established discipline for Windows artifacts.
 
 The certification of §1 therefore stands unchanged at the tip of this
 branch: no executed result differed from the certifying run.

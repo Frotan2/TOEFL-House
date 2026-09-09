@@ -1019,9 +1019,10 @@ final class WindowsLauncherContractTest extends TestCase
 
     private function tailscaleStepBlock(): string
     {
-        // The Step 10 Tailscale section, from its section banner up to (but not
+        // The Step 11 Tailscale section (renumbered from 10 when the frontend
+        // build became Step 4), from its section banner up to (but not
         // including) the "Subroutines" divider that begins :fail et al.
-        $startMarker = 'echo [10/10]';
+        $startMarker = 'echo [11/11]';
         $endMarker = 'REM ===========================================================================';
         $start = strpos($this->bat, $startMarker);
         if ($start === false) {
@@ -1080,8 +1081,9 @@ final class WindowsLauncherContractTest extends TestCase
             'TAR must be the Windows built-in %SystemRoot%\\System32\\tar.exe (bsdtar), not a PATH-resolved tar.',
         );
 
-        // Every archive extraction must invoke the quoted built-in tar.
-        $this->assertSame(2, preg_match_all('/"%TAR%"\s+-xf/', $this->bat), 'both the PHP and PostgreSQL archives must be extracted with "%TAR%" -xf.');
+        // Every archive extraction must invoke the quoted built-in tar
+        // (PHP, PostgreSQL, and the build-only Node runtime).
+        $this->assertSame(3, preg_match_all('/"%TAR%"\s+-xf/', $this->bat), 'the PHP, PostgreSQL and Node archives must all be extracted with "%TAR%" -xf.');
 
         // No bare, PATH-resolved "tar" may remain: that is the GNU tar that
         // fails with "Cannot connect to C: resolve failed" on a drive-letter path.

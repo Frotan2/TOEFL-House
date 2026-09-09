@@ -14,28 +14,33 @@ REM What this file does (every step fails loudly and says exactly what is
 REM missing; nothing here fails silently):
 REM   1.  Verifies prerequisites (Windows 10 1803+, built-in curl.exe)
 REM   2.  Prepares runtimes into .runtime\ : PHP 8.2.x (pinned at the version
-REM       in PHP_VERSION, derived artifacts in one place), Composer,
-REM       PostgreSQL 18.3 - downloaded once from official URLs and reused on
-REM       every later run. The PHP download tries /releases/ first and falls
-REM       back to /releases/archives/ (where older patches live permanently),
-REM       so a patch bump upstream never breaks a fresh clone
+REM       in PHP_VERSION, derived artifacts in one place), Composer, Node
+REM       (pinned at NODE_VERSION, build-only), PostgreSQL 18.3 - downloaded
+REM       once from official URLs and reused on every later run. The PHP
+REM       download tries /releases/ first and falls back to
+REM       /releases/archives/ (where older patches live permanently), so a
+REM       patch bump upstream never breaks a fresh clone
 REM   3.  Installs Composer dependencies (production, lock file authoritative)
-REM   4.  Creates .env from the production template + generates APP_KEY
-REM   5.  Initializes PostgreSQL (127.0.0.1 only, local trust auth) and
+REM   4.  Builds the employee console (pinned Node + npm ci from the committed
+REM       lockfile + Vite build). Production /health requires the built
+REM       manifest and the console is unusable without it, so this step is
+REM       mandatory, exactly like the production deployment procedure
+REM   5.  Creates .env from the production template + generates APP_KEY
+REM   6.  Initializes PostgreSQL (127.0.0.1 only, local trust auth) and
 REM       creates the toefl_house database
-REM   6.  Runs migrations from zero
-REM   7.  FIRST RUN ONLY: creates the owner organization, the Owner role with
+REM   7.  Runs migrations from zero
+REM   8.  FIRST RUN ONLY: creates the owner organization, the Owner role with
 REM       the complete capability set, and the owner account - you are asked
 REM       once for name, date of birth, username and password
-REM   8.  Starts Laravel on http://127.0.0.1:8080
-REM   9.  Verifies /health
-REM   10. OPTIONAL: installs Tailscale if missing and configures Tailscale SERVE
+REM   9.  Starts Laravel on http://127.0.0.1:8080
+REM   10. Verifies /health
+REM   11. OPTIONAL: installs Tailscale if missing and configures Tailscale SERVE
 REM       so the app is reachable from the other devices on your private Tailnet,
 REM       then prints that private address. This is a convenience on top of the
 REM       already-running local server, never a requirement: if the download, the
 REM       install (UAC declined), the Tailscale sign-in or the serve setup cannot
 REM       complete, the launcher still finishes and reports the local address - it
-REM       does NOT fail the deployment the way steps 1-9 do.
+REM       does NOT fail the deployment the way steps 1-10 do.
 REM
 REM You never need PowerShell, Git, Composer, PHP or PostgreSQL commands.
 REM Double-clicking this file is the entire operation.
@@ -97,6 +102,16 @@ REM MSI URL could never download. We pin a stable version exactly like
 REM PHP/Composer/PostgreSQL; the installed client keeps itself up to date.
 set "TAILSCALE_VERSION=1.102.3"
 set "TAILSCALE_MSI_URL=https://pkgs.tailscale.com/stable/tailscale-setup-%TAILSCALE_VERSION%-amd64.msi"
+REM Node.js is needed ONLY to build the employee console (Vite) once per
+REM clone - never at runtime (the built assets are served by Laravel). It is
+REM pinned to the exact version locked by the repository
+REM (docs/RUNTIME_ENVIRONMENT_LOCK.md) and fetched from the official,
+REM permanent versioned nodejs.org dist URL. npm then installs from the
+REM committed package-lock.json (npm ci --engine-strict) exactly like CI.
+set "NODE_VERSION=22.22.3"
+set "NODE_ZIP=node-v%NODE_VERSION%-win-x64.zip"
+set "NODE_ZIP_URL=https://nodejs.org/dist/v%NODE_VERSION%/%NODE_ZIP%"
+set "NODE_DIR=%RT%\node-v%NODE_VERSION%-win-x64"
 
 set "APP_PORT=8080"
 set "PG_PORT=5432"
@@ -111,7 +126,7 @@ echo.
 REM ---------------------------------------------------------------------------
 REM Step 1 - prerequisites
 REM ---------------------------------------------------------------------------
-echo [1/10] Checking prerequisites...
+echo [1/11] Checking prerequisites...
 where curl.exe >nul 2>nul
 if errorlevel 1 call :fail "Built-in curl.exe not found. Windows 10 version 1803 or newer is required - update Windows and re-run this file."
 if not exist "%TAR%" call :fail "Built-in tar.exe (bsdtar) not found at %TAR%. Windows 10 version 1803 or newer is required - update Windows and re-run this file. Do not rely on a Git/MSYS2/Cygwin tar on PATH, which cannot unpack the PHP/PostgreSQL .zip archives."
@@ -119,7 +134,7 @@ if not exist "%TAR%" call :fail "Built-in tar.exe (bsdtar) not found at %TAR%. W
 REM ---------------------------------------------------------------------------
 REM Step 2 - runtimes
 REM ---------------------------------------------------------------------------
-echo [2/10] Preparing runtimes into .runtime\ ...
+echo [2/11] Preparing runtimes into .runtime\ ...
 if not exist "%RT%" mkdir "%RT%"
 if not exist "%RT%\downloads" mkdir "%RT%\downloads"
 
@@ -127,6 +142,9 @@ call :prepare_php
 
 
 call :prepare_composer
+
+
+call :prepare_node
 
 
 if not exist "%PG_BIN%\initdb.exe" (
@@ -148,7 +166,7 @@ echo       - runtimes ready.
 REM ---------------------------------------------------------------------------
 REM Step 3 - Composer dependencies
 REM ---------------------------------------------------------------------------
-echo [3/10] Installing Composer dependencies, production mode...
+echo [3/11] Installing Composer dependencies, production mode...
 if not exist "%ROOT%\vendor" (
     "%PHP%" "%COMPOSER_PHAR%" install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
     if errorlevel 1 call :fail "Composer install failed. The internet connection must reach packagist.org. Re-run this file."
@@ -156,9 +174,31 @@ if not exist "%ROOT%\vendor" (
 echo       - dependencies ready.
 
 REM ---------------------------------------------------------------------------
-REM Step 4 - .env + APP_KEY
+REM Step 4 - frontend build (employee console)
 REM ---------------------------------------------------------------------------
-echo [4/10] Preparing .env from the production template...
+REM Production /health refuses to report healthy without the built Vite
+REM manifest, and the console itself is unusable without it, so this step is
+REM MANDATORY - exactly like the production deployment procedure
+REM (docs/operations/production-deployment.md, "Frontend build"). A fresh
+REM clone has no public\build (it is git-ignored), so without this step the
+REM launcher could never pass its own health check. The build is reused on
+REM later runs; delete public\build to force a rebuild after a code update.
+echo [4/11] Building the employee console (Node + Vite)...
+if exist "%ROOT%\public\build\manifest.json" goto frontend_ready
+set "PATH=%NODE_DIR%;%PATH%"
+set "npm_config_cache=%RT%\npm-cache"
+call "%NODE_DIR%\npm.cmd" ci --no-audit --no-fund --engine-strict
+if errorlevel 1 call :fail "npm ci failed. The internet connection must reach registry.npmjs.org and the committed package-lock.json must be intact. Re-run this file."
+call "%NODE_DIR%\npm.cmd" run build
+if errorlevel 1 call :fail "The Vite frontend build failed. Read the npm output above, then re-run this file."
+if not exist "%ROOT%\public\build\manifest.json" call :fail "The frontend build did not produce public\build\manifest.json. Delete public\build and node_modules, then re-run this file."
+:frontend_ready
+echo       - frontend ready (public\build).
+
+REM ---------------------------------------------------------------------------
+REM Step 5 - .env + APP_KEY
+REM ---------------------------------------------------------------------------
+echo [5/11] Preparing .env from the production template...
 if not exist "%ROOT%\.env" goto make_env
 goto env_ready
 :make_env
@@ -188,25 +228,25 @@ REM bindable port and keeps .env / serve / health / Tailscale consistent.
 call :resolve_app_port
 
 REM ---------------------------------------------------------------------------
-REM Step 5 - PostgreSQL initialize + start
+REM Step 6 - PostgreSQL initialize + start
 REM ---------------------------------------------------------------------------
-echo [5/10] Initializing and starting PostgreSQL, local only on 127.0.0.1...
+echo [6/11] Initializing and starting PostgreSQL, local only on 127.0.0.1...
 call :prepare_pg
 if errorlevel 1 call :fail "PostgreSQL could not be started. Details in .runtime\pg.log. If another program owns port %PG_PORT%, close it and re-run."
 
 REM ---------------------------------------------------------------------------
-REM Step 6 - database + migrations
+REM Step 7 - database + migrations
 REM ---------------------------------------------------------------------------
-echo [6/10] Ensuring the toefl_house database and running migrations...
+echo [7/11] Ensuring the toefl_house database and running migrations...
 call :ensure_app_db
 if errorlevel 1 call :fail "Could not ensure the toefl_house database. Read the message above."
 "%PHP%" artisan migrate --force
 if errorlevel 1 call :fail "Database migrations failed. PostgreSQL wraps migrations in a transaction, so no partial schema is committed; the existing database and all data are untouched. Fix the reported migration error and re-run this file - it resumes from where it stopped. See storage\logs\laravel.log."
 echo       - migrations complete.
 REM ---------------------------------------------------------------------------
-REM Step 7 - first-run bootstrap: owner account, only when none exists yet
+REM Step 8 - first-run bootstrap: owner account, only when none exists yet
 REM ---------------------------------------------------------------------------
-echo [7/10] Checking whether the first owner account needs to be created...
+echo [8/11] Checking whether the first owner account needs to be created...
 REM account-count exit codes: 0 = zero accounts (first run), 1 = accounts exist,
 REM anything else = error. Direct call (no for/f) so cmd never re-quotes it.
 "%PHP%" "%LAUNCHER_HELPER%" account-count "%APP_DSN%" postgres "" toefl_house
@@ -248,9 +288,9 @@ REM expanded when the block is parsed and is always empty here.
 )
 
 REM ---------------------------------------------------------------------------
-REM Step 8 - start Laravel
+REM Step 9 - start Laravel
 REM ---------------------------------------------------------------------------
-echo [8/10] Starting The TOEFL House on port %APP_PORT%...
+echo [9/11] Starting The TOEFL House on port %APP_PORT%...
 if "%PORTCAND_HOW%"=="health" (
     echo       - the application is already running and answering /health on port %APP_PORT%; reusing it.
     goto check_health
@@ -279,9 +319,9 @@ goto check_health
 
 :check_health
 REM ---------------------------------------------------------------------------
-REM Step 9 - health check
+REM Step 10 - health check
 REM ---------------------------------------------------------------------------
-echo [9/10] Verifying /health ...
+echo [10/11] Verifying /health ...
 set /a HEALTH_TRIES=0
 :health_loop
 set /a HEALTH_TRIES+=1
@@ -300,9 +340,9 @@ call :fail "The application was not healthy on %APP_URL_LOCAL% within 60 seconds
 echo       - /health OK.
 
 REM ---------------------------------------------------------------------------
-REM Step 10 - Tailscale Serve, private to the Tailnet, never Funnel
+REM Step 11 - Tailscale Serve, private to the Tailnet, never Funnel
 REM ---------------------------------------------------------------------------
-echo [10/10] Private Tailscale access (optional - never blocks the local app)...
+echo [11/11] Private Tailscale access (optional - never blocks the local app)...
 REM Tailscale is a convenience layer on top of the already-healthy local server:
 REM it makes the app reachable from the other devices on the private Tailnet.
 REM If it cannot be installed, signed in, or have Serve configured, the launcher
@@ -710,6 +750,37 @@ if !CP_BYTES! LSS 1000000 call :fail "Downloaded composer.phar is only !CP_BYTES
 "%PHP%" "%COMPOSER_PHAR%" --version >nul 2>nul
 if errorlevel 1 call :fail "composer.phar was downloaded to %COMPOSER_PHAR% but cannot run with %PHP%. Delete .runtime\composer.phar and re-run."
 echo       - Composer ready.
+exit /b 0
+
+:prepare_node
+REM Reuse a working Node.js runtime (idempotent). Otherwise download the
+REM official pinned zip from nodejs.org (versioned dist URLs are permanent,
+REM exactly like the PHP release/archive strategy above), verify it, and
+REM extract it under .runtime. Node is needed exactly once per clone to
+REM build the employee console; the built assets are then served by Laravel
+REM and Node is never needed at runtime.
+if exist "%NODE_DIR%\node.exe" (
+    "%NODE_DIR%\node.exe" --version >nul 2>nul
+    if not errorlevel 1 exit /b 0
+    echo       - the cached Node runtime is broken; replacing it.
+    rd /q /s "%NODE_DIR%" >nul 2>nul
+)
+echo       - Node %NODE_VERSION% : downloading the official runtime, one time only...
+call :fetch_file "%RT%\downloads\node.zip" "%NODE_ZIP_URL%" "" "20971520"
+if errorlevel 1 call :fail "Node.js download failed or was truncated from %NODE_ZIP_URL%. The incomplete file was discarded. Check the internet connection and re-run this file."
+"%TAR%" -tf "%RT%\downloads\node.zip" >nul 2>nul
+if errorlevel 1 call :fail "The downloaded Node archive %RT%\downloads\node.zip is corrupt or truncated (integrity test failed). Delete it and re-run this file."
+REM The zip extracts to a single versioned folder; unpack into a staging
+REM directory first, then move the versioned folder into place atomically.
+if exist "%RT%\node-stage" rd /q /s "%RT%\node-stage"
+mkdir "%RT%\node-stage"
+"%TAR%" -xf "%RT%\downloads\node.zip" -C "%RT%\node-stage"
+if errorlevel 1 call :fail "Could not unpack the Node archive with %TAR%. Delete .runtime\node-stage and re-run this file."
+if not exist "%RT%\node-stage\node-v%NODE_VERSION%-win-x64\node.exe" call :fail "Node was unpacked but node.exe is missing from node-stage\node-v%NODE_VERSION%-win-x64. Delete .runtime\node-stage and re-run this file."
+move /y "%RT%\node-stage\node-v%NODE_VERSION%-win-x64" "%NODE_DIR%" >nul
+if errorlevel 1 call :fail "Could not place the Node runtime at %NODE_DIR%. Delete .runtime\node-stage and re-run this file."
+rd /q /s "%RT%\node-stage"
+echo       - Node ready.
 exit /b 0
 
 

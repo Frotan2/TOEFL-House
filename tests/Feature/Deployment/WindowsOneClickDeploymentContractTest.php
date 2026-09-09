@@ -19,8 +19,9 @@ use Tests\TestCase;
  *
  * The .bat files themselves cannot execute in the development environment
  * (Linux), so this suite pins the contract that makes them safe and correct:
- * the files exist, the launcher uses Tailscale SERVE (never Funnel) and
- * verifies /health, no secret material ever ships in the deployment
+ * the files exist, the launcher uses Tailscale SERVE (never Funnel), builds
+ * the frontend before its health gate and verifies /health, no secret
+ * material ever ships in the deployment
  * artifacts, the backup/restore batch protocol matches the drilled
  * production tooling, the owner bootstrap covers EVERY capability defined
  * in the source (a new capability can never silently miss the bootstrap),
@@ -123,6 +124,37 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
         $this->assertStringContainsString('serve --bg', $start);
         $this->assertStringContainsString('start "Tailscale Setup" cmd /k', $start);
         $this->assertStringContainsString('HTTPS certificates', $start);
+    }
+
+    public function test_the_launcher_builds_the_frontend_before_its_health_gate(): void
+    {
+        // Finding FC-4, discovered on a REAL Windows run: production /health
+        // returns 503 until public/build/manifest.json exists, but the
+        // launcher had no frontend build step — so a fresh clone could never
+        // pass the launcher's own health gate (60 s timeout, STOPPED). The
+        // launcher must therefore build the console exactly like the
+        // production procedure does, and before it checks health.
+        $start = $this->read('START-TOEFL-HOUSE.bat');
+
+        // The pinned Node runtime (official permanent versioned dist URL,
+        // same pin as the locked runtime) and the CI-equivalent build chain.
+        $this->assertStringContainsString('set "NODE_VERSION=22.22.3"', $start);
+        $this->assertStringContainsString('https://nodejs.org/dist/v%NODE_VERSION%/%NODE_ZIP%', $start);
+        $this->assertStringContainsString('npm.cmd" ci --no-audit --no-fund --engine-strict', $start);
+        $this->assertStringContainsString('npm.cmd" run build', $start);
+
+        // Ordering is the contract: build first, health gate later.
+        $buildAt = mb_strpos($start, 'npm.cmd" run build');
+        $healthAt = mb_strpos($start, 'Verifying /health');
+        $this->assertNotFalse($buildAt, 'the launcher must run the Vite build');
+        $this->assertNotFalse($healthAt, 'the launcher must verify /health');
+        $this->assertLessThan($healthAt, $buildAt, 'the frontend build must complete before the health gate runs');
+
+        // The build result is verified, not assumed: a failed build must
+        // stop the launcher loudly at the manifest check.
+        $this->assertStringContainsString('public\\build\\manifest.json', $start);
+        $manifestCheckAt = mb_strpos($start, 'did not produce public\\build\\manifest.json');
+        $this->assertNotFalse($manifestCheckAt, 'a missing manifest after the build must fail the launcher');
     }
 
     public function test_no_secret_material_ships_in_the_deployment_artifacts(): void

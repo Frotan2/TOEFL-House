@@ -58,11 +58,15 @@ The supported Windows convenience path is:
 `START-TOEFL-HOUSE.bat` → local PostgreSQL → Laravel → local HTTP on
 `http://127.0.0.1:8080` → optional Tailscale Serve
 
-The launcher prepares its pinned runtime artifacts under `.runtime\`,
-installs Composer dependencies from the committed lockfile, creates a local
-PostgreSQL cluster, runs the current migration chain, performs the guarded
-first-run bootstrap (prompting for the owner account's name, birthdate,
-username and password on first run), starts Laravel and checks `/health`.
+The launcher prepares its pinned runtime artifacts under `.runtime\` (PHP,
+Composer, Node — build-only — and PostgreSQL), installs Composer
+dependencies from the committed lockfile, **builds the employee console**
+(pinned Node 22.22.3, `npm ci --engine-strict` from the committed
+`package-lock.json`, then `vite build`; production `/health` refuses to
+report healthy without the built manifest), creates a local PostgreSQL
+cluster, runs the current migration chain, performs the guarded first-run
+bootstrap (prompting for the owner account's name, birthdate, username and
+password on first run), starts Laravel and checks `/health`.
 
 The launcher deliberately serves with the PHP built-in server directly
 (not `artisan serve`) — the same rule as every other environment, see
