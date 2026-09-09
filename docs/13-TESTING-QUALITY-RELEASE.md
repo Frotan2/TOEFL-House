@@ -1,6 +1,8 @@
-# TOEFL House — Testing / Quality / Release
+# TOEFL House — Testing & Quality Contract
 
-**STATUS: CURRENT CANONICAL — NORMATIVE**
+**STATUS: ACTIVE / CANONICAL / NORMATIVE**  
+**Authority:** `docs/RUNTIME-RELEASE.md` for runtime/release conclusions  
+**Scope:** test architecture and quality expectations
 
 ## Evidence hierarchy
 
@@ -9,54 +11,34 @@
 3. test passes in the official runtime;
 4. release-critical behavior is exercised in a production-like environment.
 
-These are different claims and must never be conflated.
+These are distinct claims and must never be conflated.
 
 ## Required layers
 
-- PHP syntax/lint
-- unit/feature/integration tests
-- database schema/invariant tests
-- authorization/scope tests
-- concurrency tests on real PostgreSQL
-- frontend type/build checks
-- browser/E2E where applicable
-- deployment/recovery checks
-- security/adversarial tests
+Applicable verification may include:
 
-## Concurrency
+- PHP syntax/lint;
+- unit/feature/integration tests;
+- database schema/invariant tests;
+- authorization/scope tests;
+- real-PostgreSQL concurrency tests;
+- frontend type/build/mount checks;
+- browser/E2E;
+- security/adversarial tests;
+- deployment/recovery rehearsals.
 
-Critical races must be tested with genuine multi-session PostgreSQL behavior, not mocks alone.
+## Test isolation and fixtures
 
-## Release gate
+Use the repository's enforced test-isolation strategy and existing shared fixture/provenance helpers. Never weaken a correct database invariant, authorization rule or assertion merely to obtain green output.
 
-`RELEASE READY` is permitted only when the official runtime stack has been used and all material release gates have actually passed.
+Concurrency, database-invariant and browser gates that require committed state belong outside PHPUnit and are executed through their dedicated verification commands.
 
-## Current release distinction
+## Quality standard
 
-Target-state completeness and runtime certification are independent judgments. The repository may be target-complete but runtime-unverified, or runtime-proven while still having approved non-blocking product breadth gaps.
+A material change must include the strongest practical regression coverage for its authority, lifecycle, scope and compatibility boundary. Domain closure also requires current runtime/browser evidence where applicable.
 
+## Release boundary
 
----
+This document defines **what must be tested**. Current runtime versions, official verification outcomes, evidence semantics and release certification are defined only in `docs/RUNTIME-RELEASE.md` and `.github/workflows/verification.yml`.
 
-# Consolidated Governing Evidence
-
-## Canonical Testing Strategy
-
-`docs/TESTING_STRATEGY_LOCK.md` is the mandatory testing strategy and takes
-precedence over any older guidance in this file.
-
-Key points:
-
-- `tests/TestCase.php` uses `RefreshDatabase` (migrate once per process, then
-  roll back a transaction per test). `DatabaseMigrations` replays all 185
-  migrations per test and is prohibited; it made the suite unrunnable.
-- The rule is enforced by `tests/Unit/Architecture/TestStrategyLockTest.php`,
-  not by convention.
-- Concurrency, database-invariant and browser verification deliberately live
-  outside PHPUnit because they need committed state:
-  `npm run verify:concurrency`, `npm run verify:invariants`,
-  `npm run verify:browser`.
-- Runtime versions are locked by `docs/RUNTIME_ENVIRONMENT_LOCK.md` and checked
-  by `npm run verify:environment`.
-
-CI runs all of the above (`.github/workflows/verification.yml`).
+`IMPLEMENTED ≠ VERIFIED ≠ RELEASE CERTIFIED`. A historical green run never certifies a later commit.
