@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PHP_VERSION: '8.4.14'
-  COMPOSER_VERSION: '2.9.2'
+  PHP_VERSION: '8.4.25'
+  COMPOSER_VERSION: '2.10.3'
   NODE_VERSION: '22.22.3'
   NPM_VERSION: '10.9.8'
   POSTGRES_VERSION: '18.4'
