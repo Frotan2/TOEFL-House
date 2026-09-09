@@ -181,7 +181,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
     </header>
 
     <div className="app-frame">
-      <aside id="primary-navigation" className={`app-sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation" aria-hidden={!mobileOpen}>
+      <aside id="primary-navigation" className={`app-sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
         <div className="sidebar-inner">
           <div className="sidebar-heading"><span>Navigate</span><button type="button" onClick={() => { setMobileOpen(false); window.setTimeout(() => mobileTriggerRef.current?.focus(), 0); }} aria-label="Close navigation"><Icon name="close" /></button></div>
           <nav className="sidebar-nav"><NavigationLinks current={current} compact={collapsed} onNavigate={() => setMobileOpen(false)} /></nav>
