@@ -4,4 +4,4 @@
 200 postgresql https://get.enterprisedb.com/postgresql/postgresql-18.4-1-windows-x64-binaries.zip
 200 node https://nodejs.org/dist/v22.22.3/node-v22.22.3-win-x64.zip
 200 tailscale https://pkgs.tailscale.com/stable/tailscale-setup-1.102.3-amd64.msi
-404 php-sbom https://downloads.php.net/~windows/releases/archives/php-8.4.14-Win32-vs17-x64.zip.cdx.json
+404 php-sbom-informational https://downloads.php.net/~windows/releases/archives/php-8.4.14-Win32-vs17-x64.zip.cdx.json
