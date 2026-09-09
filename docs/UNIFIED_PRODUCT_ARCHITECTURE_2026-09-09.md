@@ -15,52 +15,100 @@ The browser never becomes the source of truth for authorization, scope, financia
 The interface is organized around the work operators perform rather than database entities:
 
 1. **My Work** — personal priority queue, notifications, visible-scope search, and next actions.
-2. **Students & Admissions** — intake, decision chain, learner lifecycle, branch provenance, guardians, communication, attendance, assessment and finance projections.
-3. **Academic Operations** — academic setup, classes, sections, capacity, timetable, attendance facts, assessment evidence, progression, graduation and transcripts.
-4. **People & Faculty** — teacher identity, employment/provenance, capability, qualification evidence, availability, workload and dated assignments.
-5. **Front Office / CRM** — visitor and follow-up workflows, preserving server-owned lifecycle and scope.
-6. **Finance Operations** — source-owned obligations, payments, exceptions and reporting boundaries.
-7. **Reports** — evidence-aware reporting and drill-in.
-8. **Command Center** — management decisions, readiness, open work and operational evidence.
+2. **Reception Desk** — operator-first visitor, admissions, student lookup and academic context.
+3. **Students & Admissions** — intake, decision chain, learner lifecycle, branch provenance, guardians, communication, attendance, assessment and finance projections.
+4. **Academic Operations** — setup, classes, sections, capacity, timetable, attendance, assessment, progression, graduation, transcripts and appeals.
+5. **Placement** — evidence, scoring, recommendation, review, approval, release and downstream eligibility.
+6. **People & Faculty** — teacher identity, employment/provenance, capability, qualification evidence, availability, workload and dated assignments.
+7. **HR / Payroll** — employee lifecycle, payroll periods, calculation review, approval and settlement.
+8. **CRM & Follow-up** — visitor pipeline, interaction history, sources, campaigns and follow-ups.
+9. **Finance & Funding** — obligations, payments, funds, allocations, discounts, credits, installments, exceptions, reconciliation and ledger-facing operations.
+10. **Library & Resources** — operational learning/resource management.
+11. **Communication** — governed messaging and communication preferences.
+12. **Documents & Evidence** — documents, verification, versions, retention and templates.
+13. **Reports & Dashboards** — evidence-aware reporting and drill-in.
+14. **Governance** — organization, identity, access, privacy and audit/history.
+15. **Command Center** — management decisions, readiness, open work and operational evidence.
 
-## UX contract
+## Experience rules
 
-The product uses progressive disclosure: show the next useful decision first, keep evidence nearby, and expose lower-level configuration only when it is relevant. The design system is token-based and componentized, with predictable spacing, hierarchy, focus states, responsive behavior and reduced-motion support.
+The product is progressive-disclosure based: expose the next useful decision first, keep supporting evidence adjacent, and only expose lower-level configuration when it is relevant.
 
-The shell is responsive and persistent on desktop, collapsible for dense workflows, and switches to a mobile drawer when horizontal navigation would harm focus. Work queues remain stable anchors so operators can move between a summary and the actual work without losing context.
+Every workspace follows the same product grammar:
 
-## Convergence rules
+`context -> purpose -> primary action -> scope/status -> decision surface -> evidence -> secondary configuration -> feedback`
 
-From the reviewed standalone frontend, the following patterns are intentionally adopted:
+The first screen should answer:
 
-- Academic Setup as a phased setup experience with completion gates.
-- Class detail as contextual roster / gradebook / settings work.
-- Student Journey as a chronological operational view built from authoritative learner lifecycle facts.
-- Teacher Day as a task-first faculty workflow.
-- Reception / CRM as an operator-oriented intake workspace.
-- Business Operating System concepts for management metrics and exception-oriented decisions.
-- Modular navigation, design tokens, RTL-safe logical properties, accessibility, responsive layout and clear handoffs.
+- Where am I?
+- What needs attention?
+- What is the next safe action?
 
-The following are explicitly **not** transplanted:
+## Global design system
 
-- the standalone `/api` transport layer;
-- `/auth/me` or `/auth/login` assumptions;
-- generic token persistence in local storage;
-- a frontend God Store replacing server projections;
-- client-side calculations that are authoritative in the academic or finance domains;
-- standalone Vite/Tailwind configuration that conflicts with Laravel Vite integration.
+The product uses institutional navy, warm academic gold and restrained blue-grey neutrals. Green, amber, red and blue are reserved for semantic states. Color never carries meaning alone.
+
+Shared tokens cover typography, spacing, control height, radii, borders, surfaces, elevation, focus rings and responsive breakpoints. The shared product theme is registered in Vite and loaded from the common Laravel console boundary.
+
+The shell is responsive and persistent on desktop, collapsible at dense widths, and switches to a mobile drawer when the navigation rail would harm focus. Tables scroll inside their own containers instead of creating page-level horizontal overflow.
+
+## Core workspace patterns
+
+### Academic Setup
+`Infrastructure -> Curriculum -> Course delivery`
+
+Readiness is calculated from live server projections and never becomes a client rule engine.
+
+### Placement
+`Profile -> attempt -> section evidence -> score -> recommendation -> review -> approval -> release -> downstream academic consumption`
+
+Recommendation is not approval; approval is not enrollment.
+
+### Student Journey
+Chronology uses dated/effective source facts. Financial and academic evidence remain separate from the learner narrative.
+
+### Teacher Day
+The default faculty operational view is a day schedule with assignments, live-now state, roster context, workload and operational warnings.
+
+### Front Office
+Read-oriented composition over CRM, admissions, students and academic context. Commands hand off to the canonical domain surfaces.
+
+### Finance & Funding
+The UI must expose source-owned facts without recreating financial truth. Current finance authority includes payments, obligations, periods, chart of accounts, journals, discounts, reconciliation, funds and allocations, credits, installment plans, gate exceptions and other governed financial commands. New read surfaces should be added only when an authoritative GET projection exists.
+
+### Reports
+Every displayed number retains metric identity, period semantics, scope, evidence completeness and reproducibility context.
+
+## Convergence rules from standalone review frontend
+
+Adopt:
+- Academic Setup as phased setup with gates.
+- Class detail as contextual roster / assessment / settings work.
+- Student Journey as evidence-backed chronology.
+- Teacher Day as task-first faculty workflow.
+- Reception as operator-first CRM intake.
+- Business Operating System concepts for exception-oriented management.
+- Responsive, accessible, RTL-safe product patterns.
+
+Never transplant:
+- standalone API transport;
+- standalone token login/session model;
+- generic client persistence of credentials/tokens;
+- frontend God Store as domain authority;
+- client-side authoritative academic/finance calculations;
+- conflicting standalone build configuration.
 
 ## Quality gates
 
-Every convergence increment must pass:
+Every experience increment must pass:
 
 - TypeScript typecheck and production build;
-- frontend mount/runtime guard tests;
+- frontend mount/runtime regression tests;
 - PHP formatting and static analysis;
-- database migration and invariant checks;
-- canonical backend test suite;
+- migration and invariant verification;
+- canonical backend suite;
 - concurrency verification;
 - branch/scope authorization regression coverage;
-- manual responsive inspection for desktop, tablet and mobile widths.
+- responsive and keyboard accessibility inspection.
 
-No UX feature is considered complete merely because it renders. A workflow is complete only when its read projection, action authority, failure state, success feedback and audit semantics are coherent.
+A workflow is complete only when its read projection, action authority, failure state, success feedback and audit semantics are coherent.
