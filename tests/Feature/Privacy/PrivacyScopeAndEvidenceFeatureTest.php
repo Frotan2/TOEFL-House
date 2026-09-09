@@ -56,7 +56,7 @@ final class PrivacyScopeAndEvidenceFeatureTest extends TestCase
             $disclosure->save();
             $this->fail('expected disclosure mutation to be rejected');
         } catch (BusinessRejection $exception) {
-            $this->assertSame('privacy.disclosure_immutable', $exception->getCode());
+            $this->assertSame('privacy.disclosure_immutable', $exception->errorCode());
         }
 
         $this->expectException(BusinessRejection::class);
@@ -73,7 +73,7 @@ final class PrivacyScopeAndEvidenceFeatureTest extends TestCase
             $revocation->save();
             $this->fail('expected revocation mutation to be rejected');
         } catch (BusinessRejection $exception) {
-            $this->assertSame('privacy.revocation_immutable', $exception->getCode());
+            $this->assertSame('privacy.revocation_immutable', $exception->errorCode());
         }
 
         $this->expectException(BusinessRejection::class);
