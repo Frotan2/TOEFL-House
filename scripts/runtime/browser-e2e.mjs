@@ -29,6 +29,7 @@ const EXECUTABLE = required('CHROMIUM_PATH');
 
 const CONSOLES = [
   ['/workspace', 'Workspace'],
+  ['/library', 'Library'],
   ['/students', 'Students'],
   ['/academic', 'Academic'],
   ['/teachers', 'Teacher'],
