@@ -26,20 +26,45 @@ import { createApiClient, type ApiClient } from './core/api';
 import { AppErrorBoundary } from './core/error-boundary';
 
 type ConsoleProps = ApiClient & { csrfToken: string };
-type ConsoleView = 'workspace' | 'students' | 'academic' | 'teachers' | 'crm' | 'management' | 'identity' | 'library' | 'privacy' | 'audit';
+
+type ConsoleView =
+  | 'workspace'
+  | 'students'
+  | 'academic'
+  | 'teachers'
+  | 'crm'
+  | 'management'
+  | 'identity'
+  | 'library'
+  | 'privacy'
+  | 'audit';
 
 function resolveContent(view: string | null, query: URLSearchParams, props: ConsoleProps) {
   switch (view as ConsoleView | null) {
-    case 'academic': return query.get('view') === 'setup' ? <AcademicSetupApp {...props} /> : <AcademicApp {...props} />;
-    case 'students': { const studentId = document.getElementById('react-console')?.getAttribute('data-student-id') ?? ''; if (query.get('view') === 'journey' && studentId) return <StudentJourneyApp {...props} studentId={studentId} />; return <StudentsApp {...props} studentsView={document.getElementById('react-console')?.getAttribute('data-students-view') ?? 'directory'} studentId={studentId} />; }
-    case 'teachers': return query.get('view') === 'day' ? <TeacherDayApp {...props} /> : <TeacherApp {...props} />;
-    case 'crm': return query.get('view') === 'front-office' ? <FrontOfficeApp {...props} /> : <CrmApp {...props} />;
-    case 'management': return <ManagementApp {...props} />;
-    case 'identity': return <IdentityApp {...props} />;
-    case 'library': return <LibraryApp {...props} />;
-    case 'privacy': return <PrivacyApp {...props} />;
-    case 'audit': return <AuditApp {...props} />;
-    case 'workspace': default: return <WorkspaceApp {...props} />;
+    case 'academic':
+      return query.get('view') === 'setup' ? <AcademicSetupApp {...props} /> : <AcademicApp {...props} />;
+    case 'students': {
+      const studentId = document.getElementById('react-console')?.getAttribute('data-student-id') ?? '';
+      if (query.get('view') === 'journey' && studentId) return <StudentJourneyApp {...props} studentId={studentId} />;
+      return <StudentsApp {...props} studentsView={document.getElementById('react-console')?.getAttribute('data-students-view') ?? 'directory'} studentId={studentId} />;
+    }
+    case 'teachers':
+      return query.get('view') === 'day' ? <TeacherDayApp {...props} /> : <TeacherApp {...props} />;
+    case 'crm':
+      return query.get('view') === 'front-office' ? <FrontOfficeApp {...props} /> : <CrmApp {...props} />;
+    case 'management':
+      return <ManagementApp {...props} />;
+    case 'identity':
+      return <IdentityApp {...props} />;
+    case 'library':
+      return <LibraryApp {...props} />;
+    case 'privacy':
+      return <PrivacyApp {...props} />;
+    case 'audit':
+      return <AuditApp {...props} />;
+    case 'workspace':
+    default:
+      return <WorkspaceApp {...props} />;
   }
 }
 
