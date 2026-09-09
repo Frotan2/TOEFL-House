@@ -91,8 +91,11 @@ Never invent a business authority, duplicate an existing one, weaken a correct i
 | Cleanup/coding hygiene | `CODEBASE_HYGIENE_AND_STANDARDS.md` |
 | Vocabulary | `CANONICAL_TERMINOLOGY.md` |
 | Domain-specific contract | The relevant domain document only |
+| Executable deployment/recovery | `operations/production-deployment.md` |
 
 No document may restate another document's full subject. Link to the owner instead.
+
+New documentation is permitted only when all of the following are true: its subject has no canonical owner, its operational purpose is explicit, its evidence boundary is explicit, its owner/status is declared, and a removal/supersession condition is defined.
 
 ## 10. Completion formula
 

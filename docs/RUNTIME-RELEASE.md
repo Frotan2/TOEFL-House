@@ -25,9 +25,13 @@ PostgreSQL is the only supported database. SQLite is not a fallback. Laravel 13 
 
 Any runtime or dependency change requires fresh applicable verification.
 
-## 2. Verification layers
+## 2. Verification layers and quality standard
 
 Applicable release evidence includes environment validation, dependency/platform validation, fresh migrations/bootstrap, invariant verification on real PostgreSQL, concurrency verification on real PostgreSQL, backend tests, frontend type/build/mount checks, browser/E2E, security/adversarial checks and deployment/recovery evidence where required.
+
+Required claims remain distinct: a test exists, a test passes, a test passes in the official runtime, and release-critical behavior is exercised in a production-like environment are four different claims.
+
+Material changes require the strongest practical regression coverage for authority, lifecycle, scope and compatibility boundaries. Correct invariants, authorization checks and assertions must never be weakened merely to obtain green output. Concurrency, database-invariant and browser gates that require committed state belong to the dedicated verification commands rather than being implied by PHPUnit success.
 
 Canonical commands:
 
@@ -85,12 +89,16 @@ All application shells reachable through nested paths must resolve application a
 
 This guard remains because browser verification previously exposed a nested `/login` asset-path failure that prevented React from mounting.
 
-## 7. Release rules
+## 7. Deployment and recovery boundary
+
+`docs/operations/production-deployment.md` is the executable production deployment/recovery runbook. It owns step-by-step operator procedure; this document owns only the release gate and evidence semantics. Application rollback does not imply database rollback. Schema compatibility, backup/restore, readiness and recovery drills must be executed according to the runbook when required; a documented procedure is never proof that the drill occurred.
+
+## 8. Release rules
 
 A release claim is prohibited when any required gate is unexecuted, pending, blocked, failed, based only on historical evidence, based on a superseded commit, or contradicted by current source inspection.
 
 `IMPLEMENTATION COMPLETE` may exist before runtime proof. `RELEASE CERTIFIED` may not.
 
-## 8. Documentation evidence rule
+## 9. Documentation evidence rule
 
 Documentation records control rules and interpretation. It does not create execution evidence. After a material change, derive current status from the actual repository and latest workflow rather than copying an older report.
