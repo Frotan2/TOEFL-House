@@ -8,7 +8,6 @@ use App\Modules\Integrations\Models\InboundEvent;
 use App\Modules\Integrations\Models\IntegrationDelivery;
 use App\Modules\Reporting\Models\ReportRun;
 use App\Support\Errors\BusinessRejection;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -37,11 +36,9 @@ final class ReportingIntegrationsIntegrityTest extends TestCase
             $this->markTestSkipped('the integration integrity indexes are PostgreSQL-specific');
         }
 
-        $index = DB::selectOne("SELECT indexname FROM pg_indexes WHERE tablename = 'integration_deliveries' AND indexname = 'integration_deliveries_endpoint_idempotency_unique'");
+        $index = DB::selectOne("SELECT indexdef FROM pg_indexes WHERE tablename = 'integration_deliveries' AND indexname = 'integration_deliveries_endpoint_idempotency_unique'");
         $this->assertNotNull($index);
-
-        $this->assertStringContainsString('endpoint_id', $index->indexname . ' endpoint_id');
-        $this->assertSame(1, (int) DB::selectOne("SELECT count(*) AS n FROM pg_indexes WHERE tablename = 'integration_deliveries' AND indexname = 'integration_deliveries_endpoint_idempotency_unique'")->n);
+        $this->assertStringContainsString('(endpoint_id, idempotency_key)', $index->indexdef);
     }
 
     public function test_database_enforces_accepted_inbound_idempotency_while_allowing_rejected_corrections(): void
@@ -52,7 +49,9 @@ final class ReportingIntegrationsIntegrityTest extends TestCase
 
         $index = DB::selectOne("SELECT indexdef FROM pg_indexes WHERE tablename = 'inbound_events' AND indexname = 'inbound_events_endpoint_external_id_accepted_unique'");
         $this->assertNotNull($index);
-        $this->assertStringContainsString('WHERE (status <>', $index->indexdef);
+        $this->assertStringContainsString('(endpoint_id, external_id)', $index->indexdef);
+        $this->assertStringContainsString('status <>', $index->indexdef);
+        $this->assertStringContainsString('rejected', $index->indexdef);
     }
 
     public function test_inbound_and_delivery_models_expose_stable_identity_fields_for_rebuilds(): void
