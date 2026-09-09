@@ -7,6 +7,7 @@ import './teacher-day.css';
 import './front-office.css';
 import './command-palette.css';
 import './product-theme.css';
+import './core/error-boundary.css';
 import { AcademicApp } from './academic';
 import { AcademicSetupApp } from './academic-setup';
 import { TeacherApp } from './teacher';
@@ -18,39 +19,48 @@ import { StudentJourneyApp } from './student-journey';
 import { StudentsApp } from './students';
 import { WorkspaceApp } from './workspace';
 import { IdentityApp } from './identity';
-import { createApiClient } from './core/api';
+import { createApiClient, type ApiClient } from './core/api';
+import { AppErrorBoundary } from './core/error-boundary';
+
+type ConsoleProps = ApiClient & { csrfToken: string };
+
+type ConsoleView =
+  | 'workspace'
+  | 'students'
+  | 'academic'
+  | 'teachers'
+  | 'crm'
+  | 'management'
+  | 'identity';
+
+function resolveContent(view: string | null, query: URLSearchParams, props: ConsoleProps) {
+  switch (view as ConsoleView | null) {
+    case 'academic':
+      return query.get('view') === 'setup' ? <AcademicSetupApp {...props} /> : <AcademicApp {...props} />;
+    case 'students': {
+      const studentId = document.getElementById('react-console')?.getAttribute('data-student-id') ?? '';
+      if (query.get('view') === 'journey' && studentId) return <StudentJourneyApp {...props} studentId={studentId} />;
+      return <StudentsApp {...props} studentsView={document.getElementById('react-console')?.getAttribute('data-students-view') ?? 'directory'} studentId={studentId} />;
+    }
+    case 'teachers':
+      return query.get('view') === 'day' ? <TeacherDayApp {...props} /> : <TeacherApp {...props} />;
+    case 'crm':
+      return query.get('view') === 'front-office' ? <FrontOfficeApp {...props} /> : <CrmApp {...props} />;
+    case 'management':
+      return <ManagementApp {...props} />;
+    case 'identity':
+      return <IdentityApp {...props} />;
+    case 'workspace':
+    default:
+      return <WorkspaceApp {...props} />;
+  }
+}
 
 const root = document.getElementById('react-console');
 if (root) {
   const csrfToken = root.getAttribute('data-csrf-token') ?? '';
   const api = createApiClient({ apiBase: root.getAttribute('data-api-base') ?? '/api/v1', csrfToken });
-  const common = { ...api, csrfToken };
-  const view = root.getAttribute('data-view');
-  const query = new URLSearchParams(window.location.search);
-  const academicSetupRequested = view === 'academic' && query.get('view') === 'setup';
-  const studentJourneyRequested = view === 'students' && query.get('view') === 'journey' && root.getAttribute('data-student-id') !== null && root.getAttribute('data-student-id') !== '';
-  const teacherDayRequested = view === 'teachers' && query.get('view') === 'day';
-  const frontOfficeRequested = view === 'crm' && query.get('view') === 'front-office';
-  const content = academicSetupRequested
-    ? <AcademicSetupApp {...common} />
-    : studentJourneyRequested
-      ? <StudentJourneyApp {...common} studentId={root.getAttribute('data-student-id') ?? ''} />
-      : teacherDayRequested
-        ? <TeacherDayApp {...common} />
-        : frontOfficeRequested
-          ? <FrontOfficeApp {...common} />
-          : view === 'academic'
-            ? <AcademicApp {...common} />
-            : view === 'teachers'
-              ? <TeacherApp {...common} />
-              : view === 'crm'
-                ? <CrmApp {...common} />
-                : view === 'management'
-                  ? <ManagementApp {...common} />
-                  : view === 'identity'
-                    ? <IdentityApp {...common} />
-                    : view === 'students'
-                      ? <StudentsApp {...common} studentsView={root.getAttribute('data-students-view') ?? 'directory'} studentId={root.getAttribute('data-student-id') ?? ''} />
-                      : <WorkspaceApp {...common} />;
-  createRoot(root).render(content);
+  const props = { ...api, csrfToken } satisfies ConsoleProps;
+  const content = resolveContent(root.getAttribute('data-view'), new URLSearchParams(window.location.search), props);
+  createRoot(root).render(<AppErrorBoundary>{content}</AppErrorBoundary>);
 }
