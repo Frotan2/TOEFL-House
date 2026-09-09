@@ -1,0 +1,168 @@
+/* TOEFL House enterprise product theme — visual system only; domain authority stays server-side. */
+
+:root {
+  --th-brand-950: #0b2440;
+  --th-brand-900: #12355b;
+  --th-brand-800: #1d4f82;
+  --th-brand-700: #2867a5;
+  --th-brand-600: #347fca;
+  --th-gold-600: #c58a13;
+  --th-gold-500: #d9a33a;
+  --th-ink-950: #0b1220;
+  --th-ink-900: #162033;
+  --th-ink-800: #27364c;
+  --th-ink-700: #3c4d65;
+  --th-ink-600: #5b6b81;
+  --th-ink-500: #748196;
+  --th-ink-400: #9aa7b8;
+  --th-line-strong: #c9d5e3;
+  --th-line: #dce4ee;
+  --th-line-soft: #edf2f7;
+  --th-surface: #ffffff;
+  --th-surface-2: #f7f9fc;
+  --th-surface-3: #eff4f8;
+  --th-success: #177245;
+  --th-success-bg: #e9f7ef;
+  --th-warning: #946300;
+  --th-warning-bg: #fff6df;
+  --th-danger: #a43a33;
+  --th-danger-bg: #fff0ee;
+  --th-info: #256b9f;
+  --th-info-bg: #edf7ff;
+  --th-focus: #3c82d3;
+  --th-shadow-xs: 0 1px 2px rgba(9, 20, 36, .05);
+  --th-shadow-sm: 0 8px 24px rgba(9, 20, 36, .065);
+  --th-shadow-md: 0 18px 50px rgba(9, 20, 36, .10);
+  --th-radius-xs: 6px;
+  --th-radius-sm: 8px;
+  --th-radius-md: 12px;
+  --th-radius-lg: 16px;
+  --th-radius-xl: 22px;
+  --th-space-1: 4px;
+  --th-space-2: 8px;
+  --th-space-3: 12px;
+  --th-space-4: 16px;
+  --th-space-5: 20px;
+  --th-space-6: 24px;
+  --th-space-8: 32px;
+  --th-space-10: 40px;
+  --th-control: 44px;
+}
+
+/* Brand language: restrained institutional navy + warm academic gold. */
+body { background: var(--th-surface-2); color: var(--th-ink-900); }
+body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
+::selection { background: rgba(52,127,202,.16); color: var(--th-ink-950); }
+:focus-visible { outline: 3px solid rgba(60,130,211,.35); outline-offset: 2px; }
+
+.app-header { box-shadow: 0 1px 0 rgba(9,20,36,.04), 0 8px 24px rgba(9,20,36,.035); }
+.app-brand .brand-mark { background: linear-gradient(145deg, var(--th-brand-950), var(--th-brand-700)); border: 1px solid rgba(255,255,255,.08); }
+.app-brand:hover { color: var(--th-ink-950); }
+.sidebar-nav a { border-radius: var(--th-radius-sm); min-height: 44px; }
+.sidebar-nav a.active { background: #eaf2f9; border-color: #d3e2ef; box-shadow: inset 3px 0 0 var(--th-brand-600); color: var(--th-brand-950); }
+.nav-group-label { letter-spacing: .13em; }
+
+/* Typography hierarchy — less shouting, clearer scanning. */
+.workspace h1 { max-width: 900px; }
+.workspace h2 { letter-spacing: -.02em; }
+.workspace h3 { letter-spacing: -.01em; }
+.eyebrow { color: var(--th-brand-700); }
+.lede { color: var(--th-ink-600); }
+
+/* Panels are quiet by default; elevation is reserved for actionable/selected surfaces. */
+.panel, .search { background: var(--th-surface); border-color: var(--th-line); border-radius: var(--th-radius-md); box-shadow: var(--th-shadow-xs); }
+.panel:hover { box-shadow: var(--th-shadow-sm); }
+.section-heading { gap: var(--th-space-4); }
+
+/* Controls: consistent geometry, strong disabled/invalid states, no ornamental gradients. */
+.button { background: var(--th-brand-800); border-color: var(--th-brand-800); border-radius: var(--th-radius-sm); min-height: var(--th-control); }
+.button:hover { background: var(--th-brand-900); border-color: var(--th-brand-900); }
+.button.secondary { background: var(--th-surface); border-color: var(--th-line-strong); color: var(--th-brand-900); }
+.button.secondary:hover { background: var(--th-surface-3); border-color: #b5c5d7; }
+.text-button { color: var(--th-brand-800); }
+input, select, textarea { background: var(--th-surface); border-color: var(--th-line-strong); border-radius: var(--th-radius-sm); min-height: var(--th-control); }
+input:hover, select:hover, textarea:hover { border-color: #acbdcf; }
+input:focus, select:focus, textarea:focus { border-color: var(--th-brand-600); box-shadow: 0 0 0 4px rgba(52,127,202,.11); }
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: #cf7971; box-shadow: 0 0 0 4px rgba(164,58,51,.08); }
+
+/* States are semantic, not decorative. */
+.status-chip { border-radius: 999px; font-weight: 800; }
+.status-chip::before { height: 6px; width: 6px; }
+.status-chip.active, .status-chip.ready, .status-chip.approved, .status-chip.completed { background: var(--th-success-bg); border-color: #c5e7d3; color: var(--th-success); }
+.status-chip.pending, .status-chip.proposed, .status-chip.reviewed, .status-chip.attention { background: var(--th-warning-bg); border-color: #f0dcaa; color: var(--th-warning); }
+.status-chip.rejected, .status-chip.failed, .status-chip.blocked, .status-chip.revoked { background: var(--th-danger-bg); border-color: #efc6c2; color: var(--th-danger); }
+.status-chip.information, .status-chip.info { background: var(--th-info-bg); border-color: #cce4f7; color: var(--th-info); }
+.alert { border-left-width: 4px; }
+.notice { border-left-width: 4px; }
+
+/* Dense data surfaces. */
+.table-wrap { box-shadow: inset 0 0 0 1px rgba(9,20,36,.018); }
+th, td { padding-block: 12px; }
+thead th { background: #f6f8fb; color: var(--th-ink-500); }
+tbody tr { transition: background .12s ease; }
+tbody tr:hover td { background: #f7fbfe; }
+.table-link { color: var(--th-brand-800); font-weight: 750; }
+
+/* Standard information layout primitives. */
+.detail-facts { display: grid; gap: 10px 18px; }
+.detail-facts div { background: var(--th-surface-2); border: 1px solid var(--th-line-soft); border-radius: var(--th-radius-sm); padding: 10px 12px; }
+.detail-facts dt { color: var(--th-ink-500); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.detail-facts dd { color: var(--th-ink-900); margin: 3px 0 0; overflow-wrap: anywhere; }
+
+/* Task/action surfaces. */
+.action-card, .quick-action, .readiness-item, .setup-check { border-color: var(--th-line); }
+.action-card:hover, .quick-action:hover, .readiness-item:hover, .setup-check:hover { border-color: #b8c9da; box-shadow: var(--th-shadow-sm); }
+.action-card-icon, .quick-action .quick-icon { background: #edf4fa; color: var(--th-brand-800); }
+
+/* Tabs: a single interaction language across domain workspaces. */
+.segmented-tabs, .student-tabs, .workspace-switch { scrollbar-width: thin; }
+.segmented-tabs button.active, .student-tabs button.active, .workspace-switch button.active { color: var(--th-brand-950); }
+.student-tabs { gap: 2px; }
+.student-tabs button, .workspace-switch button { min-height: 46px; }
+
+/* Command palette behaves like a product primitive, not a modal form. */
+.command-palette { border: 1px solid var(--th-line-strong); border-radius: var(--th-radius-lg); box-shadow: var(--th-shadow-md); }
+.command-palette-header { border-bottom-color: var(--th-line); }
+.command-palette-item { min-height: 52px; }
+.command-palette-item:hover { background: #f4f8fb; }
+
+/* Navigation density deliberately increases with viewport instead of overflowing. */
+@media (min-width: 1440px) {
+  .workspace { padding-inline: clamp(24px, 3vw, 44px); }
+  .app-sidebar { width: 264px; }
+  body[data-sidebar="collapsed"] .app-sidebar { width: 80px; }
+  .workspace { margin-left: 264px; max-width: calc(100% - 264px); }
+  body[data-sidebar="collapsed"] .workspace { margin-left: 80px; max-width: calc(100% - 80px); }
+}
+
+@media (max-width: 1100px) {
+  .app-header-actions .header-utility { display: none; }
+  .app-brand { min-width: 0; }
+  .brand-copy small { display: none; }
+  .summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .command-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+
+@media (max-width: 720px) {
+  .workspace { padding-top: 20px; }
+  .workspace-header { align-items: flex-start; flex-direction: column; }
+  .workspace h1 { font-size: clamp(26px, 8vw, 34px); }
+  .summary-grid, .metric-grid, .command-metrics, .form-grid, .compact-grid, .administration-grid { grid-template-columns: 1fr; }
+  .summary-grid .panel, .metric-grid .panel { min-height: 96px; }
+  .detail-facts div { min-width: 0; }
+  .table-wrap { margin-inline: -2px; }
+  .button, .button.secondary { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+/* Print: operational records stay legible and branded without UI chrome. */
+@media print {
+  body { background: #fff; }
+  .app-header, .app-sidebar, .sidebar-backdrop, .command-palette-backdrop, .button, .header-utility, .sidebar-toggle, .mobile-shell-trigger, .skip-link { display: none !important; }
+  .workspace, body[data-sidebar="collapsed"] .workspace { margin: 0 !important; max-width: none !important; padding: 0 !important; }
+  .panel { break-inside: avoid; box-shadow: none !important; }
+  a { color: inherit; text-decoration: none; }
+}
