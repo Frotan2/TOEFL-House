@@ -22,17 +22,18 @@ This is the single human/AI entry point to the TOEFL House engineering knowledge
 12. `11-PRIVACY-AUDIT-DOCUMENTS.md` — privacy, documents and audit governance.
 13. `12-OPERATIONS-DEPLOYMENT-DR.md` — deployment and recovery.
 14. `13-TESTING-QUALITY-RELEASE.md` — verification and release gates.
-15. `14-CURRENT-STATE-ROADMAP.md` — **current domain/state register**.
-16. `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` — **current parity contract**.
-17. `15-REQUIREMENT-TRACEABILITY.md` — requirement traceability.
-18. `16-DECISION-REGISTER.md` — decision authority index.
-19. `CODEBASE_HYGIENE_AND_STANDARDS.md` — codebase hygiene and compatibility rules.
-20. `CANONICAL_TERMINOLOGY.md` — vocabulary authority.
-21. `RUNTIME_ENVIRONMENT_LOCK.md` — runtime version authority.
-22. `RUNTIME_VERIFICATION_HANDOFF.md` — runtime evidence/handoff record.
-23. `TESTING_STRATEGY_LOCK.md` and `TEST_SUITE_ARCHITECTURE.md` — test architecture.
-24. `ai/00-AI-ENTRYPOINT.md` — mandatory AI entry point.
-25. `ai/09-NEXT-AGENT-MANDATORY-HANDOFF.md` — **blocking operating contract for the next agent**.
+15. `14-CURRENT-STATE-ROADMAP.md` — current domain/state register.
+16. `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` — current parity contract.
+17. `DOMAIN-REASSESSMENT-2026-09-09.md` — second-pass domain reassessment.
+18. `15-REQUIREMENT-TRACEABILITY.md` — requirement traceability.
+19. `16-DECISION-REGISTER.md` — decision authority index.
+20. `CODEBASE_HYGIENE_AND_STANDARDS.md` — codebase hygiene and compatibility rules.
+21. `CANONICAL_TERMINOLOGY.md` — vocabulary authority.
+22. `RUNTIME_ENVIRONMENT_LOCK.md` — authoritative runtime version specification.
+23. `RUNTIME_VERIFICATION_HANDOFF.md` — current runtime handoff/evidence contract.
+24. `TESTING_STRATEGY_LOCK.md` and `TEST_SUITE_ARCHITECTURE.md` — test architecture.
+25. `ai/00-AI-ENTRYPOINT.md` — mandatory AI entry point.
+26. `ai/09-NEXT-AGENT-MANDATORY-HANDOFF.md` — blocking operating contract for the next agent.
 
 ## Non-negotiable state model
 
@@ -44,9 +45,9 @@ Documentation alone never promotes a capability to RELEASE STATE.
 
 ## Current release warning
 
-An older `AUDIT-2026-09-09-FINAL-CERTIFICATION.md` certifies a different historical execution line and commit. It must not be used to certify later `main` commits.
+`AUDIT-2026-09-09-FINAL-CERTIFICATION.md` is historical evidence for its own execution line and commit. Its production-readiness statement must not be applied to later `main` commits.
 
-At the time of this reconciliation, Verification run **#442 / `34366532471`** is the current active evidence line for commit `2ed406e6ae07c1dd24f38cc88432457a460519e8`; frontend has passed, while the remaining jobs require their actual final conclusions. A superseded or in-progress run never counts as release certification.
+The current release state is always determined from the latest non-superseded Verification workflow attached to the current `main` HEAD. Frontend/static/backend/browser results from older or superseded runs do not certify the current commit.
 
 ## Current domain state
 
@@ -55,7 +56,7 @@ At the time of this reconciliation, Verification run **#442 / `34366532471`** is
 - **Partial:** Access/RBAC, Applicants & Students, CRM/Front Office, Academic, Placement, Teachers, HR, Finance, Payroll/settlement, Documents, Privacy, Audit, Communication, Reporting, Management/Work.
 - **Backend-only/operator:** Integration transport, workers/queues/scheduling, projections/materialization internals, database/migration machinery, accounting authority, audit/outbox internals, concurrency/idempotency enforcement.
 
-The authoritative workflow-by-workflow matrix is `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md` and the current planning register is `14-CURRENT-STATE-ROADMAP.md`.
+The authoritative workflow-by-workflow matrix is `15-BACKEND-FRONTEND-PARITY-AUTHORITY.md`; current planning is `14-CURRENT-STATE-ROADMAP.md`; the second-pass assessment is `DOMAIN-REASSESSMENT-2026-09-09.md`.
 
 ## Domain execution rule
 
@@ -69,7 +70,7 @@ Endpoint count is not parity.
 
 ## Historical evidence
 
-`history/` and dated audit files preserve provenance. They must remain identifiable as historical evidence. They do not silently override the current canonical documents.
+`history/` and dated audit files preserve provenance. They must remain identifiable as historical evidence and do not silently override current canonical documents.
 
 ## Operations
 
