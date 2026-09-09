@@ -109,7 +109,7 @@ final class FinanceApiController extends Controller
     public function recognizePayrollLiability(Request $request): JsonResponse
     {
         $input = $request->validate([
-            'source_type' => ['required', 'in:payroll_result'],
+            'source_type' => ['required', 'in:payroll_result,payroll_adjustment'],
             'source_id' => ['required', 'string'],
             'amount' => ['required', 'numeric', 'signed_money'],
             'evidence_ref' => ['required', 'string', 'max:255'],
@@ -177,5 +177,521 @@ final class FinanceApiController extends Controller
         );
 
         return response()->json(['status' => 'allocated', ...$result], 201);
+    }
+
+    public function openPeriod(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_key' => ['required', 'string', 'max:40'], 'date_from' => ['required', 'date'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+        ]);
+        $result = app(MaintainFinancialPeriod::class)->open(
+            $this->actor(), $input['period_key'], $input['date_from'], $input['date_to'],
+            $this->idempotencyKey('finance.period.open'),
+        );
+
+        return response()->json(['status' => 'opened', ...$result], 201);
+    }
+
+    public function closePeriod(string $periodId): JsonResponse
+    {
+        $result = app(MaintainFinancialPeriod::class)->close(
+            $this->actor(), FinancialPeriod::query()->findOrFail($periodId),
+            $this->idempotencyKey('finance.period.close'),
+        );
+
+        return response()->json(['status' => 'closed', ...$result]);
+    }
+
+    public function defineAccount(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'code' => ['required', 'string', 'max:40'], 'name' => ['required', 'string', 'max:120'],
+            'type' => ['required', 'in:asset,liability,equity,revenue,expense'],
+        ]);
+        $result = app(MaintainChartOfAccounts::class)->define(
+            $this->actor(), $input['code'], $input['name'], $input['type'],
+            $this->idempotencyKey('finance.account.define'),
+        );
+
+        return response()->json(['status' => 'defined', ...$result], 201);
+    }
+
+    public function postJournal(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['required', 'string'], 'source_type' => ['required', 'in:obligation,payroll_liability,expense,payment,discount,refund,fund_allocation,employment_settlement,other'],
+            'source_id' => ['nullable', 'string'], 'reason' => ['required', 'string', 'max:1000'],
+            'lines' => ['required', 'array', 'min:1'], 'lines.*.account_id' => ['required', 'string'],
+            'lines.*.direction' => ['required', 'in:debit,credit'], 'lines.*.amount' => ['required', 'numeric', 'money', 'gt:0'],
+        ]);
+        $lines = array_values(array_map(static fn (array $line): array => [
+            'account_id' => $line['account_id'], 'direction' => $line['direction'], 'amount' => (string) $line['amount'],
+        ], $input['lines']));
+        $result = app(PostJournal::class)->post(
+            $this->actor(), FinancialPeriod::query()->findOrFail((string) $input['period_id']), $input['source_type'],
+            $input['source_id'] ?? null, $input['reason'], $lines, $this->idempotencyKey('finance.journal.post'),
+        );
+
+        return response()->json(['status' => 'posted', ...$result], 201);
+    }
+
+    public function reverseJournal(Request $request, string $journalId): JsonResponse
+    {
+        $input = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+        $result = app(PostJournal::class)->reverse(
+            $this->actor(), Journal::query()->findOrFail($journalId), $input['reason'],
+            $this->idempotencyKey('finance.journal.reverse'),
+        );
+
+        return response()->json(['status' => 'reversed', ...$result]);
+    }
+
+    public function proposeDiscount(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'obligation_id' => ['required', 'string'], 'period_id' => ['required', 'string'],
+            'amount' => ['required', 'numeric', 'money', 'gt:0'], 'eligibility' => ['required', 'string', 'max:500'],
+            'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainDiscount::class)->propose(
+            $this->actor(), Obligation::query()->findOrFail((string) $input['obligation_id']),
+            FinancialPeriod::query()->findOrFail((string) $input['period_id']), $input['amount'], $input['eligibility'],
+            $input['effective_from'], $input['effective_to'] ?? null, $input['reason'],
+            $this->idempotencyKey('finance.discount.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveDiscount(string $discountId): JsonResponse
+    {
+        $result = app(MaintainDiscount::class)->approve(
+            $this->actor(), Discount::query()->findOrFail($discountId),
+            $this->idempotencyKey('finance.discount.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    /**
+     * The signed-in session PROPOSES the refund (requester). A different
+     * session signed in as an approver records it via approve() — no
+     * person-id may be supplied in the body.
+     */
+    public function proposeRefund(Request $request, string $paymentId): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['required', 'string'],
+            'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $result = app(RefundPayment::class)->propose(
+            $this->actor(),
+            Payment::query()->findOrFail($paymentId),
+            FinancialPeriod::query()->findOrFail((string) $input['period_id']),
+            $input['amount'],
+            $input['reason'],
+            $this->idempotencyKey('finance.refund.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', 'refund_id' => $result['refund_id']], 201);
+    }
+
+    public function proposeObligationCorrection(Request $request, string $obligationId): JsonResponse
+    {
+        $input = $request->validate([
+            'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'direction' => ['required', 'in:decrease,increase'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainFinancialCorrection::class)->proposeObligationAdjustment(
+            $this->actor(), Obligation::query()->findOrFail($obligationId), $input['amount'],
+            $input['direction'], $input['reason'], $this->idempotencyKey('finance.correction.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function proposeAllocationReversal(Request $request, string $allocationId): JsonResponse
+    {
+        $input = $request->validate([
+            'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainFinancialCorrection::class)->proposeAllocationReversal(
+            $this->actor(), PaymentAllocation::query()->findOrFail($allocationId), $input['amount'],
+            $input['reason'], $this->idempotencyKey('finance.correction.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveFinancialCorrection(Request $request, string $correctionId): JsonResponse
+    {
+        $result = app(MaintainFinancialCorrection::class)->approve(
+            $this->actor(), FinancialCorrection::query()->findOrFail($correctionId),
+            $this->idempotencyKey('finance.correction.approve'),
+        );
+
+        return response()->json(['status' => 'recorded', ...$result]);
+    }
+
+    public function proposeFundAllocationReversal(Request $request, string $allocationId): JsonResponse
+    {
+        $input = $request->validate([
+            'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainFinancialCorrection::class)->proposeFundAllocationReversal(
+            $this->actor(), FundAllocation::query()->findOrFail($allocationId), $input['amount'],
+            $input['reason'], $this->idempotencyKey('finance.correction.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function observeReconciliation(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['required', 'string'], 'subject' => ['required', 'string', 'max:120'],
+            'expected' => ['required', 'numeric', 'money'], 'observed' => ['required', 'numeric', 'money'],
+            'explanation' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $result = app(RecordReconciliation::class)->observe(
+            $this->actor(), FinancialPeriod::query()->findOrFail((string) $input['period_id']), $input['subject'],
+            $input['expected'], $input['observed'], $input['explanation'] ?? null,
+            $this->idempotencyKey('finance.reconciliation.observe'),
+        );
+
+        return response()->json(['status' => 'observed', ...$result], 201);
+    }
+
+    public function approveReconciliation(string $reconciliationId): JsonResponse
+    {
+        $result = app(RecordReconciliation::class)->approve(
+            $this->actor(), Reconciliation::query()->findOrFail($reconciliationId),
+            $this->idempotencyKey('finance.reconciliation.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    public function establishFund(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'organization_id' => ['required', 'string'],
+            'name' => ['required', 'string', 'max:120'], 'agreement_ref' => ['required', 'string', 'max:120'],
+            'committed_amount' => ['required', 'numeric', 'money', 'gt:0'], 'restricted_category' => ['nullable', 'string', 'max:120'],
+            'restriction_note' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $result = app(AllocateFunds::class)->establish(
+            $this->actor(), $input['organization_id'], $input['name'], $input['agreement_ref'], $input['committed_amount'],
+            $input['restricted_category'] ?? null, $input['restriction_note'] ?? null,
+            $this->idempotencyKey('finance.fund.establish'),
+        );
+
+        return response()->json(['status' => 'established', ...$result], 201);
+    }
+
+    public function allocateFund(Request $request, string $fundId): JsonResponse
+    {
+        $input = $request->validate([
+            'obligation_line_id' => ['required', 'string'], 'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(AllocateFunds::class)->allocate(
+            $this->actor(), FundingSource::query()->findOrFail($fundId),
+            ObligationLine::query()->findOrFail((string) $input['obligation_line_id']),
+            $input['amount'], $input['reason'], $this->idempotencyKey('finance.fund.allocate'),
+        );
+
+        return response()->json(['status' => 'allocated', ...$result], 201);
+    }
+
+    public function proposeCredit(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'student_id' => ['required', 'string'], 'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'reason' => ['required', 'string', 'max:1000'], 'source_ref' => ['required', 'string', 'max:120'],
+        ]);
+        $result = app(MaintainFinancialCredit::class)->propose(
+            $this->actor(), $input['student_id'], $input['amount'], $input['reason'], $input['source_ref'],
+            $this->idempotencyKey('finance.credit.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveCredit(string $creditId): JsonResponse
+    {
+        $result = app(MaintainFinancialCredit::class)->approve(
+            $this->actor(), FinancialCredit::query()->findOrFail($creditId),
+            $this->idempotencyKey('finance.credit.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    public function proposeInstallment(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'student_id' => ['required', 'string'], 'offering_id' => ['nullable', 'string'],
+            'amount' => ['required', 'numeric', 'money', 'gt:0'], 'installments_count' => ['required', 'integer', 'gt:0'],
+            'first_due_on' => ['required', 'date'], 'schedule_ref' => ['required', 'string', 'max:120'],
+        ]);
+        $result = app(MaintainInstallmentPlan::class)->propose(
+            $this->actor(), $input['student_id'], $input['offering_id'] ?? null, $input['amount'],
+            (int) $input['installments_count'], $input['first_due_on'], $input['schedule_ref'],
+            $this->idempotencyKey('finance.installment.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveInstallment(string $planId): JsonResponse
+    {
+        $result = app(MaintainInstallmentPlan::class)->approve(
+            $this->actor(), EnrollmentInstallmentPlan::query()->findOrFail($planId),
+            $this->idempotencyKey('finance.installment.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    public function proposeGateException(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'student_id' => ['required', 'string'], 'offering_id' => ['nullable', 'string'], 'class_id' => ['nullable', 'string'],
+            'amount' => ['required', 'numeric', 'money', 'gt:0'], 'reason' => ['required', 'string', 'max:1000'],
+            'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'],
+        ]);
+        $result = app(MaintainFinancialGateException::class)->propose(
+            $this->actor(), $input['student_id'], $input['offering_id'] ?? null, $input['class_id'] ?? null,
+            $input['amount'], $input['reason'], $input['effective_from'], $input['effective_to'] ?? null,
+            $this->idempotencyKey('finance.gate_exception.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveGateException(string $exceptionId): JsonResponse
+    {
+        $result = app(MaintainFinancialGateException::class)->approve(
+            $this->actor(), FinancialGateException::query()->findOrFail($exceptionId),
+            $this->idempotencyKey('finance.gate_exception.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    public function proposeCoverageRevocation(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'coverage_source_type' => ['required', 'in:financial_credit,enrollment_installment_plan,financial_gate_exception'],
+            'coverage_source_id' => ['required', 'string', 'max:36'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(RevokeFinancialCoverage::class)->propose(
+            $this->actor(),
+            $input['coverage_source_type'],
+            $input['coverage_source_id'],
+            $input['reason'],
+            $this->idempotencyKey('finance.coverage-revocation.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveCoverageRevocation(string $revocationId): JsonResponse
+    {
+        $result = app(RevokeFinancialCoverage::class)->approve(
+            $this->actor(),
+            FinancialCoverageRevocation::query()->findOrFail($revocationId),
+            $this->idempotencyKey('finance.coverage-revocation.approve'),
+        );
+
+        return response()->json(['status' => 'recorded', ...$result]);
+    }
+
+    public function approveRefund(Request $request, string $refundId): JsonResponse
+    {
+        $result = app(RefundPayment::class)->approve(
+            $this->actor(),
+            Refund::query()->findOrFail($refundId),
+            $this->idempotencyKey('finance.refund.approve'),
+        );
+
+        return response()->json(['status' => 'refunded', 'refund_id' => $result['refund_id']]);
+    }
+
+    public function proposeExpense(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['required', 'string'], 'branch_id' => ['required', 'string'],
+            'supplier' => ['required', 'string', 'max:200'], 'purpose' => ['required', 'string', 'max:1000'],
+            'category' => ['required', 'string', 'max:120'], 'source_ref' => ['required', 'string', 'max:120'],
+            'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'expense_account_id' => ['required', 'string'],
+        ]);
+        $result = app(MaintainExpense::class)->propose(
+            $this->actor(), FinancialPeriod::query()->findOrFail((string) $input['period_id']),
+            $input['branch_id'], $input['supplier'], $input['purpose'], $input['category'],
+            $input['source_ref'], $input['amount'], $input['expense_account_id'],
+            $this->idempotencyKey('finance.expense.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveExpense(string $expenseId): JsonResponse
+    {
+        $result = app(MaintainExpense::class)->approve(
+            $this->actor(), Expense::query()->findOrFail($expenseId),
+            $this->idempotencyKey('finance.expense.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    public function openCashDrawer(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'branch_id' => ['required', 'string'], 'custodian_id' => ['required', 'string'],
+            'opening_balance' => ['required', 'numeric', 'money'],
+        ]);
+        $result = app(MaintainCashDrawer::class)->open(
+            $this->actor(), $input['branch_id'], $input['custodian_id'], $input['opening_balance'],
+            $this->idempotencyKey('finance.cash-drawer.open'),
+        );
+
+        return response()->json(['status' => 'opened', ...$result], 201);
+    }
+
+    public function recordCashMovement(Request $request, string $drawerId): JsonResponse
+    {
+        $input = $request->validate([
+            'type' => ['required', 'in:in,out'], 'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainCashDrawer::class)->recordMovement(
+            $this->actor(), CashDrawer::query()->findOrFail($drawerId), $input['type'],
+            $input['amount'], $input['reason'], $this->idempotencyKey('finance.cash-drawer.move'),
+        );
+
+        return response()->json(['status' => 'recorded', ...$result], 201);
+    }
+
+    public function closeCashDrawer(Request $request, string $drawerId): JsonResponse
+    {
+        $input = $request->validate([
+            'counted_balance' => ['required', 'numeric', 'money'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainCashDrawer::class)->close(
+            $this->actor(), CashDrawer::query()->findOrFail($drawerId), $input['counted_balance'],
+            $input['reason'], $this->idempotencyKey('finance.cash-drawer.close'),
+        );
+
+        return response()->json(['status' => 'closed', ...$result]);
+    }
+
+    public function proposeScholarship(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'student_id' => ['required', 'string'], 'funding_source_id' => ['required', 'string'],
+            'period_id' => ['required', 'string'], 'amount' => ['required', 'numeric', 'money', 'gt:0'],
+            'award_rule_ref' => ['required', 'string', 'max:120'], 'reason' => ['required', 'string', 'max:1000'],
+        ]);
+        $result = app(MaintainScholarshipAward::class)->propose(
+            $this->actor(), $input['student_id'],
+            FundingSource::query()->findOrFail((string) $input['funding_source_id']),
+            FinancialPeriod::query()->findOrFail((string) $input['period_id']),
+            $input['amount'], $input['award_rule_ref'], $input['reason'],
+            $this->idempotencyKey('finance.scholarship.propose'),
+        );
+
+        return response()->json(['status' => 'proposed', ...$result], 201);
+    }
+
+    public function approveScholarship(string $awardId): JsonResponse
+    {
+        $result = app(MaintainScholarshipAward::class)->approve(
+            $this->actor(), ScholarshipAward::query()->findOrFail($awardId),
+            $this->idempotencyKey('finance.scholarship.approve'),
+        );
+
+        return response()->json(['status' => 'approved', ...$result]);
+    }
+
+    public function glTrialBalance(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['nullable', 'string'],
+            'organization_id' => ['required', 'string'],
+        ]);
+        $this->requireOrganizationInScope('finance.journal', $input['organization_id'], 'finance.gltrial', 'journal');
+        $ledger = app(GeneralLedgerQuery::class)->trialBalance($input['period_id'] ?? null, $input['organization_id']);
+
+        return response()->json($ledger);
+    }
+
+    public function glAccountDetail(Request $request, string $accountId): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['nullable', 'string'],
+            'organization_id' => ['required', 'string'],
+        ]);
+        $this->requireOrganizationInScope('finance.journal', $input['organization_id'], 'finance.gldetail', 'journal');
+        $ledger = app(GeneralLedgerQuery::class)->accountDetail($accountId, $input['period_id'] ?? null, $input['organization_id']);
+
+        return response()->json(['account_id' => $accountId, 'entries' => $ledger]);
+    }
+
+    public function glCompleteness(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['nullable', 'string'],
+        ]);
+        $this->requireOrganizationRead('finance.journal', 'finance.glcompleteness', 'journal');
+        $ledger = app(GeneralLedgerQuery::class)->completeness($input['period_id'] ?? null);
+
+        return response()->json($ledger);
+    }
+
+    public function glIncomeStatement(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['required', 'string'],
+            'organization_id' => ['required', 'string'],
+        ]);
+        $this->requireOrganizationInScope('finance.journal', $input['organization_id'], 'finance.glincomestatement', 'journal');
+        $statement = app(GeneralLedgerQuery::class)->incomeStatement($input['period_id'], $input['organization_id']);
+
+        return response()->json($statement);
+    }
+
+    public function glBalanceSheet(Request $request): JsonResponse
+    {
+        $input = $request->validate([
+            'period_id' => ['nullable', 'string'],
+            'organization_id' => ['required', 'string'],
+        ]);
+        $this->requireOrganizationInScope('finance.journal', $input['organization_id'], 'finance.glbalancesheet', 'journal');
+        $statement = app(GeneralLedgerQuery::class)->balanceSheet($input['period_id'] ?? null, $input['organization_id']);
+
+        return response()->json($statement);
+    }
+
+    private function requireOrganizationInScope(string $capability, string $organizationId, string $operation, string $targetType): void
+    {
+        if (! in_array($organizationId, $this->authorizedOrganizations($capability), true)) {
+            app(AttemptedOperation::class)->deniedByActor(
+                AuthorizationDenied::forCode('api.organization_read_denied', 'this organization is outside your authorized finance scope'),
+                $this->actor(), $operation, $targetType, $organizationId,
+            );
+        }
     }
 }
