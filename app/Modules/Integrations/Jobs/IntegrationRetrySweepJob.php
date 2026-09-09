@@ -19,6 +19,7 @@ use App\Support\Errors\BusinessRejection;
 final class IntegrationRetrySweepJob implements JobHandler
 {
     private const DEFAULT_BATCH = 100;
+
     private const MAX_BATCH = 500;
 
     public function __construct(
