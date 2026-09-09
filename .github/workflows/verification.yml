@@ -38,6 +38,7 @@ jobs:
       - run: npm install --global npm@${{ env.NPM_VERSION }}
       - run: npm --version
       - run: npm ci --engine-strict
+      - run: npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:frontend
@@ -57,6 +58,7 @@ jobs:
       - run: composer --version --no-ansi
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: composer audit --no-interaction --abandoned=report
       - run: composer check-platform-reqs
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
