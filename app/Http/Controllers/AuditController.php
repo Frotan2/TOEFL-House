@@ -12,6 +12,7 @@ final class AuditController extends Controller
     public function index(): RedirectResponse
     {
         $this->requireOrganizationRead('governance.config', 'audit.console.index');
+
         return redirect()->route('governance.audit');
     }
 }
