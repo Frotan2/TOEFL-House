@@ -4,17 +4,16 @@
 **Last reconciled:** 2026-09-09  
 **Authority branch:** `main`
 
-## 1. Current repository identity
+## 1. Repository identity
 
 - Repository: `Frotan2/TOEFL-House`
 - Authoritative branch: `main`
-- Current HEAD at last documentation reconciliation: `6e3e6d27ff5b89ffe18416db956f89972098b871`
 - Backend: Laravel 12.67.0 modular monolith
 - Database: PostgreSQL 18.4
 - Canonical frontend transport: `resources/js/core/api.ts`
 - Canonical navigation: `resources/js/core/navigation.ts`
 
-**Important:** a newer commit may exist when this file is read. The next agent must inspect `main` first and treat the live branch plus latest Verification run as authoritative.
+**Before any work, inspect the actual `main` HEAD and the latest Verification workflow. Do not rely on a stored SHA as current truth.**
 
 ## 2. Locked environment
 
@@ -28,15 +27,15 @@
 - Vite 7.3.6
 - TypeScript 5.9.x
 
-Use `docs/RUNTIME_ENVIRONMENT_LOCK.md` and `npm run verify:environment`; do not copy historical runtime versions from older reports.
+Use `docs/RUNTIME_ENVIRONMENT_LOCK.md` and `npm run verify:environment`.
 
 ## 3. Release-state truth
 
-No current release certification is implied by the existence of `AUDIT-2026-09-09-FINAL-CERTIFICATION.md`. That file records a historical execution line at commit `96925d3` and must remain historical evidence.
+`AUDIT-2026-09-09-FINAL-CERTIFICATION.md` is historical evidence for its own execution line at commit `96925d3`; it must not certify later commits.
 
-The current release state is determined only by the latest non-superseded Verification workflow on the current `main` commit, plus any explicit manually executed release evidence required by `docs/ai/07-RELEASE-CERTIFICATION-PROTOCOL.md`.
+Current release state is determined only by the latest non-superseded Verification workflow attached to the current `main` HEAD, together with explicit release evidence required by the certification protocol.
 
-Never treat an in-progress, cancelled, superseded, or older green run as certification of the current HEAD.
+Never treat an in-progress, cancelled, superseded, or older green run as current certification.
 
 ## 4. Current domain gate
 
@@ -54,13 +53,11 @@ Implementation has materially converged around:
 - irreversible confirmation;
 - server-authoritative scope, lifecycle, audit and idempotency.
 
-The domain remains **IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED** until current verification proves the relevant repository state.
+Current classification remains **IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED** until the current `main` release gates prove it.
 
-Do not start Documents or another Partial domain before Library & Resources is closed.
+**Do not start Documents or another Partial domain before Library & Resources is closed.**
 
 ## 5. Verification gates
-
-The complete verification sequence is:
 
 ```text
 Environment
@@ -84,17 +81,17 @@ A domain may be certified only when all materially applicable gates pass and no 
 
 When a gate fails:
 
-1. preserve the exact failure evidence;
-2. classify it as product, harness, documentation, environment or stale-evidence failure;
+1. preserve exact failure evidence;
+2. classify the failure as product, harness, documentation, environment, or stale-evidence;
 3. fix the smallest confirmed root cause;
-4. add or update regression coverage;
-5. rerun the affected gate and the complete relevant chain;
-6. update the canonical status documents;
-7. never downgrade or weaken a test merely to recover a green status.
+4. add/update regression coverage;
+5. rerun the affected and dependent gates;
+6. update canonical documentation;
+7. never weaken a test to recover a green status.
 
 ## 7. Security/scope runtime verification
 
-Every domain with scoped data or writes must verify, as applicable:
+Every domain with scoped data or writes must verify as applicable:
 
 - organization isolation;
 - campus isolation;
@@ -120,13 +117,13 @@ React is the operational client, not the business authority.
 - Do not create duplicate API clients.
 - Do not reproduce backend lifecycle/accounting/security logic in React.
 - Do not use implicit actor selection for consequential actions.
-- Gate irreversible actions on server state and require explicit confirmation.
-- Preserve the canonical mount/navigation architecture.
+- Gate irreversible actions on server state and explicit confirmation.
+- Preserve canonical mount/navigation architecture.
 - Keep nested-route asset loading anchored to the document origin.
 
 ## 9. Documentation obligations
 
-After every material fix, review and update as applicable:
+After every material fix, review/update as applicable:
 
 - `docs/README.md`
 - `docs/14-CURRENT-STATE-ROADMAP.md`
@@ -134,10 +131,10 @@ After every material fix, review and update as applicable:
 - `docs/DOMAIN-REASSESSMENT-2026-09-09.md`
 - `docs/RUNTIME_ENVIRONMENT_LOCK.md`
 - this document
-- the relevant domain specification
+- relevant domain specification
 - relevant AI governance/decision documents
 
-Historical evidence must remain historically accurate rather than being rewritten to appear current.
+Historical evidence must remain historically accurate rather than being rewritten to look current.
 
 ## 10. Next-agent mandatory reading
 
@@ -148,18 +145,17 @@ Before changing code, read:
 3. `docs/MASTER_ENGINEERING_CONTRACT.md`
 4. `docs/14-CURRENT-STATE-ROADMAP.md`
 5. `docs/15-BACKEND-FRONTEND-PARITY-AUTHORITY.md`
-6. the relevant domain documentation and current source/tests
+6. `docs/DOMAIN-REASSESSMENT-2026-09-09.md`
+7. relevant domain documentation and source/tests
 
-Then inspect `main` HEAD and the latest Verification workflow run.
+Then inspect `main` HEAD and the latest Verification workflow before implementation.
 
 ## 11. Evidence vocabulary
-
-Use these exact meanings:
 
 - `VERIFIED` — executed and observed successfully.
 - `STATICALLY VERIFIED` — source/config/static evidence only.
 - `UNVERIFIED` — insufficient evidence.
-- `BLOCKED` — execution prevented by a missing prerequisite.
+- `BLOCKED` — prerequisite prevented execution.
 - `FAILED` — executed and failed.
 
-Never convert one status to another without evidence.
+Never convert one state into another without evidence.
