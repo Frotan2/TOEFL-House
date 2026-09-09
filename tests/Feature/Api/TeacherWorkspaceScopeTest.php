@@ -6,7 +6,6 @@ namespace Tests\Feature\Api;
 
 use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Models\TeacherProfile;
-use App\Modules\Academic\Models\TeacherQualification;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Identifiers\RandomIdentifier;
@@ -62,12 +61,18 @@ final class TeacherWorkspaceScopeTest extends TestCase
 
         $teacher = $this->buildActiveTeacher('workspace-teacher-person', $this->branchA, 'workspace');
         $profile = TeacherProfile::query()->findOrFail($teacher['teacher_profile_id']);
-
-        $managerId = 'workspace-manager-a';
-        $manager = $this->grantedActor($managerId, ['academic.teacher_manage']);
-        $approver = $this->grantedActor('workspace-approver-a', ['academic.teacher_approve']);
         $profiles = app(MaintainTeacherProfile::class);
         $from = CarbonImmutable::today()->subDay()->toDateString();
+
+        $managerAId = 'workspace-manager-a';
+        $managerA = $this->grantedActor($managerAId, ['academic.teacher_manage']);
+        $this->grantScopeAuthority($managerAId, ['academic.teacher_manage'], 'branch', $this->branchA);
+
+        $managerBId = 'workspace-manager-b';
+        $managerB = $this->grantedActor($managerBId, ['academic.teacher_manage']);
+        $this->grantScopeAuthority($managerBId, ['academic.teacher_manage'], 'branch', $this->branchB);
+
+        $approver = $this->grantedActor('workspace-approver', ['academic.teacher_approve']);
 
         // The same teacher legitimately has branch-B authority, but the
         // branch-A manager must not receive branch-B operational evidence.
@@ -81,7 +86,7 @@ final class TeacherWorkspaceScopeTest extends TestCase
             'workspace-xbranch',
         );
         $profiles->declareAvailability(
-            $manager,
+            $managerA,
             $profile,
             $this->branchA,
             1,
@@ -93,7 +98,7 @@ final class TeacherWorkspaceScopeTest extends TestCase
             'workspace-avail-a',
         );
         $profiles->declareAvailability(
-            $manager,
+            $managerB,
             $profile,
             $this->branchB,
             2,
@@ -105,7 +110,7 @@ final class TeacherWorkspaceScopeTest extends TestCase
             'workspace-avail-b',
         );
         $profiles->setWorkloadLimit(
-            $manager,
+            $managerA,
             $profile,
             $this->branchA,
             '10.00',
@@ -115,7 +120,7 @@ final class TeacherWorkspaceScopeTest extends TestCase
             'workspace-load-a',
         );
         $profiles->setWorkloadLimit(
-            $manager,
+            $managerB,
             $profile,
             $this->branchB,
             '20.00',
@@ -125,8 +130,7 @@ final class TeacherWorkspaceScopeTest extends TestCase
             'workspace-load-b',
         );
 
-        $this->grantScopeAuthority($managerId, ['academic.teacher_manage'], 'branch', $this->branchA);
-        $this->login($managerId, 'teacher.workspace.manager');
+        $this->login($managerAId, 'teacher.workspace.manager');
 
         $payload = $this->getJson('/api/v1/teachers/workspace')->assertOk()->json('data');
         $rows = $payload['profiles'] ?? [];
