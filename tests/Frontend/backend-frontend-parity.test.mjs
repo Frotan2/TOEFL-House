@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(path, 'utf8');
+const containsAll = (source, markers, label) => {
+  for (const marker of markers) assert.ok(source.includes(marker), `${label} is missing: ${marker}`);
+};
 
 const [resourceRoutes, library, placementRoutes, placement, navigation] = await Promise.all([
   read('routes/resources-api.php'),
@@ -11,32 +14,32 @@ const [resourceRoutes, library, placementRoutes, placement, navigation] = await 
   read('resources/js/core/navigation.ts'),
 ]);
 
-// Concrete parity contract: every user-facing Resources lifecycle action exposed by
-// the canonical API must remain reachable from the modern Library workspace.
-for (const endpoint of [
-  '/resources/books',
-  '/resources/issuances/',
-  '/resources/assets',
-  '/resources/assets/',
-  '/resources/disposals/',
-  '/resources/work-orders',
-]) {
-  assert.match(resourceRoutes, new RegExp(endpoint.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')));
-}
-for (const endpoint of [
+containsAll(resourceRoutes, [
+  "'/books'", "'/books/{copyId}/issue'", "'/issuances/{issuanceId}/return'", "'/issuances/{issuanceId}/loss'",
+  "'/assets'", "'/assets/{assetId}/custody'", "'/assets/{assetId}/custody/release'", "'/assets/{assetId}/disposal'",
+  "'/disposals/{requestId}/approve'", "'/disposals/{requestId}/execute'", "'/work-orders'", "'/work-orders/{orderId}/approve'",
+  "'/work-orders/{orderId}/start'", "'/work-orders/{orderId}/complete'", "'/work-orders/{orderId}/cancel'",
+], 'Resources API route contract');
+
+containsAll(library, [
+  '/resources/books/${copy.id}/issue',
+  '/resources/issuances/${loan.id}/return',
+  '/resources/issuances/${loan.id}/loss',
+  '/resources/assets/${asset.id}/custody',
+  '/resources/assets/${asset.id}/custody/release',
+  '/resources/assets/${asset.id}/disposal',
   '/resources/disposals/${request.id}/approve',
   '/resources/disposals/${request.id}/execute',
-]) {
-  assert.ok(library.includes(endpoint), `Library workspace is missing Resources capability: ${endpoint}`);
-}
+  '/resources/work-orders/${work.id}/approve',
+  '/resources/work-orders/${work.id}/start',
+  '/resources/work-orders/${work.id}/complete',
+  '/resources/work-orders/${work.id}/cancel',
+], 'Library workspace capability contract');
 
-// The placement workspace must preserve the server-owned decision lifecycle.
-for (const endpoint of [
-  '/placement/attempts',
-  '/placement/section-results/',
-  '/placement/profiles/',
-]) assert.match(placementRoutes, new RegExp(endpoint.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')));
-for (const marker of [
+containsAll(placementRoutes, [
+  "'/placement/attempts'", "'/placement/attempts/{attemptId}/submit'", "'/placement/attempts/{attemptId}/cancel'",
+], 'Placement API base contract');
+containsAll(placement, [
   '/placement/attempts/${encodeURIComponent(attempt.id)}/submit',
   '/placement/attempts/${encodeURIComponent(attempt.id)}/cancel',
   '/placement/section-results/${encodeURIComponent(result.id)}/moderate',
@@ -44,9 +47,7 @@ for (const marker of [
   '/placement/profiles/${encodeURIComponent(profile.id)}/recommend',
   '/placement/profiles/${encodeURIComponent(profile.id)}/approve',
   '/placement/profiles/${encodeURIComponent(profile.id)}/release',
-]) assert.ok(placement.includes(marker), `Placement workspace lost lifecycle marker: ${marker}`);
+], 'Placement workspace lifecycle');
 
-// Canonical navigation must retain the Resource workspace once it becomes converged.
 assert.match(navigation, /['\"]\/library['\"]/);
-
 console.log('Backend↔frontend parity sentinels passed.');
