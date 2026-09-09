@@ -10,37 +10,40 @@ on:
     branches: ['**']
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # The locked runtime. Changing these requires updating the lock documents and
-# re-running the full verification chain. PHP 8.4 is the locked version: it is
-# the best-performing build in the composer.json "^8.2" range, ships every
-# required extension (posix/sockets included), and is exactly what
-# scripts/runtime/provision.sh installs — CI and the local runtime are the same.
-# See docs/RUNTIME_ENVIRONMENT_LOCK.md.
+# re-running the full verification chain.
 env:
   PHP_VERSION: '8.4'
-  NODE_VERSION: '22'
-  POSTGRES_VERSION: '18'
+  NODE_VERSION: '22.22.3'
+  POSTGRES_VERSION: '18.4'
 
 jobs:
   frontend:
     name: Frontend (typecheck, build, mount)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      # ci (not install) so package-lock.json is authoritative.
-      - run: npm ci
+      - run: npm ci --engine-strict
       - run: npm run typecheck
       - run: npm run build
-      # Guards bundles that compile but crash on load.
       - run: npm run test:frontend
 
   static-analysis:
     name: Static analysis (Pint, PHPStan, audits)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -49,17 +52,17 @@ jobs:
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
       - run: composer validate --strict
-      - run: composer install --no-interaction --no-progress
+      - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer check-platform-reqs
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
-      # Repository discipline: migration numbering and canonical terminology.
       - run: php scripts/database-migration-audit.php
       - run: php scripts/terminology-audit.php
 
   backend:
     name: Backend (migrations, suite, invariants, concurrency)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -85,55 +88,40 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - run: composer install --no-interaction --no-progress
-      - run: npm ci
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: npm ci --engine-strict
 
       - name: Prepare application
         run: |
           cp .env.example .env
           php artisan key:generate
 
-      # Fails fast and legibly if the runtime has drifted, rather than letting
-      # it surface as confusing downstream failures.
       - name: Verify runtime environment lock
         run: npm run verify:environment
 
-      # The full 185-migration chain must replay from zero.
       - name: Replay migrations
         run: php artisan migrate:fresh --force
 
       - name: Seed reference data
         run: php artisan db:seed --class=StandardFinanceChartSeeder --force
 
-      # PostgreSQL itself must reject invalid states.
       - name: Database invariants
         run: npm run verify:invariants
-        env:
-          DB_DATABASE: toefl_house_test
 
-      # Real concurrent transactions, not static inspection.
       - name: Concurrency
         run: npm run verify:concurrency
-        env:
-          DB_DATABASE: toefl_house_test
 
-      # The canonical suite is the authority for new domain coverage and is
-      # expected to be green; it runs first so a regression there is obvious.
       - name: Canonical suite
         run: vendor/bin/phpunit --testsuite Canonical --no-coverage
 
-      # Includes the architecture test that locks the testing strategy.
       - name: Backend test suite
         run: vendor/bin/phpunit --no-coverage
