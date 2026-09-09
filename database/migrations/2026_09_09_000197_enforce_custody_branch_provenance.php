@@ -16,8 +16,8 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     asset_acquired_on date;
-    asset_branch_id char(36);
-    custodian_branch_id char(36);
+    asset_branch_id text;
+    custodian_branch_id text;
     previous_assigned_on date;
 BEGIN
     IF TG_OP = 'DELETE' THEN
@@ -50,12 +50,17 @@ BEGIN
         RAISE EXCEPTION 'custody cannot precede asset acquisition';
     END IF;
 
-    SELECT home_branch_id
-      INTO custodian_branch_id
-      FROM people
-     WHERE id = NEW.custodian_person_id;
-    IF custodian_branch_id IS NULL OR custodian_branch_id IS DISTINCT FROM asset_branch_id THEN
-        RAISE EXCEPTION 'custody custodian must belong to the asset branch' USING ERRCODE = 'check_violation';
+    -- Branch provenance is checked when a custody fact is created. A later
+    -- person home-branch transfer must not make it impossible to close an
+    -- already-recorded custody history.
+    IF TG_OP = 'INSERT' THEN
+        SELECT home_branch_id
+          INTO custodian_branch_id
+          FROM people
+         WHERE id = NEW.custodian_person_id;
+        IF custodian_branch_id IS NULL OR custodian_branch_id IS DISTINCT FROM asset_branch_id THEN
+            RAISE EXCEPTION 'custody custodian must belong to the asset branch' USING ERRCODE = 'check_violation';
+        END IF;
     END IF;
 
     IF NEW.released_on IS NOT NULL AND NEW.released_on < NEW.assigned_on THEN
