@@ -56,6 +56,14 @@ assert.match(hr, /event\.key === 'ArrowRight' \|\| event\.key === 'ArrowDown'/, 
 assert.match(hr, /event\.key === 'ArrowLeft' \|\| event\.key === 'ArrowUp'/, 'HR: reverse tab keyboard traversal missing');
 assert.match(hr, /aria-controls/, 'HR: tabs must reference their tabpanels');
 
+const payroll = fs.readFileSync(path.join(jsRoot, 'payroll.tsx'), 'utf8');
+assert.match(payroll, /function confirmAction/, 'Payroll: decision confirmation helper missing');
+assert.match(payroll, /Close Payroll period .*?confirmAction/s, 'Payroll: closing a period must confirm');
+assert.match(payroll, /Approve Payroll calculation .*?confirmAction/s, 'Payroll: approving a calculation must confirm');
+assert.match(payroll, /event\.key === 'ArrowRight' \|\| event\.key === 'ArrowDown'/, 'Payroll: tab keyboard traversal missing');
+assert.match(payroll, /event\.key === 'ArrowLeft' \|\| event\.key === 'ArrowUp'/, 'Payroll: reverse tab keyboard traversal missing');
+assert.match(payroll, /payroll-panel-calculations/, 'Payroll: calculations tabpanel must have a distinct id');
+
 const blade = fs.readFileSync(path.join(viewsRoot, 'workspace.blade.php'), 'utf8');
 assert.match(blade, /@vite\('resources\/js\/app\.tsx'\)/, 'workspace blade: canonical app entrypoint missing');
 assert.match(blade, /toefl-house-ultimate\.css/, 'workspace blade: global visual contract missing');
