@@ -19,7 +19,9 @@ concurrency:
 
 env:
   PHP_VERSION: '8.4.14'
+  COMPOSER_VERSION: '2.9.2'
   NODE_VERSION: '22.22.3'
+  NPM_VERSION: '10.9.8'
   POSTGRES_VERSION: '18.4'
 
 jobs:
@@ -47,6 +49,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
+          tools: composer:${{ env.COMPOSER_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
       - run: composer validate --strict
@@ -86,6 +89,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
+          tools: composer:${{ env.COMPOSER_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
       - uses: actions/setup-node@v4
@@ -144,6 +148,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
+          tools: composer:${{ env.COMPOSER_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
       - uses: actions/setup-node@v4
