@@ -279,6 +279,10 @@ final class ManageAssessmentResult
                         'correction_reason' => $lockedCorrection->reason,
                         'scored_by' => $lockedCorrection->proposed_by,
                     ]);
+                    $corrected->forceFill([
+                        'approved_by' => $approver->actorId,
+                        'released_by' => $approver->actorId,
+                    ])->save();
 
                     $lockedCorrection->forceFill([
                         'lifecycle_state' => ResultCorrection::STATE_APPROVED,
@@ -286,6 +290,7 @@ final class ManageAssessmentResult
                     ])->save();
                     $event = $this->audit->record($approver->actorId, 'academic.result.correction.approve', 'assessment_result', $corrected->id, ['score' => $locked->score], [
                         'corrects_id' => $locked->id, 'score' => $lockedCorrection->score, 'correction_id' => $lockedCorrection->id,
+                        'approved_by' => $approver->actorId, 'released_by' => $approver->actorId,
                         ...$this->branchProvenance(RecordBranch::resultBranch($corrected)),
                     ]);
 
