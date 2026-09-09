@@ -14,7 +14,7 @@ return new class extends Migration
                 INSERT INTO notification_recipient_states
                     (id, notification_id, recipient_actor_id, lifecycle_state, read_at, dismissed_at, created_at, updated_at)
                 VALUES
-                    (gen_random_uuid()::text, NEW.id, NEW.recipient_actor_id, NEW.lifecycle_state, NEW.read_at, NEW.dismissed_at, NEW.created_at, NEW.updated_at)
+                    (md5(NEW.id || ':' || NEW.recipient_actor_id)::uuid::text, NEW.id, NEW.recipient_actor_id, NEW.lifecycle_state, NEW.read_at, NEW.dismissed_at, NEW.created_at, NEW.updated_at)
                 ON CONFLICT (notification_id, recipient_actor_id) DO NOTHING;
                 RETURN NEW;
             END;
