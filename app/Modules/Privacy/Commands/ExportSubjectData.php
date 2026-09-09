@@ -8,6 +8,7 @@ use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Organization;
+use App\Modules\Privacy\Domain\PrivacyScopePolicy;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\Disclosure;
 use App\Modules\Privacy\Models\PrivacyExportRequest;
@@ -22,20 +23,10 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Subject data export: purpose-based authorization, minimum disclosure,
- * and audit. The export descriptor is derived read-only; the disclosure
- * row is the immutable evidence of the release.
- *
- * Organization-wide exports are STAGED (000114): an exporter session
- * requests, two distinct approver sessions each sign in their own
- * session, and only then may an exporter session execute. The two
- * signatures are never typed into one request.
- */
+/** Subject data export with purpose, provenance, approval and audit invariants. */
 final class ExportSubjectData
 {
     public const CAPABILITY = 'privacy.export';
-
     public const CAPABILITY_BULK_APPROVE = 'privacy.approve_bulk_export';
 
     public function __construct(
@@ -49,49 +40,29 @@ final class ExportSubjectData
     public function export(Actor $exporter, string $subjectPersonId, string $purpose, string $scopeType, string $scopeId, string $idempotencyKey): array
     {
         $payload = hash('sha256', implode('|', ['privacy.export', $subjectPersonId, $purpose, $scopeType, $scopeId, $exporter->actorId]));
-
         try {
             return $this->idempotency->execute('privacy.export', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($exporter, $subjectPersonId, $purpose, $scopeType, $scopeId): array {
-                    // Privacy owns the subject gate: like consent and
-                    // disclosure, an export of an unknown subject is refused
-                    // with the module's typed code before any scope resolves.
-                    // Provenance then applies to a known subject only.
                     $this->requireSubjectAndPurpose($subjectPersonId, $purpose);
                     $subjectScope = PersonBranchScope::resolve($subjectPersonId);
                     $this->requireCapability($exporter, self::CAPABILITY, 'privacy.export_denied', $subjectScope);
                     if ($scopeType === 'organization') {
                         throw BusinessRejection::forCode('privacy.export_bulk_requires_request', 'organization-wide exports proceed only through the staged approval chain');
                     }
-
+                    PrivacyScopePolicy::assertDeclaredScopeMatchesSubject($subjectPersonId, $scopeType, $scopeId);
                     $dataset = $this->deriveDataset($subjectPersonId);
-
                     $disclosure = Disclosure::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'subject_person_id' => $subjectPersonId,
-                        'recipient' => 'data-export:'.$exporter->actorId,
-                        'purpose' => $purpose,
-                        'authority' => self::CAPABILITY,
-                        'scope_type' => $scopeType,
-                        'scope_id' => $scopeId,
-                        'disclosed_category' => 'subject-data-export',
-                        'disclosed_by' => $exporter->actorId,
+                        'id' => RandomIdentifier::new(), 'subject_person_id' => $subjectPersonId,
+                        'recipient' => 'data-export:'.$exporter->actorId, 'purpose' => $purpose,
+                        'authority' => self::CAPABILITY, 'scope_type' => $scopeType, 'scope_id' => $scopeId,
+                        'disclosed_category' => 'subject-data-export', 'disclosed_by' => $exporter->actorId,
                     ]);
-
                     $event = $this->audit->record($exporter->actorId, 'privacy.export', 'disclosure', $disclosure->id, null, [
-                        'subject_person_id' => $subjectPersonId,
-                        'purpose' => $purpose,
-                        'scope' => $scopeType.':'.$scopeId,
-                        'as_of' => (new CarbonImmutable)->toDateString(),
+                        'subject_person_id' => $subjectPersonId, 'purpose' => $purpose,
+                        'scope' => $scopeType.':'.$scopeId, 'as_of' => (new CarbonImmutable)->toDateString(),
                         'branch_id' => $subjectScope->branchId, 'organization_id' => $subjectScope->organizationId,
                     ]);
-
-                    return [
-                        'export_id' => RandomIdentifier::new(),
-                        'disclosure_id' => $disclosure->id,
-                        'dataset' => $dataset,
-                        'correlation_id' => $event->correlation_id,
-                    ];
+                    return ['export_id' => RandomIdentifier::new(), 'disclosure_id' => $disclosure->id, 'dataset' => $dataset, 'correlation_id' => $event->correlation_id];
                 }),
             );
         } catch (AuthorizationDenied $denial) {
@@ -103,7 +74,6 @@ final class ExportSubjectData
     public function request(Actor $requester, string $subjectPersonId, string $purpose, string $organizationId, string $idempotencyKey): array
     {
         $payload = hash('sha256', implode('|', ['privacy.export.request', $subjectPersonId, $purpose, $organizationId, $requester->actorId]));
-
         try {
             return $this->idempotency->execute('privacy.export.request', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($requester, $subjectPersonId, $purpose, $organizationId): array {
@@ -113,22 +83,13 @@ final class ExportSubjectData
                     }
                     $this->requireCapability($requester, self::CAPABILITY, 'privacy.export_denied', $subjectScope);
                     $this->requireSubjectAndPurpose($subjectPersonId, $purpose);
-
                     $request = PrivacyExportRequest::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'subject_person_id' => $subjectPersonId,
-                        'purpose' => $purpose,
-                        'organization_id' => $organizationId,
-                        'lifecycle_state' => 'requested',
-                        'requested_by' => $requester->actorId,
+                        'id' => RandomIdentifier::new(), 'subject_person_id' => $subjectPersonId, 'purpose' => $purpose,
+                        'organization_id' => $organizationId, 'lifecycle_state' => 'requested', 'requested_by' => $requester->actorId,
                     ]);
                     $event = $this->audit->record($requester->actorId, 'privacy.export.request', 'privacy_export_request', $request->id, null, [
-                        'subject_person_id' => $subjectPersonId,
-                        'purpose' => $purpose,
-                        'organization_id' => $organizationId,
-                        'branch_id' => $subjectScope->branchId,
+                        'subject_person_id' => $subjectPersonId, 'purpose' => $purpose, 'organization_id' => $organizationId, 'branch_id' => $subjectScope->branchId,
                     ]);
-
                     return ['request_id' => $request->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -141,11 +102,9 @@ final class ExportSubjectData
     public function approve(Actor $approver, PrivacyExportRequest $request, string $idempotencyKey): array
     {
         $payload = hash('sha256', implode('|', ['privacy.export.approve', $request->id, $approver->actorId]));
-
         try {
             return $this->idempotency->execute('privacy.export.approve', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($approver, $request): array {
-                    /** @var PrivacyExportRequest $locked */
                     $locked = PrivacyExportRequest::query()->whereKey($request->id)->lockForUpdate()->firstOrFail();
                     $organizationScope = $this->organizationScope($locked->organization_id);
                     $subjectScope = PersonBranchScope::resolve($locked->subject_person_id);
@@ -156,7 +115,6 @@ final class ExportSubjectData
                     if ($locked->lifecycle_state !== 'requested') {
                         throw BusinessRejection::forCode('privacy.export_request_state', sprintf('the request is already %s; approvals only count while it is requested', $locked->lifecycle_state));
                     }
-
                     if ($locked->approver_one_id === null) {
                         $locked->forceFill(['approver_one_id' => $approver->actorId]);
                         $state = 'requested';
@@ -168,14 +126,10 @@ final class ExportSubjectData
                         $state = 'approved';
                     }
                     $locked->save();
-
                     $event = $this->audit->record($approver->actorId, 'privacy.export.approve', 'privacy_export_request', $locked->id, null, [
-                        'lifecycle_state' => $state,
-                        'approver_one_id' => $locked->approver_one_id,
-                        'approver_two_id' => $locked->approver_two_id,
+                        'lifecycle_state' => $state, 'approver_one_id' => $locked->approver_one_id, 'approver_two_id' => $locked->approver_two_id,
                         'branch_id' => $subjectScope->branchId, 'organization_id' => $organizationScope->organizationId,
                     ]);
-
                     return ['request_id' => $locked->id, 'lifecycle_state' => $state, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -188,11 +142,9 @@ final class ExportSubjectData
     public function execute(Actor $exporter, PrivacyExportRequest $request, string $idempotencyKey): array
     {
         $payload = hash('sha256', implode('|', ['privacy.export.execute', $request->id, $exporter->actorId]));
-
         try {
             return $this->idempotency->execute('privacy.export.execute', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($exporter, $request): array {
-                    /** @var PrivacyExportRequest $locked */
                     $locked = PrivacyExportRequest::query()->whereKey($request->id)->lockForUpdate()->firstOrFail();
                     $organizationScope = $this->organizationScope($locked->organization_id);
                     $subjectScope = PersonBranchScope::resolve($locked->subject_person_id);
@@ -203,43 +155,21 @@ final class ExportSubjectData
                     if ($locked->lifecycle_state !== 'approved') {
                         throw BusinessRejection::forCode('privacy.export_request_state', sprintf('the request must be approved before execution; it is %s', $locked->lifecycle_state));
                     }
-
                     $dataset = $this->deriveDataset($locked->subject_person_id);
-
                     $disclosure = Disclosure::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'subject_person_id' => $locked->subject_person_id,
-                        'recipient' => 'data-export:'.$exporter->actorId,
-                        'purpose' => $locked->purpose,
-                        'authority' => self::CAPABILITY,
-                        'scope_type' => 'organization',
-                        'scope_id' => $locked->organization_id,
-                        'disclosed_category' => 'subject-data-export',
-                        'disclosed_by' => $exporter->actorId,
+                        'id' => RandomIdentifier::new(), 'subject_person_id' => $locked->subject_person_id,
+                        'recipient' => 'data-export:'.$exporter->actorId, 'purpose' => $locked->purpose,
+                        'authority' => self::CAPABILITY, 'scope_type' => 'organization', 'scope_id' => $locked->organization_id,
+                        'disclosed_category' => 'subject-data-export', 'disclosed_by' => $exporter->actorId,
                     ]);
-
-                    $locked->forceFill([
-                        'lifecycle_state' => 'exported',
-                        'exported_by' => $exporter->actorId,
-                        'disclosure_id' => $disclosure->id,
-                    ]);
+                    $locked->forceFill(['lifecycle_state' => 'exported', 'exported_by' => $exporter->actorId, 'disclosure_id' => $disclosure->id]);
                     $locked->save();
-
                     $event = $this->audit->record($exporter->actorId, 'privacy.export.execute', 'disclosure', $disclosure->id, null, [
-                        'subject_person_id' => $locked->subject_person_id,
-                        'purpose' => $locked->purpose,
-                        'scope' => 'organization:'.$locked->organization_id,
-                        'request_id' => $locked->id,
-                        'as_of' => (new CarbonImmutable)->toDateString(),
-                        'branch_id' => $subjectScope->branchId, 'organization_id' => $organizationScope->organizationId,
+                        'subject_person_id' => $locked->subject_person_id, 'purpose' => $locked->purpose,
+                        'scope' => 'organization:'.$locked->organization_id, 'request_id' => $locked->id,
+                        'as_of' => (new CarbonImmutable)->toDateString(), 'branch_id' => $subjectScope->branchId, 'organization_id' => $organizationScope->organizationId,
                     ]);
-
-                    return [
-                        'export_id' => RandomIdentifier::new(),
-                        'disclosure_id' => $disclosure->id,
-                        'dataset' => $dataset,
-                        'correlation_id' => $event->correlation_id,
-                    ];
+                    return ['export_id' => RandomIdentifier::new(), 'disclosure_id' => $disclosure->id, 'dataset' => $dataset, 'correlation_id' => $event->correlation_id];
                 }),
             );
         } catch (AuthorizationDenied $denial) {
@@ -250,29 +180,13 @@ final class ExportSubjectData
     /** @return array<string, mixed> */
     private function deriveDataset(string $subjectPersonId): array
     {
-        /** @var Person $subject */
         $subject = Person::query()->findOrFail($subjectPersonId);
-
         return [
             'subject' => ['person_id' => $subjectPersonId, 'legal_name' => $subject->legal_name],
-            'consents' => Consent::query()->where('subject_person_id', $subjectPersonId)
-                ->get(['id', 'purpose_id', 'lifecycle_state', 'effective_from', 'effective_to'])
-                ->map(static fn (Consent $consent): array => [
-                    'consent_id' => trim((string) $consent->id),
-                    'purpose_id' => trim((string) $consent->purpose_id),
-                    'lifecycle_state' => $consent->lifecycle_state,
-                    'effective_from' => $consent->effective_from,
-                    'effective_to' => $consent->effective_to,
-                ])->all(),
-            'disclosures' => Disclosure::query()->where('subject_person_id', $subjectPersonId)
-                ->get(['id', 'recipient', 'purpose', 'disclosed_category', 'created_at'])
-                ->map(static fn (Disclosure $disclosure): array => [
-                    'disclosure_id' => trim((string) $disclosure->id),
-                    'recipient' => $disclosure->recipient,
-                    'purpose' => $disclosure->purpose,
-                    'disclosed_category' => $disclosure->disclosed_category,
-                    'at' => $disclosure->created_at?->toDateTimeString(),
-                ])->all(),
+            'consents' => Consent::query()->where('subject_person_id', $subjectPersonId)->get(['id', 'purpose_id', 'lifecycle_state', 'effective_from', 'effective_to'])
+                ->map(static fn (Consent $consent): array => ['consent_id' => trim((string) $consent->id), 'purpose_id' => trim((string) $consent->purpose_id), 'lifecycle_state' => $consent->lifecycle_state, 'effective_from' => $consent->effective_from, 'effective_to' => $consent->effective_to])->all(),
+            'disclosures' => Disclosure::query()->where('subject_person_id', $subjectPersonId)->get(['id', 'recipient', 'purpose', 'disclosed_category', 'created_at'])
+                ->map(static fn (Disclosure $disclosure): array => ['disclosure_id' => trim((string) $disclosure->id), 'recipient' => $disclosure->recipient, 'purpose' => $disclosure->purpose, 'disclosed_category' => $disclosure->disclosed_category, 'at' => $disclosure->created_at?->toDateTimeString()])->all(),
         ];
     }
 
@@ -292,7 +206,6 @@ final class ExportSubjectData
         if ($organization === null || $organization->lifecycle_state !== 'active') {
             throw BusinessRejection::forCode('privacy.export_organization_unknown', 'the export organization must be active');
         }
-
         return StructureScope::organization($organization->id);
     }
 
