@@ -36,6 +36,7 @@ const navigation = [
   { href: '/students', label: 'Students & Admissions', key: 'students', icon: 'users' as const, group: 'Work' },
   { href: '/academic', label: 'Academic Operations', key: 'academic', icon: 'academic' as const, group: 'Work' },
   { href: '/teachers', label: 'People & Faculty', key: 'teachers', icon: 'teacher' as const, group: 'Work' },
+  { href: '/crm?view=front-office', label: 'Reception Desk', key: 'front-office', icon: 'crm' as const, group: 'Work' },
   { href: '/crm', label: 'Front Office / CRM', key: 'crm', icon: 'crm' as const, group: 'Work' },
   { href: '/finance', label: 'Finance', key: 'finance', icon: 'finance' as const, group: 'Operations' },
   { href: '/reporting', label: 'Reports', key: 'reporting', icon: 'reporting' as const, group: 'Operations' },
