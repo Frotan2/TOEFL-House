@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ asset('css/toefl-house-ultimate.css') }}">
     <link rel="stylesheet" href="{{ asset('css/toefl-house-route-state.css') }}">
     <link rel="stylesheet" href="{{ asset('css/toefl-house-operations.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/toefl-house-legacy-operations.css') }}">
     <style>
         :root {
             --ink:#162033; --muted:#62718a; --line:#dde5ef; --surface:#fff; --bg:#f8fafc;
