@@ -58,12 +58,17 @@ assert.match(blade, /toefl-house-operations\.css/, 'workspace blade: operational
 const legacyLayout = fs.readFileSync(path.join(viewsRoot, 'layouts', 'app.blade.php'), 'utf8');
 assert.match(legacyLayout, /toefl-house-ultimate\.css/, 'legacy layout: unified visual contract missing');
 assert.match(legacyLayout, /toefl-house-operations\.css/, 'legacy layout: operational visual contract missing');
+assert.match(legacyLayout, /toefl-house-legacy-operations\.css/, 'legacy layout: legacy operations contract missing');
 
 const specialistBlades = {
   placement: ['placement', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-placement\.css']],
   finance: ['finance', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
   hr: ['hr', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
   payroll: ['payroll', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  reporting: ['reporting', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  organization: ['organization', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  identity: ['identity', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
+  access: ['access', 'index.blade.php', ['toefl-house-ultimate\.css', 'toefl-house-route-state\.css', 'toefl-house-operations\.css']],
 };
 for (const [domain, [folder, filename, cssContracts]] of Object.entries(specialistBlades)) {
   const file = path.join(viewsRoot, folder, filename);
@@ -72,7 +77,7 @@ for (const [domain, [folder, filename, cssContracts]] of Object.entries(speciali
   for (const contract of cssContracts) assert.match(source, new RegExp(contract), `${domain}: ${contract} is not loaded`);
 }
 
-const legacyViews = ['library', 'communication', 'documents', 'organization', 'access', 'audit', 'privacy'];
+const legacyViews = ['library', 'communication', 'documents', 'audit', 'privacy'];
 for (const folder of legacyViews) {
   const file = path.join(viewsRoot, folder, 'index.blade.php');
   assert.ok(fs.existsSync(file), `${folder}: legacy domain Blade mount is missing`);
