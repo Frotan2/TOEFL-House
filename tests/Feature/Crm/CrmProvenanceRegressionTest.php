@@ -11,7 +11,6 @@ use App\Modules\Crm\Queries\VisitorListQuery;
 use App\Modules\Crm\Queries\VisitorTimelineQuery;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
-use Carbon\CarbonImmutable;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
