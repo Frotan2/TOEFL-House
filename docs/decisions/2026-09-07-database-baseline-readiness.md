@@ -6,7 +6,7 @@
 
 ## Context
 
-TOEFL House currently has exactly 190 migration files. Many of the newest migrations are not disposable history: they contain active domain convergence and database integrity hardening. The project is still pre-production, so a clean baseline is desirable once the schema is stable.
+TOEFL House currently has exactly 185 migration files (ordinals `000001`–`000190`; the `000175`–`000179` numbering gap is historical — this paragraph originally said 190 and was corrected 2026-09-09). Many of the newest migrations are not disposable history: they contain active domain convergence and database integrity hardening. The project is still pre-production, so a clean baseline is desirable once the schema is stable.
 
 A migration count is not a correctness metric. The engineering objective is one canonical schema with controlled versioned evolution, not the smallest possible number of files.
 

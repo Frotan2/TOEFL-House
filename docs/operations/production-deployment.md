@@ -77,6 +77,42 @@ nginx serves **only** `current/public` (see §11). The project root —
 `app/`, `config/`, `.env`, `database/`, `storage/`, `.git` — is never
 reachable over HTTP.
 
+### First installation (greenfield)
+
+`deploy/deploy.sh` is the release-switch procedure; it migrates but
+deliberately never seeds. On a **brand-new** installation, after the first
+successful deployment (migrations applied, health green) run the guarded
+first-run bootstrap exactly once to create the bootstrap organization, the
+genesis campus + branch that every branch-mandated intake requires, and the
+owner account:
+
+```bash
+BOOTSTRAP_OWNER_NAME="<full legal name>" \
+BOOTSTRAP_OWNER_BIRTHDATE="YYYY-MM-DD" \
+BOOTSTRAP_OWNER_USERNAME="<owner-username>" \
+BOOTSTRAP_OWNER_PASSWORD='<strong-password>' \
+  php artisan db:seed --class=FirstRunBootstrapSeeder --force
+```
+
+Contract (pinned by `WindowsOneClickDeploymentContractTest`):
+
+- The variables are read from the **process environment only** — never from
+  `.env` — and nothing but the bcrypt password hash is persisted.
+- The seeder is a **no-op once any user account exists**: it can never touch,
+  overwrite or compete with records on a live system, and re-running it is
+  safe.
+- This is the one sanctioned place where structure facts are written outside
+  the four-actor `StructureDecision` chain, and only at genesis — see
+  `docs/decisions/2026-09-09-first-run-genesis-structure.md`. From the moment
+  bootstrap completes, all structure change goes through the governed
+  four-actor console workflow.
+- The standard finance chart needs no separate step: migration `000186`
+  seeds it during `migrate`.
+
+Afterwards log in as the owner and provision real staff through the normal
+identity/access workflows; rotate away from the bootstrap owner for daily
+administration.
+
 ## 5. Installing dependencies
 
 `deploy/deploy.sh` runs, per release:
@@ -95,8 +131,9 @@ versions of its own; a duplicated contract drifts, and it had started refusing
 releases that were certified on the locked runtime. If a version must be tightened, change
 `docs/RUNTIME_ENVIRONMENT_LOCK.md` and `scripts/runtime/verify-environment.mjs`
 together — never here.) PHP and Composer are installed once on the host
-(standard package manager or the repository's `docs/environment` recovery
-procedure for a from-scratch build).
+(standard package manager, the self-contained provisioner
+`scripts/runtime/provision.sh`, or the from-source fallback narrative in
+`docs/RUNTIME_ENVIRONMENT.md`).
 
 ## 6. Frontend build
 

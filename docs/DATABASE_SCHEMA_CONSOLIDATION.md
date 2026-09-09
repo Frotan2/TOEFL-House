@@ -2,6 +2,14 @@
 
 **Status:** BASELINE DEFERRED — SCHEMA FREEZE REQUIRED
 
+> **Progress note (2026-09-09):** the environment limitation cited below no
+> longer holds — the locked runtime (PostgreSQL 18.4 via
+> `scripts/runtime/provision.sh`) now exists, and the **entire 185-migration
+> chain has been replayed from zero (185/185)** with a live schema census
+> recorded in `AUDIT-2026-09-09-FINAL-CERTIFICATION.md` §4. The deferral
+> decision itself stands: physical consolidation still requires a schema
+> freeze and the full baseline procedure of §5 before any chain removal.
+
 **Branch:** `frontend-transformation-2026-09`
 
 **Assessment date:** 2026-09-07
@@ -86,18 +94,23 @@ The fact that the project has many migrations is **not** by itself a defect.
 
 ## 8. Verification classification
 
+Rows updated 2026-09-09 once the locked runtime existed
+(`scripts/runtime/provision.sh`, PostgreSQL 18.4):
+
 | Area | Status |
 |---|---|
 | Migration inventory | STATICALLY REVIEWED |
 | Historical retirement detection | STATICALLY REVIEWED |
 | Reference-data separation design | IMPLEMENTED |
-| Canonical physical baseline | UNVERIFIED |
-| Fresh PostgreSQL database | UNVERIFIED — ENVIRONMENT BLOCKED |
-| Existing DB reconciliation | UNVERIFIED — ENVIRONMENT BLOCKED |
+| Canonical physical baseline | UNVERIFIED — baseline not yet generated (deferred behind schema freeze) |
+| Fresh PostgreSQL database | **VERIFIED (2026-09-09)** — 185/185 replay from zero on fresh databases, repeated per journey |
+| Existing DB reconciliation | UNVERIFIED — no pre-existing production database exists in this environment to reconcile |
 | Old-chain vs baseline schema diff | UNVERIFIED — baseline not yet generated |
-| PostgreSQL constraint execution | UNVERIFIED — ENVIRONMENT BLOCKED |
-| Laravel migration/runtime boot | UNVERIFIED — Composer/runtime unavailable |
+| PostgreSQL constraint execution | **VERIFIED (2026-09-09)** — invariant (6/6) and concurrency (4/4) gates executed against the migrated schema |
+| Laravel migration/runtime boot | **VERIFIED (2026-09-09)** — full suite and three real-HTTP journeys booted the application on the locked runtime |
 
 ## 9. Required next runtime operation
 
 Run the migration-chain replay in a disposable PostgreSQL database, export the schema-only definition, and use that exact artifact as the input to physical baseline construction. The repository must not claim `DATABASE CONVERGED` until the fresh-baseline replay and schema equivalence checks are runtime-verified.
+
+The first half of this operation (fresh replay) is now routine — it is exactly what `migrate:fresh` did for the 2026-09-09 certification. What remains gated is the *baseline construction and equivalence proof* itself, pending a schema freeze.

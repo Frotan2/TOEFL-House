@@ -1,5 +1,13 @@
 # TOEFL House — Runtime Environment
 
+> **SUPERSEDED (2026-09-09) — retained as the from-source fallback narrative.**
+> The PHP 8.2.33 build described here was an intermediate stage. The locked
+> runtime is **PHP 8.4.14** provisioned by `scripts/runtime/provision.sh`
+> (self-contained npm-carried build); the authoritative specification is
+> `RUNTIME_ENVIRONMENT_LOCK.md`. `RUNTIME_ENVIRONMENT_LOCK.md` §6 points back
+> to this document only as the fallback if the npm-carried PHP build ever
+> disappears. Nothing below is the current runtime.
+
 How the verified runtime was established, so it can be reproduced. Every
 version below was observed in the running environment, not inferred.
 

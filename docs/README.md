@@ -28,6 +28,18 @@ This is the single human/AI entry point to the TOEFL House engineering knowledge
 20. [`RUNTIME_VERIFICATION_HANDOFF.md`](RUNTIME_VERIFICATION_HANDOFF.md) — pre-runtime state, blockers, verification order and handoff evidence template.
 21. [`ai/00-AI-ENTRYPOINT.md`](ai/00-AI-ENTRYPOINT.md) — mandatory AI engineering entry point.
 
+## Runtime, testing and operations documents
+
+- [`RUNTIME_ENVIRONMENT_LOCK.md`](RUNTIME_ENVIRONMENT_LOCK.md) — **the authoritative runtime specification** (locked versions, required extensions, verification chain, provisioner). Machine-checked by `npm run verify:environment`.
+- [`RUNTIME_VERIFICATION_HANDOFF.md`](RUNTIME_VERIFICATION_HANDOFF.md) (also in the authority chain above) — the session-by-session runtime evidence record (Parts I–L), ending in the 2026-09-09 final certification.
+- [`RUNTIME_ENVIRONMENT.md`](RUNTIME_ENVIRONMENT.md) — superseded 8.2-era build narrative, retained as the from-source fallback for the lock.
+- [`TESTING_STRATEGY_LOCK.md`](TESTING_STRATEGY_LOCK.md) — mandatory test-isolation strategy (enforced by an architecture test).
+- [`TEST_SUITE_ARCHITECTURE.md`](TEST_SUITE_ARCHITECTURE.md) — what each test layer proves and must not replace.
+- [`DATABASE_SCHEMA_CONSOLIDATION.md`](DATABASE_SCHEMA_CONSOLIDATION.md) — migration-chain integrity and the runtime-gated baseline decision.
+- [`operations/production-deployment.md`](operations/production-deployment.md) — the operator deployment/DR manual (nginx + PHP-FPM, `deploy/` scripts, first-install bootstrap, health, backup/restore, rollback doctrine).
+- [`reference/current-state-compliance-evidence.md`](reference/current-state-compliance-evidence.md) — supporting evidence snapshot (2026-09-07), not primary authority.
+- The root-level [`../SETUP.md`](../SETUP.md) — supported setup/verification procedure (Windows launcher, clean-environment provisioner, all verification commands).
+
 ## Authority chain for implementation work
 
 For implementation/cleanup work, apply the canonical architecture and data/security decisions first, then the repository-wide hygiene and terminology standards. The hygiene and terminology standards never override a domain, security, database, or release decision.
@@ -70,6 +82,10 @@ Use `CANONICAL_TERMINOLOGY.md` for current domain names. New synonyms for an exi
   verified line, the corrections applied to it, and the fresh verification record
   (all gates re-run, plus live browser E2E and a running-instance readiness check).
   **Read this before treating any audit verdict as release authority.**
+- [`AUDIT-2026-09-08-GATE-EVIDENCE.md`](AUDIT-2026-09-08-GATE-EVIDENCE.md) —
+  the gate-by-gate evidence record behind the 2026-09-08 reconciliation
+  (deployment rehearsal, DR drill, volume fixtures; cited by the 2026-09-09
+  certification as carried-forward evidence).
 - `AUDIT-2026-09-08-PRODUCTION-READINESS.md` and the root-level
   `FINAL-ENGINEERING-REPORT.md` / `AUDIT-SUMMARY.md` — the superseded certification
   from `arena/01a0814a-toefl-house`, retained verbatim with inline `[R.n]`

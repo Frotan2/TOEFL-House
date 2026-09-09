@@ -1,6 +1,6 @@
 # TOEFL House — Runtime Verification Handoff
 
-**STATUS: FULL PHPUNIT SUITE GREEN ON A PROVISIONED RUNTIME AND GREEN IN CI (899 tests, 0 failures, 1 network-gated skip) — RUNTIME REPRODUCIBLE VIA `scripts/runtime/provision.sh`; SEE PART I (convergence), PART J (CI) AND PART K (reconciliation, re-verification, certification correction)**
+**STATUS: CERTIFIED PRODUCTION-READY AT COMMIT `96925d3` (2026-09-09) — full gate chain re-executed on the locked runtime; 986 tests / 7,400 assertions / 0 failures (1 network-gated skip); all three real-HTTP business journeys green from true first-boot databases (77/77, 29/29, 27/27); CI green on the pushed commits. Runtime reproducible via `scripts/runtime/provision.sh`. Release authority: `AUDIT-2026-09-09-FINAL-CERTIFICATION.md`. SEE PART L (final certification), then PART I (convergence), PART J (CI) AND PART K (reconciliation, re-verification, certification correction)**
 
 This document is the canonical handoff record for the next engineering agent. It records what has been established before real runtime verification and what still requires an executable environment.
 
@@ -9,24 +9,24 @@ This document is the canonical handoff record for the next engineering agent. It
 | Item | Current evidence |
 |---|---|
 | Repository | `Frotan2/TOEFL-House` |
-| Working branch | `arena/01a081d4-toefl-house` — the reconciled authoritative branch (previous: `arena/01a07c87-toefl-house`, branched from `frontend-transformation-2026-09`) |
-| Base commit | `54d7e1a` = tip of `arena/01a080c8-toefl-house`, with `9225b33` (`arena/01a0814a-toefl-house`) merged as a second parent (previous base: `25e4f425b53baa012ac655b8d9459e66ae161859`) |
-| `main` HEAD | `14c9869b7193057437c621ddf26d48f49271980c` |
+| Working branch | `arena/01a08450-toefl-house` (2026-09-09 final certification line; history has since been squashed to a single root commit `5b38775`, so pre-squash lineage exists only in this document and the reconciliation records) |
+| Base commit | squashed root `5b38775` (previous lineage: `arena/01a081d4-toefl-house` ← `arena/01a080c8-toefl-house` @ `54d7e1a`, with `9225b33` (`arena/01a0814a-toefl-house`) merged as a second parent — see Part K) |
+| `main` HEAD | `ea0d054e378a91a5742d75a19f56af1569a7840c` (as observed 2026-09-09) |
 | Backend | Laravel 12.x modular monolith |
 | PHP project constraint | `^8.2` |
 | Laravel project constraint | `^12.67.0` |
 | Database | PostgreSQL (`pgsql`) |
 | Database target | PostgreSQL 18.x |
-| Composer target | 2.10.x |
-| Node target | 22.x (`package.json` engine: 22.23.1) |
-| npm target | 10.9.2 |
+| Composer target | locked 2.9.2, allowed `>=2.5 <3.0` |
+| Node target | 22.x (`package.json` engines: `>=22.0 <23.0`) |
+| npm target | `>=10.0` (locked observation: 10.9.8) |
 | React | 19.x (`^19.1.1`) |
 | Vite | 7.x (`^7.1.5`) |
 | TypeScript | 5.9.x (`^5.9.2`) |
 | Architecture state | Modular monolith with domain-owned writes, query/read boundaries, PostgreSQL invariants, React presentation/intent orchestration |
 | Frontend transport | `resources/js/core/api.ts` is the canonical transport layer |
 | Database baseline | Deferred; current migration chain remains the authoritative implementation candidate until PostgreSQL schema freeze/replay |
-| Release state | Not runtime-certified; no production-readiness claim |
+| Release state | **Certified production-ready at commit `96925d3`** (2026-09-09) — `AUDIT-2026-09-09-FINAL-CERTIFICATION.md` is the release authority; see Part L |
 
 Repository evidence for versions is in `composer.json` and `package.json`. The branch and `main` heads were verified immediately before this handoff was updated.
 
@@ -1348,3 +1348,72 @@ required by one:
 The next agent should treat this branch as the baseline, work items 1–6, and never
 promote a local or documented green state to a release claim without the CI run and
 the protocol's rehearsal items in hand.
+
+---
+
+# Part L — Final Certification Session (2026-09-09)
+
+The final principal-architect session ran the release protocol end-to-end on
+a freshly re-provisioned locked runtime. Full record and per-gate evidence:
+[`AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](AUDIT-2026-09-09-FINAL-CERTIFICATION.md).
+
+## L.1 What was executed
+
+- Runtime re-provisioned from scratch: PHP 8.4.14, Composer 2.9.2,
+  PostgreSQL 18.4, Node 22.22.3 — environment lock **8/8**.
+- Static gates: `composer validate --strict`, `check-platform-reqs`, Pint
+  (878 files), PHPStan level 6, migration-discipline audit, terminology
+  audit — all clean.
+- Database: 185/185 migration replay; finance chart present; invariants
+  **6/6**; concurrency **4/4**; live schema census re-measured with
+  documented methodology.
+- Full suite: **986 tests / 7,400 assertions / 0 failures**, 1
+  network-gated skip (`WindowsLauncherContractTest` PHP-mirror URL probe —
+  environment limitation, not a code failure).
+- Frontend: typecheck, Vite build, console mount — green.
+- **Three real-HTTP business journeys from true first-boot databases:**
+  student lifecycle **77/77** (`e2e-journey.php`), payment lifecycle
+  **29/29** (`e2e-payment-journey.php`), payroll → Finance liability
+  recognition → exactly-once journal → reconciliation **27/27**
+  (`e2e-payroll-journey.php`).
+- CI `Verification` workflow green on the pushed tip: Frontend / Static
+  analysis / Backend all PASS.
+
+## L.2 Defects found and fixed (pinned)
+
+1. **FC-1 (product):** first-run genesis dead end — intake is
+   branch-mandated but the bootstrap created no campus/branch and no
+   governed surface can create the first one (four-actor SoD needs actors
+   that cannot exist yet). Fixed in the guarded once-only
+   `FirstRunBootstrapSeeder`; pinned by
+   `test_first_run_bootstrap_provisions_the_genesis_structure`; governed by
+   ADR `decisions/2026-09-09-first-run-genesis-structure.md`.
+2. **FC-2 (harness):** the three journey scripts had drifted from the
+   converged contracts (branch provenance, canonical teacher chain, Finance
+   liability-recognition disbursement replacing the retired
+   `payroll_result` journal source). Re-converged; the journeys above are
+   the proof.
+3. **FC-3 (documented):** `php artisan serve` strips `LD_LIBRARY_PATH`/
+   `PHPRC` from the child `php -S` whenever `.env` exists
+   (`ServeCommand::$passthroughVariables`), so the launcher contract does
+   not hold there. Recorded in `RUNTIME_ENVIRONMENT_LOCK.md` §6 with the
+   direct built-in-server recipe.
+
+## L.3 Evidence boundary (do not overstate)
+
+- Executed fresh in this session: everything in L.1.
+- **Carried forward** from the 2026-09-08 line, not re-executed: live
+  browser E2E (Chromium 152, 21/21) and the deployment-rehearsal + DR-drill
+  gates (A–F in `AUDIT-2026-09-08-RECONCILIATION.md`). The deploy scripts
+  were unchanged by the certification session, so the carried evidence
+  remains applicable; periodic re-drills are operational policy.
+- **Environment-limited** in the certification sandbox: Chromium-based
+  `verify:browser`, and the PHP-mirror URL liveness probe.
+
+## L.4 Handoff instruction
+
+The next agent inherits a **certified** repository. Normal rules apply from
+here: any lock bump or material change re-runs the full verification chain
+and updates this file and `RUNTIME_ENVIRONMENT_LOCK.md` together; no claim
+above its executed evidence level; environment blockers are reported, never
+papered over.

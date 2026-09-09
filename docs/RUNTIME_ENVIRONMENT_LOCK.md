@@ -37,9 +37,11 @@ environment problem.
 which is why successive agents kept re-fighting the toolchain. The runtime is
 now built from a self-contained native PHP 8.4.14 (see §6 and
 `scripts/runtime/provision.sh`), and the **entire** verification chain has been
-executed on it: 185/185 migrations replay, the full 900-test PHPUnit suite is
-green (6,991 assertions, 0 failures, 2 network-gated skips), and every runtime
-gate passes. `composer.json` requires `^8.2` (i.e. `>=8.2 <9.0`), so 8.4 is
+executed on it: 185/185 migrations replay, the full PHPUnit suite is green on
+the latest re-execution (**986 tests / 7,400 assertions / 0 failures**, 1
+network-gated skip — 2026-09-09), and every runtime gate passes, including the
+three root-level E2E business journeys from true first-boot databases.
+`composer.json` requires `^8.2` (i.e. `>=8.2 <9.0`), so 8.4 is
 in range and fully compatible; the enforcement window is `>=8.2 <8.5`. No
 version here is sacred — this is the best-compatible, actually-verified set,
 not a preference.
@@ -156,6 +158,15 @@ vendor/bin/phpunit --no-coverage
 npm run typecheck && npm run build
 npm run test:frontend           # console mount coverage
 npm run verify:browser          # real Chromium E2E (needs CHROMIUM_PATH)
+```
+
+Release-critical business journeys (real HTTP against fresh first-boot
+databases; reset recipe in each script's header):
+
+```bash
+php e2e-journey.php             # student lifecycle          (77 checks)
+php e2e-payment-journey.php     # payment lifecycle          (29 checks)
+php e2e-payroll-journey.php     # payroll → liability → ledger (27 checks)
 ```
 
 ---

@@ -18,6 +18,10 @@
 > backend FAIL), 230 files of convergence work landed on top of it
 > immediately afterwards, and two of its three "advisory findings" and two of
 > its cited commit hashes are contradicted by the repository itself.
+>
+> **Current release authority:** [`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md)
+> certifies the system at commit `96925d3` on fully re-executed evidence
+> (2026-09-09). This report must never be cited as a release authorization.
 
 **Mission:** TOEFL House Production-Readiness Audit, Hardening, and Final Convergence  
 **Date:** 2026-09-08  

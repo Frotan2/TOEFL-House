@@ -115,10 +115,13 @@ On a virgin `toefl_house_test` (transcripts `08-`…`11-`):
   refunds against 100.00 → `total refunded=80.00`; 6 overlapping room-slot
   claims → `committed=1, rows=1`).
 
-Live schema census on the migrated database (this session):
-168 tables, 1,765 columns, 380 FKs, 53 unique constraints, 1,415 CHECK
-constraints, 494 triggers, 525 functions, 392 indexes (65 partial),
-2 exclusion constraints.
+Live schema census on the migrated database (this session, re-measured
+2026-09-09 with explicit methodology on `pg_constraint`/`pg_trigger`):
+168 tables · 1,765 columns · 168 primary keys · 380 foreign keys ·
+53 unique constraints · 336 CHECK constraints · 2 exclusion constraints ·
+285 user-defined triggers (1,805 including PostgreSQL-internal RI/constraint
+triggers) · 525 functions · 392 indexes (65 partial, 328 index-backed
+uniqueness).
 
 ---
 
@@ -306,6 +309,53 @@ php e2e-journey.php http://127.0.0.1:8999
 php e2e-payment-journey.php http://127.0.0.1:8999
 php e2e-payroll-journey.php http://127.0.0.1:8998
 ```
+
+---
+
+## 10. Post-certification coherence pass (2026-09-09, same day)
+
+A repository-wide documentation audit followed the certification commit,
+under the same authority. It changed **no code, migration, test, lockfile or
+deploy script** — documentation only — and then re-executed the full gate
+chain on the resulting tip:
+
+**Documentation fixes applied:**
+
+- This document's schema census was re-measured with explicit methodology
+  and corrected: 285 user-defined triggers (1,805 including PostgreSQL
+  internal RI/constraint triggers) and 336 CHECK constraints (`pg_constraint
+  contype='c'`; the earlier 1,415 figure was the `information_schema` CHECK
+  count, which includes NOT NULL constraints).
+- Added the missing root `README.md` (repository entry point; the `ai/`
+  entry point's mandatory reading order referenced it but it did not exist).
+- `SETUP.md` rewritten: locked runtime table, corrected migration count
+  (185 files, ordinals to `000190`), the clean-environment provisioner, the
+  guarded first-run bootstrap command, the journey/invariant/concurrency
+  gates, and removal of the obsolete "runtime certification BLOCKED" claim.
+- `docs/12`, `docs/14`, `docs/15`, `RUNTIME_ENVIRONMENT_LOCK.md`,
+  `RUNTIME_VERIFICATION_HANDOFF.md` (new Part L),
+  `DATABASE_SCHEMA_CONSOLIDATION.md`, `RUNTIME_ENVIRONMENT.md` (supersession
+  banner), `reference/current-state-compliance-evidence.md`,
+  `operations/production-deployment.md` (new first-install bootstrap
+  section), `decisions/2026-09-07-database-baseline-readiness.md`
+  (190→185 correction) — all synchronized with the certified state;
+  superseded root reports now point at this document.
+- Broken-link sweep across all live documentation: 0 broken relative links.
+
+**Re-executed on the post-audit tip (transcripts 40–42):**
+
+`npm ci` from the committed lock (reproducible: 171 packages) · typecheck,
+Vite build, console mount 8/8 · environment lock 8/8 ·
+`composer validate --strict`, `check-platform-reqs` · Pint 878 files ·
+PHPStan level 6 · migration audit PASS · terminology audit exit 0 ·
+full suite **986 / 7,400 / 0 failures / 1 network-gated skip** ·
+invariants **6/6** · concurrency **4/4** · journeys from four freshly
+dropped/created/migrated/seeded databases: **77/77, 29/29, 27/27** ·
+`bash -n` clean on every `deploy/` and `scripts/runtime/` shell script ·
+`php -l` clean on the Windows launcher helper.
+
+The certification of §1 therefore stands unchanged at the tip of this
+branch: no executed result differed from the certifying run.
 
 ---
 

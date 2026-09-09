@@ -32,17 +32,18 @@ The repository is a Laravel 12 modular monolith backed by PostgreSQL with broad 
 - donor/aid, bank reconciliation, procurement/AP and inventory/asset breadth
 - student/employee portal breadth
 - production observability/alerting depth
-- full operational browser/accessibility/performance evidence
-- physical PostgreSQL schema-baseline consolidation and independent schema equivalence proof
-- full runtime execution of the repository-wide quality gates in the official environment
+- accessibility/performance evidence depth (browser E2E was executed 2026-09-08; accessibility and realistic-volume performance evidence remain open)
+- physical PostgreSQL schema-baseline consolidation and independent schema equivalence proof (the full chain now replays 185/185 on the locked runtime; the consolidation decision itself remains runtime-gated behind a schema freeze)
 
 ## Release blockers
 
-The current documentation status must retain the runtime-certification blocker until the official runtime stack is actually available and the required gates pass.
+**No runtime-certification blocker remains.** The full repository-wide gate chain (environment lock, static gates, 185-migration replay, complete suite, invariants, concurrency, frontend build/mount, and three real-HTTP business journeys) was executed on the locked runtime, and the system is certified production-ready at commit `96925d3` — see `AUDIT-2026-09-09-FINAL-CERTIFICATION.md` (the current release authority) for the exact evidence boundary, including the items carried forward from the 2026-09-08 line (browser E2E, deployment/DR rehearsal) and the honest environment limitations.
 
 The database baseline decision is separately runtime-gated. No guessed baseline or fake migration state is acceptable.
 
 ## Priority order
+
+Items 1–2 are **complete** (2026-09-09): the official runtime was established via `scripts/runtime/provision.sh`, every verification gate executed, and the runtime defects discovered there (first-run genesis structure dead end; journey-script contract drift) were fixed and pinned by tests. They are retained below for provenance.
 
 1. Establish the official runtime environment and execute the verification gates.
 2. Resolve any runtime defects discovered there.
@@ -68,8 +69,8 @@ Historical work-package roadmaps remain historical evidence and must not overrid
 | CRM / Workspace | CURRENT / TARGET GAP | Core capability exists; richer automation/SLA/portal depth remains. |
 | Reporting / integration | CURRENT / TARGET GAP | Read-only projections/outbox/consumers exist; richer replay/DLQ/snapshot depth remains. |
 | Frontend | CURRENT / TARGET GAP | React boundary exists; remaining interactive Blade retirement remains. |
-| Operations / DR | CURRENT / TARGET GAP | Hardened deployment and recovery procedures exist; official-runtime drills remain. |
-| Codebase hygiene | CURRENT / TARGET GAP | Standards, naming, comment, compatibility and cleanup policy are canonical; full runtime execution of all gates remains blocked. |
+| Operations / DR | CURRENT | Hardened deployment and recovery procedures exist; deployment-rehearsal and DR-drill evidence was executed 2026-09-08 and carried forward by the 2026-09-09 certification; periodic re-drills remain operational policy. |
+| Codebase hygiene | CURRENT | Standards, naming, comment, compatibility and cleanup policy are canonical; all gates executed on the official locked runtime and certified 2026-09-09. |
 
 ## Release-state separation
 
