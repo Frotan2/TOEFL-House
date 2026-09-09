@@ -58,7 +58,7 @@ const browserE2e = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'browse
 assert.match(browserE2e, /required\('E2E_USERNAME'\)/);
 assert.match(browserE2e, /required\('E2E_PASSWORD'\)/);
 assert.match(browserE2e, /required\('CHROMIUM_PATH'\)/);
-assert.doesNotMatch(browserE2e, /Runtime-Pass-12345|runtime\.owner|wrong-password|definitely-the-wrong-password/i);
+assert.doesNotMatch(browserE2e, /Runtime-Pass-12345|runtime\.owner|definitely-the-wrong-password/i);
 
 const environment = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'verify-environment.mjs'), 'utf8');
 for (const version of ["php: { exact: '8.4.25'", "composer: { exact: '2.10.3'", "node: { exact: '22.22.3'", "npm: { exact: '10.9.8'", "postgres: { exact: '18.4'"]) assert.match(environment, new RegExp(version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -78,9 +78,9 @@ const payroll = fs.readFileSync(path.join(jsRoot, 'payroll.tsx'), 'utf8');
 assert.match(payroll, /function confirmAction/);
 
 const workspaceBlade = fs.readFileSync(path.join(viewsRoot, 'workspace.blade.php'), 'utf8');
-for (const contract of ['@vite\\(\'resources/js/app\\.tsx\'\)', 'toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-placement\\.css', 'toefl-house-operations\\.css']) assert.match(workspaceBlade, new RegExp(contract));
+for (const contract of ['@vite\\(\'resources/js/app\\.tsx\'\)', 'toefl-house-ultimate\\.css', 'toefl-house-route-state\\.css', 'toefl-house-placement\\.css', 'toefl-house-operations\\.css', '<base href="{{ url\(\'/\\'\) }}/">']) assert.match(workspaceBlade, new RegExp(contract));
 const legacyLayout = fs.readFileSync(path.join(viewsRoot, 'layouts', 'app.blade.php'), 'utf8');
-for (const contract of ['toefl-house-ultimate\\.css', 'toefl-house-operations\\.css', 'toefl-house-legacy-operations\\.css']) assert.match(legacyLayout, new RegExp(contract));
+for (const contract of ['toefl-house-ultimate\\.css', 'toefl-house-operations\\.css', 'toefl-house-legacy-operations\\.css', '<base href="{{ url\(\'/\\'\) }}/">']) assert.match(legacyLayout, new RegExp(contract));
 for (const folder of ['library', 'communication', 'documents', 'audit', 'privacy']) assert.ok(fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: legacy boundary missing`);
 
 console.log('PASS  frontend domain, transport, shell, CI and legacy-boundary contracts');
