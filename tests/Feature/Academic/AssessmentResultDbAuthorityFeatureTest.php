@@ -67,7 +67,7 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
         $this->assertSame($fixture['result']->released_by, $fresh->released_by);
     }
 
-    public function test_direct_sql_cannot_release_a_correction_before_the_correction_is_approved(): void
+    public function test_direct_sql_cannot_release_a_correction_against_an_unclosed_source_or_unapproved_correction(): void
     {
         $fixture = $this->releasedResult('dbreplace');
         $moderator = $this->actorWith('dbreplace-corrector', ['academic.moderate']);
@@ -80,13 +80,6 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
             'dbreplace-correction-propose',
         );
         $correction = ResultCorrection::query()->findOrFail($proposal['correction_id']);
-
-        // Close the source result exactly as the correction workflow does, but
-        // deliberately leave the correction in PROPOSED state. The database
-        // must reject any forged released replacement at this boundary.
-        DB::table('assessment_results')
-            ->where('id', $fixture['result']->id)
-            ->update(['lifecycle_state' => 'corrected']);
 
         try {
             DB::table('assessment_results')->insert([
@@ -103,7 +96,7 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            $this->fail('a proposed correction must never be enough to create a released replacement');
+            $this->fail('a replacement must not be insertable while the source is still released and the correction is proposed');
         } catch (QueryException $exception) {
             $this->assertSame('23514', $exception->getCode());
         }
@@ -111,6 +104,10 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
         $this->assertDatabaseHas('result_corrections', [
             'id' => $correction->id,
             'lifecycle_state' => 'proposed',
+        ]);
+        $this->assertDatabaseHas('assessment_results', [
+            'id' => $fixture['result']->id,
+            'lifecycle_state' => 'released',
         ]);
         $this->assertDatabaseCount('assessment_results', 1);
     }
