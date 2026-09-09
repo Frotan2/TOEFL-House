@@ -25,23 +25,19 @@ export function ActionCard({ href, title, description, icon, footer }: { href: s
   return <a className="action-card" href={href}><span className="action-card-icon" aria-hidden="true">{icon}</span><span className="action-card-body"><strong>{title}</strong><small>{description}</small>{footer && <em>{footer}</em>}</span><span className="action-card-arrow" aria-hidden="true">→</span></a>;
 }
 
-type TabItem<T extends string> = { value: T; label: string; count?: number; panelId?: string };
-
-export function SegmentedTabs<T extends string>({ items, value, onChange, ariaLabel }: { items: Array<TabItem<T>>; value: T; onChange: (value: T) => void; ariaLabel: string }) {
+export function SegmentedTabs<T extends string>({ items, value, onChange, ariaLabel }: { items: Array<{ value: T; label: string; count?: number }>; value: T; onChange: (value: T) => void; ariaLabel: string }) {
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (index: number, delta: number) => {
     if (!items.length) return;
     const next = (index + delta + items.length) % items.length;
-    const target = items[next];
-    if (!target) return;
-    onChange(target.value);
+    onChange(items[next].value);
     window.setTimeout(() => buttonRefs.current[next]?.focus(), 0);
   };
 
   return <div className="segmented-tabs" role="tablist" aria-label={ariaLabel}>
     {items.map((item, index) => {
       const selected = value === item.value;
-      return <button key={item.value} ref={(node) => { buttonRefs.current[index] = node; }} id={`tab-${item.value}`} className={selected ? 'active' : ''} role="tab" aria-selected={selected} {...(item.panelId ? { 'aria-controls': item.panelId } : {})} tabIndex={selected ? 0 : -1} type="button" onClick={() => onChange(item.value)} onKeyDown={(event) => {
+      return <button key={item.value} ref={(node) => { buttonRefs.current[index] = node; }} id={`tab-${item.value}`} className={selected ? 'active' : ''} role="tab" aria-selected={selected} aria-controls={`panel-${item.value}`} tabIndex={selected ? 0 : -1} type="button" onClick={() => onChange(item.value)} onKeyDown={(event) => {
         if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); move(index, 1); }
         if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); move(index, -1); }
         if (event.key === 'Home') { event.preventDefault(); move(index, -index); }
