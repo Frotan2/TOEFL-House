@@ -73,36 +73,40 @@ AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'disposal request history cannot be deleted' USING ERRCODE = 'check_violation';
-    END IF;
+    ELSIF TG_OP = 'UPDATE' THEN
+        IF OLD.requested_by IS DISTINCT FROM NEW.requested_by
+           OR OLD.method IS DISTINCT FROM NEW.method
+           OR OLD.reason IS DISTINCT FROM NEW.reason THEN
+            RAISE EXCEPTION 'disposal request facts are immutable';
+        END IF;
 
-    IF OLD.requested_by IS DISTINCT FROM NEW.requested_by
-       OR OLD.method IS DISTINCT FROM NEW.method
-       OR OLD.reason IS DISTINCT FROM NEW.reason THEN
-        RAISE EXCEPTION 'disposal request facts are immutable';
-    END IF;
+        IF OLD.approver_one_id IS NOT NULL AND NEW.approver_one_id IS DISTINCT FROM OLD.approver_one_id THEN
+            RAISE EXCEPTION 'first disposal approver is immutable';
+        END IF;
+        IF OLD.approver_two_id IS NOT NULL AND NEW.approver_two_id IS DISTINCT FROM OLD.approver_two_id THEN
+            RAISE EXCEPTION 'second disposal approver is immutable';
+        END IF;
 
-    IF OLD.approver_one_id IS NOT NULL AND NEW.approver_one_id IS DISTINCT FROM OLD.approver_one_id THEN
-        RAISE EXCEPTION 'first disposal approver is immutable';
-    END IF;
-    IF OLD.approver_two_id IS NOT NULL AND NEW.approver_two_id IS DISTINCT FROM OLD.approver_two_id THEN
-        RAISE EXCEPTION 'second disposal approver is immutable';
-    END IF;
+        IF OLD.executed_by IS NOT NULL AND NEW.executed_by IS DISTINCT FROM OLD.executed_by THEN
+            RAISE EXCEPTION 'disposal executor is immutable';
+        END IF;
+        IF OLD.disposal_id IS NOT NULL AND NEW.disposal_id IS DISTINCT FROM OLD.disposal_id THEN
+            RAISE EXCEPTION 'disposal linkage is immutable';
+        END IF;
 
-    IF OLD.executed_by IS NOT NULL AND NEW.executed_by IS DISTINCT FROM OLD.executed_by THEN
-        RAISE EXCEPTION 'disposal executor is immutable';
-    END IF;
-    IF OLD.disposal_id IS NOT NULL AND NEW.disposal_id IS DISTINCT FROM OLD.disposal_id THEN
-        RAISE EXCEPTION 'disposal linkage is immutable';
-    END IF;
-
-    IF OLD.lifecycle_state = 'requested' AND NEW.lifecycle_state NOT IN ('requested', 'approved') THEN
-        RAISE EXCEPTION 'invalid disposal request transition from requested to %', NEW.lifecycle_state;
-    END IF;
-    IF OLD.lifecycle_state = 'approved' AND NEW.lifecycle_state NOT IN ('approved', 'completed') THEN
-        RAISE EXCEPTION 'invalid disposal request transition from approved to %', NEW.lifecycle_state;
-    END IF;
-    IF OLD.lifecycle_state = 'completed' AND NEW.lifecycle_state <> 'completed' THEN
-        RAISE EXCEPTION 'completed disposal request is immutable';
+        IF OLD.lifecycle_state = 'requested' AND NEW.lifecycle_state NOT IN ('requested', 'approved') THEN
+            RAISE EXCEPTION 'invalid disposal request transition from requested to %', NEW.lifecycle_state;
+        END IF;
+        IF OLD.lifecycle_state = 'approved' AND NEW.lifecycle_state NOT IN ('approved', 'completed') THEN
+            RAISE EXCEPTION 'invalid disposal request transition from approved to %', NEW.lifecycle_state;
+        END IF;
+        IF OLD.lifecycle_state = 'completed' AND NEW.lifecycle_state <> 'completed' THEN
+            RAISE EXCEPTION 'completed disposal request is immutable';
+        END IF;
+    ELSE
+        IF NEW.lifecycle_state <> 'requested' THEN
+            RAISE EXCEPTION 'new disposal requests must start in requested state';
+        END IF;
     END IF;
 
     IF NEW.lifecycle_state = 'requested' THEN
@@ -219,8 +223,6 @@ SQL);
 
     public function down(): void
     {
-        // The prior migration remains the authoritative fallback for these
-        // functions/triggers when this reconciliation is rolled back.
         DB::unprepared(<<<'SQL'
 DROP TRIGGER IF EXISTS custody_history_guard ON custodies;
 DROP FUNCTION IF EXISTS resource_custody_history_guard();
