@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  * A correction replacement may be released only after the staged correction
  * itself is approved. Reviewer/approver/releaser provenance is immutable once
  * recorded and a replacement remains linked to the same attempt as its source.
+ * The correction approval is a transaction-level invariant: an approved
+ * correction cannot commit without its corrected source and released successor.
  */
 return new class extends Migration
 {
@@ -206,10 +208,10 @@ return new class extends Migration
                        SELECT 1
                          FROM result_corrections rc
                         WHERE rc.result_id = NEW.id
-                          AND rc.lifecycle_state = 'proposed'
+                          AND rc.lifecycle_state = 'approved'
                    )
                 THEN
-                    RAISE EXCEPTION 'correcting an assessment result requires its staged correction proposal before replacement approval commits'
+                    RAISE EXCEPTION 'correcting an assessment result requires its approved staged correction'
                         USING ERRCODE = 'check_violation';
                 END IF;
 
@@ -217,10 +219,67 @@ return new class extends Migration
             END;
             $fn$ LANGUAGE plpgsql;
             SQL);
+
+        DB::statement(<<<'SQL'
+            CREATE OR REPLACE FUNCTION academic_result_correction_commit_guard() RETURNS trigger AS $fn$
+            DECLARE
+                source_state text;
+                source_attempt char(36);
+                replacement_id char(36);
+                replacement_attempt char(36);
+                replacement_score numeric;
+                replacement_reason text;
+                replacement_scorer char(36);
+                replacement_moderator char(36);
+                replacement_approver char(36);
+                replacement_releaser char(36);
+            BEGIN
+                IF NEW.lifecycle_state <> 'approved' THEN
+                    RETURN NEW;
+                END IF;
+
+                SELECT r.lifecycle_state, r.attempt_id
+                  INTO source_state, source_attempt
+                  FROM assessment_results r
+                 WHERE r.id = NEW.result_id;
+
+                SELECT ar.id, ar.attempt_id, ar.score, ar.correction_reason,
+                       ar.scored_by, ar.moderated_by, ar.approved_by, ar.released_by
+                  INTO replacement_id, replacement_attempt, replacement_score,
+                       replacement_reason, replacement_scorer, replacement_moderator,
+                       replacement_approver, replacement_releaser
+                  FROM assessment_results ar
+                 WHERE ar.corrects_id = NEW.result_id
+                   AND ar.lifecycle_state = 'released'
+                 ORDER BY ar.created_at DESC, ar.id DESC
+                 LIMIT 1;
+
+                IF source_state IS DISTINCT FROM 'corrected'
+                   OR replacement_id IS NULL
+                   OR replacement_attempt IS DISTINCT FROM source_attempt
+                   OR replacement_score IS DISTINCT FROM NEW.score
+                   OR replacement_reason IS DISTINCT FROM NEW.reason
+                   OR replacement_scorer IS DISTINCT FROM NEW.proposed_by
+                   OR replacement_moderator IS NULL
+                   OR replacement_approver IS DISTINCT FROM NEW.approved_by
+                   OR replacement_releaser IS DISTINCT FROM NEW.approved_by
+                THEN
+                    RAISE EXCEPTION 'an approved result correction requires a corrected source and matching released replacement'
+                        USING ERRCODE = 'check_violation';
+                END IF;
+
+                RETURN NEW;
+            END;
+            $fn$ LANGUAGE plpgsql;
+            SQL);
+        DB::statement('DROP TRIGGER IF EXISTS academic_result_correction_commit_guard_trigger ON result_corrections');
+        DB::statement('CREATE CONSTRAINT TRIGGER academic_result_correction_commit_guard_trigger AFTER INSERT OR UPDATE ON result_corrections DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION academic_result_correction_commit_guard()');
     }
 
     public function down(): void
     {
+        DB::statement('DROP TRIGGER IF EXISTS academic_result_correction_commit_guard_trigger ON result_corrections');
+        DB::statement('DROP FUNCTION IF EXISTS academic_result_correction_commit_guard()');
         DB::statement("ALTER TABLE assessment_results DROP CONSTRAINT IF EXISTS assessment_results_not_self_corrected");
         DB::statement('ALTER TABLE assessment_results DROP CONSTRAINT IF EXISTS assessment_results_corrects_fk');
         DB::statement(<<<'SQL'
