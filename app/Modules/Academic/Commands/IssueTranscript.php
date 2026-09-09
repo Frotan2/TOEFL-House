@@ -46,8 +46,8 @@ final class IssueTranscript
         private readonly AcademicAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
-        private readonly AttemptedOperation $attemptedOperation,
         private readonly TranscriptComposer $composer,
+        private readonly AttemptedOperation $attemptedOperation,
         private readonly RegisterDocument $registerDocument,
         private readonly TransitionDocument $transitionDocument,
     ) {}
@@ -60,6 +60,12 @@ final class IssueTranscript
         try {
             return $this->idempotency->execute('academic.transcript.issue', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($issuer, $studentId, $programVersionId, $idempotencyKey): array {
+                    // Official transcripts are compound historical snapshots.
+                    // REPEATABLE READ prevents concurrent Academic mutations
+                    // committed mid-composition from producing a payload whose
+                    // sections describe different database states.
+                    DB::statement('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+
                     $this->access->require($issuer, self::CAPABILITY_ISSUE, RecordBranch::studentBranchForId($studentId), 'academic.transcript_denied');
 
                     /** @var Student $student */
