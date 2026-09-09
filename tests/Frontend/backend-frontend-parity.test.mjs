@@ -6,11 +6,11 @@ const containsAll = (source, markers, label) => {
   for (const marker of markers) assert.ok(source.includes(marker), `${label} is missing: ${marker}`);
 };
 
-const [resourceRoutes, resourceController, library, placementRoutes, placement, navigation] = await Promise.all([
+const [resourceRoutes, resourceController, library, apiRoutes, placement, navigation] = await Promise.all([
   read('routes/resources-api.php'),
   read('app/Http/Controllers/Api/ResourcesApiController.php'),
   read('resources/js/library.tsx'),
-  read('routes/placement-api.php'),
+  read('routes/api.php'),
   read('resources/js/placement.tsx'),
   read('resources/js/core/navigation.ts'),
 ]);
@@ -49,9 +49,14 @@ containsAll(library, [
   'function executeDisposal(request: RecordMap)',
 ], 'Library workspace capability contract');
 
-containsAll(placementRoutes, [
-  "'/placement/attempts'", "'/placement/attempts/{attemptId}/submit'", "'/placement/attempts/{attemptId}/cancel'",
-], 'Placement API base contract');
+containsAll(apiRoutes, [
+  "use App\\Http\\Controllers\\Api\\PlacementApiController;",
+  "Route::prefix('placement')->name('api.placement.')",
+  "'/attempts'",
+  "'/attempts/{attemptId}/submit'",
+  "'/attempts/{attemptId}/cancel'",
+], 'Placement API route contract');
+
 containsAll(placement, [
   '/placement/attempts/${encodeURIComponent(attempt.id)}/submit',
   '/placement/attempts/${encodeURIComponent(attempt.id)}/cancel',
