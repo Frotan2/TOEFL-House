@@ -32,11 +32,20 @@ for (const [domain, filename] of Object.entries(domainEntrypoints)) {
 const app = fs.readFileSync(path.join(jsRoot, 'app.tsx'), 'utf8');
 assert.match(app, /react-console/, 'app.tsx: canonical React console mount must remain present');
 
+const ui = fs.readFileSync(path.join(jsRoot, 'ui.tsx'), 'utf8');
+assert.match(ui, /metaKey\s*\|\|\s*event\.ctrlKey/, 'shell: Ctrl/⌘+K command palette shortcut missing');
+assert.match(ui, /event\.key === 'ArrowDown'/, 'shell: ArrowDown traversal missing');
+assert.match(ui, /event\.key === 'ArrowUp'/, 'shell: ArrowUp traversal missing');
+assert.match(ui, /event\.key === 'Enter'/, 'shell: Enter activation missing');
+assert.match(ui, /event\.key === 'Escape'/, 'shell: Escape dismissal missing');
+assert.match(ui, /aria-selected/, 'shell: active command palette option must be exposed semantically');
+
 const blade = fs.readFileSync(path.join(root, 'resources', 'views', 'workspace.blade.php'), 'utf8');
 assert.match(blade, /@vite\('resources\/js\/app\.tsx'\)/, 'workspace blade: canonical app entrypoint missing');
 assert.match(blade, /toefl-house-ultimate\.css/, 'workspace blade: global visual contract missing');
 assert.match(blade, /toefl-house-route-state\.css/, 'workspace blade: route-aware navigation contract missing');
 assert.match(blade, /toefl-house-placement\.css/, 'workspace blade: Placement visual contract missing');
+assert.match(blade, /toefl-house-operations\.css/, 'workspace blade: operational visual contract missing');
 
 const lifecycle = fs.readFileSync(
   path.join(root, 'app', 'Modules', 'Academic', 'Placement', 'Domain', 'PlacementProfileLifecycle.php'),
