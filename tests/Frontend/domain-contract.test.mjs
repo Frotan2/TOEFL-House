@@ -41,6 +41,13 @@ assert.match(ui, /event\.key === 'Enter'/, 'shell: Enter activation missing');
 assert.match(ui, /event\.key === 'Escape'/, 'shell: Escape dismissal missing');
 assert.match(ui, /aria-selected/, 'shell: active command palette option must be exposed semantically');
 
+const navigationPaths = [
+  '/workspace', '/crm?view=front-office', '/students', '/academic', '/placement', '/teachers', '/hr', '/crm',
+  '/finance', '/payroll', '/library', '/communication', '/reporting', '/documents', '/organization', '/identity',
+  '/access', '/privacy', '/audit', '/management',
+];
+for (const route of navigationPaths) assert.match(ui, new RegExp(`href=[\"']${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\"']`), `shell: navigation route ${route} is missing`);
+
 const blade = fs.readFileSync(path.join(viewsRoot, 'workspace.blade.php'), 'utf8');
 assert.match(blade, /@vite\('resources\/js\/app\.tsx'\)/, 'workspace blade: canonical app entrypoint missing');
 assert.match(blade, /toefl-house-ultimate\.css/, 'workspace blade: global visual contract missing');
