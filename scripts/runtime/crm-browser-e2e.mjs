@@ -31,12 +31,43 @@ const record = (name, pass, detail) => {
 };
 
 const setReactControl = async (page, selector, value) => {
-  await page.$eval(selector, (element, nextValue) => {
+  const updated = await page.$eval(selector, (element, nextValue) => {
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
-    setter?.call(element, nextValue);
+    if (!setter) return false;
+    setter.call(element, nextValue);
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
   }, value);
+  if (!updated) throw new Error(`Unable to set React control ${selector}`);
+};
+
+const setFormControl = async (page, submitText, selector, value) => {
+  const updated = await page.evaluate(({ needle, controlSelector, nextValue }) => {
+    const form = [...document.querySelectorAll('.crm-detail form')]
+      .find((node) => (node.querySelector('button[type="submit"]')?.textContent || '').includes(needle));
+    const element = form?.querySelector(controlSelector);
+    if (!element) return false;
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
+    if (!setter) return false;
+    setter.call(element, nextValue);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }, { needle: submitText, controlSelector: selector, nextValue: value });
+  if (!updated) throw new Error(`Control ${selector} in form ${submitText} was not found`);
+};
+
+const submitFormByButton = async (page, text) => {
+  const submitted = await page.evaluate((needle) => {
+    const form = [...document.querySelectorAll('form')]
+      .find((node) => (node.querySelector('button[type="submit"]')?.textContent || '').includes(needle));
+    const button = form?.querySelector('button[type="submit"]');
+    if (!button) return false;
+    button.click();
+    return true;
+  }, text);
+  if (!submitted) throw new Error(`Form with submit button containing "${text}" was not found`);
 };
 
 const clickButtonByText = async (page, text) => {
@@ -93,7 +124,7 @@ try {
   await page.waitForSelector('#crm-title');
   await page.waitForSelector('form.crm-capture');
 
-  const branchState = await page.$eval('.crm-capture select', (select) => ({
+  const branchState = await page.$eval('.crm-capture select:nth-of-type(3)', (select) => ({
     value: select.value,
     options: [...select.options].map((option) => option.value),
   }));
@@ -101,13 +132,11 @@ try {
 
   const captureInputs = await page.$$('.crm-capture input');
   if (captureInputs.length < 3) throw new Error('CRM capture form no longer exposes name/phone/email controls');
-  await captureInputs[0].type(`Browser CRM ${Date.now()}`);
-  await captureInputs[2].type(`crm-browser-${Date.now()}@example.test`);
-
-  const captureSelects = await page.$$('.crm-capture select');
-  if (captureSelects.length < 3) throw new Error('CRM capture form no longer exposes branch selector');
+  const uniqueSuffix = `${Date.now()}`;
+  await captureInputs[0].type(`Browser CRM ${uniqueSuffix}`);
+  await captureInputs[2].type(`crm-browser-${uniqueSuffix}@example.test`);
   const branchValue = branchState.options.find(Boolean);
-  await captureSelects[2].select(branchValue);
+  await page.select('.crm-capture select:nth-of-type(3)', branchValue);
   await page.click('.crm-capture button[type="submit"]');
   await waitForNotice(page, 'Visitor captured in the CRM source of truth.');
   record('Visitor capture succeeds through the canonical API', true, 'capture acknowledgement received');
@@ -123,44 +152,19 @@ try {
     await waitForNotice(page, 'Visitor moved to');
     record('Visitor stage transition round-trips through the API', true, `${stageOptions[0]} -> ${stageOptions[1]}`);
   } else {
-    record('Visitor stage transition round-trips through the API', false, 'no authorized next transition rendered');
+    throw new Error('no authorized next transition rendered');
   }
 
-  await setReactControl(page, '.crm-detail form textarea', 'Browser E2E interaction evidence');
-  await clickButtonByText(page, 'Append interaction');
+  await setFormControl(page, 'Append interaction', 'textarea', 'Browser E2E interaction evidence');
+  await submitFormByButton(page, 'Append interaction');
   await waitForNotice(page, 'Interaction appended to the immutable timeline.');
   record('Interaction is appended to the CRM timeline', true, 'immutable interaction acknowledgement received');
 
-  const followupFormState = await page.$$eval('.crm-detail form', (forms) => forms.map((form) => ({
-    text: (form.textContent || '').replace(/\s+/g, ' ').trim(),
-    inputs: [...form.querySelectorAll('input')].map((input) => ({ type: input.type, value: input.value })),
-  })));
-  const followupIndex = followupFormState.findIndex((form) => form.text.includes('Schedule follow-up'));
-  if (followupIndex < 0) throw new Error('CRM follow-up form not found');
-
-  const forms = await page.$$('.crm-detail form');
-  const followupForm = forms[followupIndex];
-  const followupInputs = await followupForm.$$('input');
-  const dateValue = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const iso = new Date(dateValue.getTime() - dateValue.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-  const scheduledInput = followupInputs.find(async () => false);
-  void scheduledInput;
-  for (const input of followupInputs) {
-    const type = await input.evaluate((node) => node.type);
-    if (type === 'datetime-local') {
-      await input.click();
-      await input.evaluate((node, nextValue) => {
-        const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(node), 'value')?.set;
-        setter?.call(node, nextValue);
-        node.dispatchEvent(new Event('input', { bubbles: true }));
-        node.dispatchEvent(new Event('change', { bubbles: true }));
-      }, iso);
-    }
-  }
-  const followupTextInputs = followupInputs.filter(async (input) => (await input.evaluate((node) => node.type)) === 'text');
-  void followupTextInputs;
-  await setReactControl(page, '.crm-detail form:nth-of-type(4) input[type="text"]', `Browser E2E follow-up ${Date.now()}`);
-  await clickButtonByText(page, 'Schedule follow-up');
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const isoLocal = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  await setFormControl(page, 'Schedule follow-up', 'input[type="datetime-local"]', isoLocal);
+  await setFormControl(page, 'Schedule follow-up', 'input[type="text"]', `Browser E2E follow-up ${uniqueSuffix}`);
+  await submitFormByButton(page, 'Schedule follow-up');
   await waitForNotice(page, 'Follow-up scheduled in the CRM source of truth.');
   record('Follow-up is scheduled through the canonical CRM path', true, 'follow-up acknowledgement received');
 
