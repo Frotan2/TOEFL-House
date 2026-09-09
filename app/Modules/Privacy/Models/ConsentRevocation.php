@@ -11,7 +11,9 @@ use Illuminate\Database\Eloquent\Model;
 final class ConsentRevocation extends Model
 {
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     protected $fillable = ['id', 'consent_id', 'revoked_by', 'scope', 'effect'];
 
     public function save(array $options = []): bool
@@ -19,6 +21,7 @@ final class ConsentRevocation extends Model
         if ($this->exists) {
             throw BusinessRejection::forCode('privacy.revocation_immutable', 'consent revocation evidence is append-only');
         }
+
         return parent::save($options);
     }
 
