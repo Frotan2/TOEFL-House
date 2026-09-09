@@ -33,18 +33,21 @@ assert.equal(packageJson.engines?.npm, '10.9.8', 'package: npm engine drift');
 const app = fs.readFileSync(path.join(jsRoot, 'app.tsx'), 'utf8');
 assert.match(app, /react-console/);
 assert.match(app, /AppErrorBoundary/);
+assert.match(app, /ReportingApp/);
 assert.match(app, /function resolveContent/);
+assert.match(app, /case 'reporting':/);
 assert.match(app, /switch \(view as ConsoleView \| null\)/);
 
 const navigation = fs.readFileSync(path.join(jsRoot, 'core', 'navigation.ts'), 'utf8');
 assert.match(navigation, /export const navigation:/);
 assert.match(navigation, /navigationGroups/);
-for (const route of ['/workspace', '/crm?view=front-office', '/students', '/academic', '/placement', '/teachers', '/hr', '/crm', '/finance', '/payroll', '/library', '/communication', '/reporting', '/documents', '/organization', '/identity', '/access', '/privacy', '/audit', '/management']) {
+for (const route of ['/workspace', '/crm?view=front-office', '/students', '/academic', '/placement', '/teachers', '/hr', '/crm', '/finance', '/payroll', '/library', '/communication', '/workspace?view=reporting', '/documents', '/organization', '/identity', '/access', '/privacy', '/audit', '/management']) {
   assert.match(navigation, new RegExp(`href: '${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`), `navigation: ${route} missing`);
 }
+assert.doesNotMatch(navigation, /href: '\/reporting'/, 'navigation: legacy reporting route must not be primary UI');
 
 const api = fs.readFileSync(path.join(jsRoot, 'core', 'api.ts'), 'utf8');
-for (const pattern of [/credentials: 'same-origin'/, /X-CSRF-TOKEN/, /Idempotency-Key/, /correlation_id/, /DEFAULT_TIMEOUT_MS\s*=\s*30_000/, /AbortController/]) assert.match(api, pattern);
+for (const pattern of [/credentials: 'same-origin'/, /X-CSRF-TOKEN/, /Idempotency-Key/, /correlation_id/, /DEFAULT_TIMEOUT_MS\s*=\s*30_000/, /AbortController/, /network_error/]) assert.match(api, pattern);
 const boundary = fs.readFileSync(path.join(jsRoot, 'core', 'error-boundary.tsx'), 'utf8');
 assert.match(boundary, /componentDidCatch/);
 assert.match(boundary, /window\.location\.reload/);
@@ -84,6 +87,7 @@ for (const contract of [
   'toefl-house-operations.css',
   '<base href="{{ url(\'/\') }}/">',
 ]) assert.ok(workspaceBlade.includes(contract), `workspace Blade contract missing: ${contract}`);
+assert.doesNotMatch(workspaceBlade, /reporting-console|resources\/js\/reporting\.tsx/, 'workspace Blade must have one React mount authority');
 const legacyLayout = fs.readFileSync(path.join(viewsRoot, 'layouts', 'app.blade.php'), 'utf8');
 for (const contract of [
   'toefl-house-ultimate.css',
