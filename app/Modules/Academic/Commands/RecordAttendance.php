@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Attendance control: facts are append-only evidence tied to an active
- * enrollment of the session's class; corrections append a linked row with
+enrollment of the session's class; corrections append a linked row with
  * a mandatory reason and never rewrite the original.
  */
 final class RecordAttendance
@@ -112,9 +112,12 @@ final class RecordAttendance
                             throw BusinessRejection::forCode('academic.attendance_correction_reason', 'a correction requires a reason');
                         }
                         /** @var AttendanceFact|null $original */
-                        $original = AttendanceFact::query()->find($correctsId);
+                        $original = AttendanceFact::query()->whereKey($correctsId)->lockForUpdate()->first();
                         if ($original === null || $original->enrollment_id !== $lockedEnrollment->id || $original->session_id !== $session->id) {
                             throw BusinessRejection::forCode('academic.attendance_correction_target', 'a correction must target a fact of the same enrollment and session');
+                        }
+                        if (AttendanceFact::query()->where('corrects_id', $original->id)->exists()) {
+                            throw BusinessRejection::forCode('academic.attendance_correction_exists', 'an attendance fact can have only one direct correction');
                         }
                     }
 
