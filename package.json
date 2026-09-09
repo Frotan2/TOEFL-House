@@ -5,7 +5,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
-    "test:frontend": "node tests/Frontend/mount.test.mjs && node tests/Frontend/domain-contract.test.mjs && node tests/Frontend/backend-frontend-parity.test.mjs",
+    "test:frontend": "node tests/Frontend/mount.test.mjs && node tests/Frontend/productization-a11y.test.mjs && node tests/Frontend/domain-contract.test.mjs && node tests/Frontend/backend-frontend-parity.test.mjs",
     "verify:concurrency": "node scripts/runtime/concurrency-verification.mjs",
     "verify:invariants": "node scripts/runtime/database-invariants.mjs",
     "verify:browser": "node scripts/runtime/browser-e2e.mjs",
