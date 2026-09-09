@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Academic\Models;
 
+use App\Support\Errors\AuthorizationDenied;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -25,6 +26,32 @@ final class AssessmentResult extends Model
     protected $keyType = 'string';
 
     protected $fillable = ['id', 'attempt_id', 'score', 'lifecycle_state', 'corrects_id', 'correction_reason', 'scored_by'];
+
+    protected static function booted(): void
+    {
+        static::updating(function (self $result): void {
+            if ($result->getOriginal('lifecycle_state') !== 'approved' || $result->lifecycle_state !== 'released') {
+                return;
+            }
+
+            $releaser = trim((string) $result->released_by);
+            $approver = trim((string) $result->approved_by);
+            $moderator = trim((string) $result->moderated_by);
+
+            if ($releaser === '') {
+                throw AuthorizationDenied::forCode(
+                    'academic.release_signer_required',
+                    'a released assessment result requires attributable release signer provenance',
+                );
+            }
+            if ($releaser === $approver || $releaser === $moderator) {
+                throw AuthorizationDenied::forCode(
+                    'academic.release_not_independent',
+                    'the assessment releaser must differ from both the approver and moderator',
+                );
+            }
+        });
+    }
 
     /** @return BelongsTo<AssessmentAttempt, $this> */
     public function attempt(): BelongsTo
