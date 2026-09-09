@@ -81,6 +81,29 @@ const navigationPaths = [
 ];
 for (const route of navigationPaths) assert.match(ui, new RegExp(`href=[\"']${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\"']`), `shell: navigation route ${route} is missing`);
 
+const browserE2e = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'browser-e2e.mjs'), 'utf8');
+assert.match(browserE2e, /required\('E2E_USERNAME'\)/, 'browser E2E: username must come from runtime configuration');
+assert.match(browserE2e, /required\('E2E_PASSWORD'\)/, 'browser E2E: password must come from runtime configuration');
+assert.match(browserE2e, /required\('CHROMIUM_PATH'\)/, 'browser E2E: browser binary must be explicit');
+assert.doesNotMatch(browserE2e, /Runtime-Pass-12345|runtime\.owner/, 'browser E2E: embedded test credentials are forbidden');
+assert.doesNotMatch(browserE2e, /wrong-password|definitely-the-wrong-password/i, 'browser E2E: must not consume login throttling with a deliberate invalid login');
+
+const environment = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'verify-environment.mjs'), 'utf8');
+assert.match(environment, /php: \{ exact: '8\.4\.14'/, 'environment: PHP exact lock missing');
+assert.match(environment, /composer: \{ exact: '2\.9\.2'/, 'environment: Composer exact lock missing');
+assert.match(environment, /node: \{ exact: '22\.22\.3'/, 'environment: Node exact lock missing');
+assert.match(environment, /npm: \{ exact: '10\.9\.8'/, 'environment: npm exact lock missing');
+assert.match(environment, /postgres: \{ exact: '18\.4'/, 'environment: PostgreSQL exact lock missing');
+assert.match(environment, /function exact\(/, 'environment: exact version comparator missing');
+
+const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'verification.yml'), 'utf8');
+assert.match(workflow, /permissions:\s*\n\s*contents: read/, 'CI: workflow must use least-privilege contents permission');
+assert.match(workflow, /concurrency:\s*\n\s*group:/, 'CI: duplicate verification runs must be cancelable');
+assert.match(workflow, /cancel-in-progress: true/, 'CI: superseded verification must be canceled');
+assert.match(workflow, /NODE_VERSION: '22\.22\.3'/, 'CI: Node must match the verified runtime lock');
+assert.match(workflow, /npm ci --engine-strict/, 'CI: npm must enforce package engine constraints');
+assert.match(workflow, /timeout-minutes:/, 'CI: jobs must have bounded execution time');
+
 const hr = fs.readFileSync(path.join(jsRoot, 'hr.tsx'), 'utf8');
 assert.match(hr, /function confirmAction/, 'HR: lifecycle confirmation helper missing');
 assert.match(hr, /action === 'terminate'/, 'HR: termination must be classified as irreversible');
