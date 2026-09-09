@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\DB;
 final class ExportSubjectData
 {
     public const CAPABILITY = 'privacy.export';
+
     public const CAPABILITY_BULK_APPROVE = 'privacy.approve_bulk_export';
 
     public function __construct(
@@ -181,6 +182,7 @@ final class ExportSubjectData
     private function deriveDataset(string $subjectPersonId): array
     {
         $subject = Person::query()->findOrFail($subjectPersonId);
+
         return [
             'subject' => ['person_id' => $subjectPersonId, 'legal_name' => $subject->legal_name],
             'consents' => Consent::query()->where('subject_person_id', $subjectPersonId)->get(['id', 'purpose_id', 'lifecycle_state', 'effective_from', 'effective_to'])
@@ -206,6 +208,7 @@ final class ExportSubjectData
         if ($organization === null || $organization->lifecycle_state !== 'active') {
             throw BusinessRejection::forCode('privacy.export_organization_unknown', 'the export organization must be active');
         }
+
         return StructureScope::organization($organization->id);
     }
 
