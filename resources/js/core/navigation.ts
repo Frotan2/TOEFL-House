@@ -22,7 +22,7 @@ export const navigation: readonly NavigationItem[] = [
   { href: '/payroll', label: 'Payroll', key: 'payroll', icon: 'finance', group: 'Operations' },
   { href: '/library', label: 'Library & Resources', key: 'library', icon: 'settings', group: 'Operations' },
   { href: '/communication', label: 'Communication', key: 'communication', icon: 'crm', group: 'Operations' },
-  { href: '/reporting', label: 'Reports & Dashboards', key: 'reporting', icon: 'reporting', group: 'Operations' },
+  { href: '/workspace?view=reporting', label: 'Reports & Dashboards', key: 'reporting', icon: 'reporting', group: 'Operations' },
   { href: '/documents', label: 'Documents & Evidence', key: 'documents', icon: 'settings', group: 'Operations' },
   { href: '/organization', label: 'Organization', key: 'organization', icon: 'management', group: 'Governance' },
   { href: '/identity', label: 'Identity', key: 'identity', icon: 'users', group: 'Governance' },
