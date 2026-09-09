@@ -44,7 +44,7 @@ final class DecideProgression
 
     public function __construct(
         private readonly AcademicAccess $access,
-        private readonly IdempotentExecution $idempotency,
+        private readonly IdempotencyExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly AcademicHistoryQuery $history,
@@ -424,6 +424,9 @@ final class DecideProgression
         if (trim((string) $attempt->enrollment_id) !== trim($enrollmentId)) {
             throw BusinessRejection::forCode('academic.progression_result_enrollment_mismatch', 'the assessment result must belong to the class enrollment');
         }
+        if ($result->lifecycle_state !== 'released') {
+            throw BusinessRejection::forCode('academic.progression_result_not_released', 'progression may use only a released assessment result');
+        }
     }
 
     private function assertPrerequisitesSatisfied(string $studentId, ProgramVersionLevel $target, ?ProgramVersionLevel $current = null): void
@@ -456,6 +459,9 @@ final class DecideProgression
         }
         /** @var AssessmentResult $result */
         $result = AssessmentResult::query()->whereKey($assessmentResultId)->firstOrFail();
+        if ($result->lifecycle_state !== 'released') {
+            throw BusinessRejection::forCode('academic.progression_result_not_released', 'progression may use only a released assessment result');
+        }
         if ((float) $result->score < (float) $rule->minimum_passing_score) {
             throw BusinessRejection::forCode('academic.progression_minimum_score', 'the assessment result is below the required minimum passing score');
         }
