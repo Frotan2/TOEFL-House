@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ ($view ?? 'workspace') === 'crm' ? 'CRM — The TOEFL House' : (($view ?? 'workspace') === 'management' ? 'Management Workspace — The TOEFL House' : (($view ?? 'workspace') === 'students' ? 'Students & Admissions — The TOEFL House' : (($view ?? 'workspace') === 'academic' ? 'Academic Classes — The TOEFL House' : (($view ?? 'workspace') === 'teachers' ? 'Teacher & Faculty — The TOEFL House' : (($view ?? 'workspace') === 'reporting' ? 'Reporting & Dashboards — The TOEFL House' : 'Employee Workspace — The TOEFL House'))))) }}</title>
+    @vite('resources/js/product-theme.css')
     @if (($view ?? 'workspace') === 'reporting')
         @vite('resources/js/reporting.tsx')
     @else
