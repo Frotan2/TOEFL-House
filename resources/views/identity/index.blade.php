@@ -3,7 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Identity &amp; Access</title>
+    <title>Identity &amp; Access — The TOEFL House</title>
+    @vite('resources/js/product-theme.css')
+    <link rel="stylesheet" href="{{ asset('css/toefl-house-ultimate.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/toefl-house-route-state.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/toefl-house-operations.css') }}">
     @viteReactRefresh
     @vite(['resources/js/identity.tsx'])
 </head>
