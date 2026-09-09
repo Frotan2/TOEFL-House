@@ -1,0 +1,87 @@
+/* Operational domain presentation contract. Business truth remains server-owned. */
+
+body:has(#react-console[data-view="finance"]) .workspace,
+body:has(#react-console[data-view="payroll"]) .workspace,
+body:has(#react-console[data-view="hr"]) .workspace,
+body:has(#react-console[data-view="teachers"]) .workspace {
+  container-type: inline-size;
+}
+
+body:has(#react-console[data-view="finance"]) .table-wrap,
+body:has(#react-console[data-view="payroll"]) .table-wrap,
+body:has(#react-console[data-view="hr"]) .table-wrap,
+body:has(#react-console[data-view="teachers"]) .table-wrap {
+  border-radius: 0.85rem;
+  overflow: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+body:has(#react-console[data-view="finance"]) table,
+body:has(#react-console[data-view="payroll"]) table,
+body:has(#react-console[data-view="hr"]) table,
+body:has(#react-console[data-view="teachers"]) table {
+  min-width: 44rem;
+}
+
+body:has(#react-console[data-view="finance"]) .section-heading,
+body:has(#react-console[data-view="payroll"]) .section-heading,
+body:has(#react-console[data-view="hr"]) .section-heading,
+body:has(#react-console[data-view="teachers"]) .section-heading {
+  gap: 1rem;
+}
+
+body:has(#react-console[data-view="finance"]) .status-chip,
+body:has(#react-console[data-view="payroll"]) .status-chip,
+body:has(#react-console[data-view="hr"]) .status-chip,
+body:has(#react-console[data-view="teachers"]) .status-chip {
+  white-space: nowrap;
+}
+
+body:has(#react-console[data-view="finance"]) .panel,
+body:has(#react-console[data-view="payroll"]) .panel,
+body:has(#react-console[data-view="hr"]) .panel,
+body:has(#react-console[data-view="teachers"]) .panel {
+  break-inside: avoid;
+}
+
+@container (max-width: 880px) {
+  body:has(#react-console[data-view="finance"]) .workspace-header,
+  body:has(#react-console[data-view="payroll"]) .workspace-header,
+  body:has(#react-console[data-view="hr"]) .workspace-header,
+  body:has(#react-console[data-view="teachers"]) .workspace-header {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  body:has(#react-console[data-view="finance"]) .summary-grid,
+  body:has(#react-console[data-view="payroll"]) .summary-grid,
+  body:has(#react-console[data-view="hr"]) .summary-grid,
+  body:has(#react-console[data-view="teachers"]) .summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body:has(#react-console[data-view="finance"]) form,
+  body:has(#react-console[data-view="payroll"]) form,
+  body:has(#react-console[data-view="hr"]) form,
+  body:has(#react-console[data-view="teachers"]) form {
+    min-width: 0;
+  }
+}
+
+@media print {
+  body:has(#react-console[data-view="finance"]) .workspace,
+  body:has(#react-console[data-view="payroll"]) .workspace,
+  body:has(#react-console[data-view="hr"]) .workspace,
+  body:has(#react-console[data-view="teachers"]) .workspace {
+    max-width: none;
+  }
+
+  body:has(#react-console[data-view="finance"]) table,
+  body:has(#react-console[data-view="payroll"]) table,
+  body:has(#react-console[data-view="hr"]) table,
+  body:has(#react-console[data-view="teachers"]) table {
+    min-width: 0;
+    width: 100%;
+  }
+}
