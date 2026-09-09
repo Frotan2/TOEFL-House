@@ -52,7 +52,23 @@ final class TeacherApiController extends Controller
         }
         $profiles = $query->orderBy('id')->limit(300)->get();
         $profileIds = $profiles->pluck('id')->all();
-        $assignments = $profileIds === [] ? collect() : TeacherAssignment::query()->whereIn('teacher_profile_id', $profileIds)->with('skills')->orderByDesc('effective_from')->get()->groupBy('teacher_profile_id');
+        $assignments = collect();
+        if ($profileIds !== []) {
+            $assignments = TeacherAssignment::query()
+                ->whereIn('teacher_profile_id', $profileIds)
+                ->where(function ($scoped) use ($branchIds, $own): void {
+                    if ($branchIds !== []) {
+                        $scoped->whereIn('branch_id', $branchIds);
+                    }
+                    if ($own !== null) {
+                        $scoped->orWhere('teacher_profile_id', $own->id);
+                    }
+                })
+                ->with('skills')
+                ->orderByDesc('effective_from')
+                ->get()
+                ->groupBy('teacher_profile_id');
+        }
 
         return response()->json([
             'data' => [
@@ -62,8 +78,17 @@ final class TeacherApiController extends Controller
                     'approve' => $this->authorizedBranches(MaintainTeacherProfile::CAPABILITY_APPROVE) !== [],
                     'is_teacher' => $own !== null,
                 ],
-                'profiles' => $profiles->map(function (TeacherProfile $profile) use ($assignments): array {
+                'profiles' => $profiles->map(function (TeacherProfile $profile) use ($assignments, $branchIds, $own): array {
                     $rows = $assignments->get($profile->id, collect());
+                    $isOwnProfile = $own !== null && (string) $own->id === (string) $profile->id;
+                    $branchVisible = static function (string|null $branchId) use ($branchIds, $isOwnProfile): bool {
+                        return $isOwnProfile || ($branchId !== null && in_array((string) $branchId, array_map('strval', $branchIds), true));
+                    };
+                    $qualifications = $profile->qualifications;
+                    $branchAuthorizations = $profile->branchAuthorizations->filter(fn ($authorization): bool => $branchVisible($authorization->branch_id));
+                    $skillAuthorities = $profile->skillAuthorities->filter(fn ($authority): bool => $branchVisible($authority->branch_id));
+                    $availability = $profile->availabilities->filter(fn ($item): bool => $branchVisible($item->branch_id));
+                    $workloadLimits = $profile->workloadLimits->filter(fn ($item): bool => $branchVisible($item->branch_id));
                     /** @var Employment|null $employment */
                     $employment = $profile->employment;
                     $employmentState = $employment !== null ? (string) $employment->lifecycle_state : 'unknown';
@@ -91,7 +116,7 @@ final class TeacherApiController extends Controller
                         'profile_summary' => $profile->profile_summary,
                         'originating_branch_id' => (string) $profile->originating_branch_id,
                         'current_home_branch_id' => (string) $profile->current_home_branch_id,
-                        'qualifications' => $profile->qualifications->map(static fn (TeacherQualification $qualification): array => [
+                        'qualifications' => $qualifications->map(static fn (TeacherQualification $qualification): array => [
                             'id' => (string) $qualification->id,
                             'type' => (string) $qualification->qualification_type,
                             'title' => (string) $qualification->title,
@@ -101,14 +126,14 @@ final class TeacherApiController extends Controller
                             'valid_to' => $qualification->valid_to,
                             'evidence_ref' => (string) $qualification->evidence_ref,
                         ])->values()->all(),
-                        'branch_authorizations' => $profile->branchAuthorizations->map(static fn ($authorization): array => [
+                        'branch_authorizations' => $branchAuthorizations->map(static fn ($authorization): array => [
                             'id' => (string) $authorization->id,
                             'branch_id' => (string) $authorization->branch_id,
                             'state' => (string) $authorization->lifecycle_state,
                             'effective_from' => (string) $authorization->effective_from,
                             'effective_to' => $authorization->effective_to,
                         ])->values()->all(),
-                        'skill_authorities' => $profile->skillAuthorities->map(static fn ($authority): array => [
+                        'skill_authorities' => $skillAuthorities->map(static fn ($authority): array => [
                             'id' => (string) $authority->id,
                             'skill_id' => (string) $authority->skill_id,
                             'branch_id' => (string) $authority->branch_id,
@@ -118,7 +143,7 @@ final class TeacherApiController extends Controller
                             'effective_to' => $authority->effective_to,
                             'evidence_ref' => (string) $authority->evidence_ref,
                         ])->values()->all(),
-                        'availability' => $profile->availabilities->map(static fn ($availability): array => [
+                        'availability' => $availability->map(static fn ($availability): array => [
                             'id' => (string) $availability->id,
                             'branch_id' => (string) $availability->branch_id,
                             'weekday' => (int) $availability->weekday,
@@ -128,7 +153,7 @@ final class TeacherApiController extends Controller
                             'effective_to' => $availability->effective_to,
                             'state' => (string) $availability->lifecycle_state,
                         ])->values()->all(),
-                        'workload_limits' => $profile->workloadLimits->map(static fn (TeacherWorkloadLimit $limit): array => [
+                        'workload_limits' => $workloadLimits->map(static fn (TeacherWorkloadLimit $limit): array => [
                             'id' => (string) $limit->id,
                             'branch_id' => (string) $limit->branch_id,
                             'max_hours_per_week' => (string) $limit->max_hours_per_week,
