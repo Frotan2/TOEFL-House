@@ -84,7 +84,7 @@ function TeacherApp({ getJson, postJson, csrfToken }: TeacherApi) {
 
   return <>
     <AppShell current="teachers" csrfToken={csrfToken} />
-    <header className="workspace-context-bar"><div><p className="eyebrow">Canonical People domain</p><h1>Teacher & Faculty workspace</h1><p className="muted">Assignments and capabilities are effective-dated server facts. Identity, position, employment, and browser state do not grant teaching authority.</p></div><span className="source-note">React projection · domain commands own writes</span></header>
+    <header className="workspace-context-bar"><div><p className="eyebrow">Canonical People domain</p><h1>Teacher & Faculty workspace</h1><p className="muted">Assignments and capabilities are effective-dated server facts. Identity, position, employment, and browser state do not grant teaching authority.</p></div><div className="page-header-actions"><span className="source-note">React projection · domain commands own writes</span><a className="button" href="/teachers?view=day">Open Teacher Day</a></div></header>
     <main id="workspace-main" className="workspace">
       {error && <div className="error-banner" role="alert">{error}</div>}
       {message && <div className="success-banner" role="status">{message}</div>}
