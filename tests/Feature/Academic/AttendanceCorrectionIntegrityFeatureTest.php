@@ -19,21 +19,19 @@ use Illuminate\Support\Facades\DB;
 use Tests\Canonical\CanonicalTestCase;
 
 /**
- * Attendance corrections form a strict one-successor lineage. The command
- * rejects a second direct correction, and the PostgreSQL boundary rejects a
- * direct-SQL bypass of the same invariant.
+ * Attendance corrections form a strict one-successor lineage. Each session
+ * and enrollment has exactly one base fact, and each immutable fact has at
+ * most one direct correction. The command and PostgreSQL enforce both sides.
  */
 final class AttendanceCorrectionIntegrityFeatureTest extends CanonicalTestCase
 {
-    public function test_an_attendance_fact_has_one_direct_correction_and_sql_cannot_create_a_second(): void
+    public function test_attendance_marks_and_corrections_have_single_successors_and_sql_cannot_bypass_them(): void
     {
         $officer = $this->actorWith('attendance-canon-officer', [
             'academic.structure',
             'academic.schedule',
             'academic.teacher_manage',
             'academic.attendance',
-            'academic.enroll',
-            'academic.enroll_approve',
         ]);
         $delivery = $this->newActiveClass($officer, 'attcorr', 2, 10);
         $student = $this->newStudent()['student'];
@@ -68,6 +66,38 @@ final class AttendanceCorrectionIntegrityFeatureTest extends CanonicalTestCase
             'present',
             'attendance-record',
         );
+
+        try {
+            app(RecordAttendance::class)->record(
+                $recorder,
+                ClassSession::query()->findOrFail($session['session_id']),
+                Enrollment::query()->findOrFail($requested['enrollment_id']),
+                'present',
+                'attendance-record-duplicate',
+            );
+            $this->fail('a session/enrollment pair must have only one base attendance fact');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('academic.attendance_exists', $rejection->errorCode());
+        }
+
+        DB::beginTransaction();
+        try {
+            DB::table('attendance_facts')->insert([
+                'id' => RandomIdentifier::new(),
+                'session_id' => $session['session_id'],
+                'enrollment_id' => $requested['enrollment_id'],
+                'status' => 'late',
+                'corrects_id' => null,
+                'reason' => null,
+                'recorded_by' => 'attendance-sql-test',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->fail('the database must reject a second base attendance fact');
+        } catch (QueryException $exception) {
+            DB::rollBack();
+            $this->assertSame('23505', $exception->getCode());
+        }
 
         $firstCorrection = app(RecordAttendance::class)->correct(
             $recorder,
