@@ -23,17 +23,32 @@ final class AuditApiController extends Controller
         $operation = trim((string) $request->query('operation', ''));
         $actorId = trim((string) $request->query('actor_id', ''));
         $targetType = trim((string) $request->query('target_type', ''));
-        if ($operation !== '') $query->where('operation', $operation);
-        if ($actorId !== '') $query->where('actor_id', $actorId);
-        if ($targetType !== '') $query->where('target_type', $targetType);
+        if ($operation !== '') {
+            $query->where('operation', $operation);
+        }
+        if ($actorId !== '') {
+            $query->where('actor_id', $actorId);
+        }
+        if ($targetType !== '') {
+            $query->where('target_type', $targetType);
+        }
 
         $events = (clone $query)
             ->orderByDesc('occurred_at')
             ->limit(300)
-            ->get(['id', 'actor_id', 'operation', 'target_type', 'target_id', 'correlation_id', 'before_state', 'after_state', 'occurred_at']);
+            ->get([
+                'id', 'actor_id', 'operation', 'target_type', 'target_id', 'correlation_id',
+                'before_state', 'after_state', 'occurred_at',
+            ]);
 
         $operations = ScopedAuditQuery::forScope($organizations, $branches)
-            ->select('operation')->distinct()->orderBy('operation')->limit(200)->pluck('operation')->values()->all();
+            ->select('operation')
+            ->distinct()
+            ->orderBy('operation')
+            ->limit(200)
+            ->pluck('operation')
+            ->values()
+            ->all();
 
         return response()->json(['data' => [
             'scope' => ['organization_ids' => array_values($organizations), 'branch_ids' => array_values($branches)],
