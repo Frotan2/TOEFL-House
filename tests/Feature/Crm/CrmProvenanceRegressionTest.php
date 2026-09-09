@@ -9,7 +9,6 @@ use App\Modules\Crm\Domain\CrmAccess;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Queries\VisitorListQuery;
 use App\Modules\Crm\Queries\VisitorTimelineQuery;
-use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
