@@ -99,30 +99,22 @@ jobs:
           cache: npm
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: npm ci --engine-strict
-
       - name: Prepare application
         run: |
           cp .env.example .env
           php artisan key:generate
-
       - name: Verify runtime environment lock
         run: npm run verify:environment
-
       - name: Replay migrations
         run: php artisan migrate:fresh --force
-
       - name: Seed reference data
         run: php artisan db:seed --class=StandardFinanceChartSeeder --force
-
       - name: Database invariants
         run: npm run verify:invariants
-
       - name: Concurrency
         run: npm run verify:concurrency
-
       - name: Canonical suite
         run: vendor/bin/phpunit --testsuite Canonical --no-coverage
-
       - name: Backend test suite
         run: vendor/bin/phpunit --no-coverage
 
@@ -183,7 +175,7 @@ jobs:
           sudo apt-get install -y chromium
       - name: Start application
         run: |
-          .runtime/bin/php -S 127.0.0.1:8999 -t public public/index.php > /tmp/toefl-house.log 2>&1 &
+          php -S 127.0.0.1:8999 -t public public/index.php > /tmp/toefl-house.log 2>&1 &
           for i in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8999/health >/dev/null && exit 0; sleep 1; done
           cat /tmp/toefl-house.log
           exit 1
