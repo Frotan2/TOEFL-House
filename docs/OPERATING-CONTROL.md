@@ -5,19 +5,17 @@
 **Last reconciled:** 2026-09-09  
 **Purpose:** Single operational control plane for current state, active domain, agent execution, evidence semantics and documentation governance.
 
-> This is the one document an agent uses to determine **what may be worked on now, what is blocked, and what evidence is required before closure**. Architecture subject matter remains in the architecture documents; domain maturity remains in `DOMAIN-REGISTRY.md`; runtime/release evidence remains in `RUNTIME-RELEASE.md`.
+> This is the one document an agent uses to determine **what may be worked on now, what is blocked, and what evidence is required before closure**. It deliberately does not hard-code a verification run number or commit SHA; those change whenever the repository changes.
 
 ## 1. Current control state
 
 - **Authoritative branch:** `main`
-- **Current HEAD:** `e4e058f34df0f10055929be704ce1f734bbc5f9e`
 - **Active domain:** Library & Resources
-- **Active domain status:** IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED
-- **Latest Verification:** run #464 / workflow id `34369529127` — PENDING for the current HEAD at reconciliation time.
+- **Active domain status:** **IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED**
 - **Next allowed domain:** Documents, but only after Library is closed and a fresh reassessment is performed.
-- **Release status:** NOT CURRENTLY CERTIFIED; current HEAD must be proven by the latest non-superseded verification evidence.
+- **Release status:** **NOT CURRENTLY CERTIFIED** until the latest non-superseded Verification evidence for the actual `main` HEAD passes all applicable gates.
 
-Never convert `PENDING`, `QUEUED`, `IN PROGRESS`, `STATICALLY VERIFIED`, historical evidence, or documentation claims into `VERIFIED` or `RELEASE CERTIFIED`.
+To determine current evidence, inspect the actual `main` HEAD and the latest non-superseded Verification workflow. Do not infer state from a previous run recorded in a document.
 
 ## 2. State vocabulary
 
