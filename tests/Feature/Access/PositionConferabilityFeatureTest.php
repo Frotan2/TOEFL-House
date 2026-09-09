@@ -12,6 +12,7 @@ use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
 use App\Support\Authorization\Actor;
+use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
@@ -83,7 +84,7 @@ final class PositionConferabilityFeatureTest extends TestCase
         }
 
         $this->assertDatabaseHas('position_assignments', ['id' => $assignment->id, 'lifecycle_state' => 'proposed']);
-        $this->assertFalse((new AccessResolution)->decide(new Actor('conf-target-2', 'Target'), 'finance.manage', new \App\Support\Authorization\StructureScope($organizationId))->allowed);
+        $this->assertFalse((new AccessResolution)->decide(new Actor('conf-target-2', 'Target'), 'finance.manage', new StructureScope($organizationId))->allowed);
     }
 
     public function test_access_policy_administrator_retains_explicit_power_to_confer_any_position(): void
