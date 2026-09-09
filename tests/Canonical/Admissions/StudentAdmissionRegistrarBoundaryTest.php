@@ -116,6 +116,36 @@ final class StudentAdmissionRegistrarBoundaryTest extends CanonicalTestCase
             $this->assertSame('students.admission_branch_mismatch', $rejection->errorCode());
         }
 
+        try {
+            app(StudentAdmissionRegistrar::class)->register(
+                $decisionModel->id,
+                $this->personId,
+                'STU-BOUNDARY-3B',
+                $this->sharedBranchId(),
+                'ffffffff-ffff-4fff-8fff-ffffffffffff',
+                null,
+                'canon-student-boundary-actor-3b',
+            );
+            $this->fail('the Students-owned registrar must not attach foreign placement evidence');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('students.admission_placement_mismatch', $rejection->errorCode());
+        }
+
+        try {
+            app(StudentAdmissionRegistrar::class)->register(
+                $decisionModel->id,
+                $this->personId,
+                'STU-BOUNDARY-3C',
+                $this->sharedBranchId(),
+                null,
+                'ffffffff-ffff-4fff-8fff-ffffffffffff',
+                'canon-student-boundary-actor-3c',
+            );
+            $this->fail('the Students-owned registrar must not attach a foreign eligibility snapshot');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('students.admission_placement_mismatch', $rejection->errorCode());
+        }
+
         $registered = app(StudentAdmissionRegistrar::class)->register(
             $decisionModel->id,
             $this->personId,
