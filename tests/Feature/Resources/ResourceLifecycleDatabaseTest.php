@@ -43,6 +43,45 @@ final class ResourceLifecycleDatabaseTest extends TestCase
         ]);
     }
 
+    public function test_database_rejects_a_completed_disposal_request_without_full_provenance(): void
+    {
+        $this->ensureBootstrapAuthority();
+        $requestId = RandomIdentifier::new();
+        $assetId = $this->newAsset('2026-09-10');
+
+        $this->expectException(QueryException::class);
+        DB::table('asset_disposal_requests')->insert([
+            'id' => $requestId,
+            'asset_id' => $assetId,
+            'method' => 'scrap',
+            'reason' => 'worn',
+            'lifecycle_state' => 'completed',
+            'requested_by' => 'requester-a',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function test_database_rejects_a_disposal_without_a_matching_approved_request(): void
+    {
+        $this->ensureBootstrapAuthority();
+        $assetId = $this->newAsset('2026-09-10');
+
+        $this->expectException(QueryException::class);
+        DB::table('asset_disposals')->insert([
+            'id' => RandomIdentifier::new(),
+            'asset_id' => $assetId,
+            'method' => 'scrap',
+            'reason' => 'worn',
+            'disposed_on' => '2026-09-10',
+            'requested_by' => 'requester-a',
+            'approver_one' => 'approver-a',
+            'approver_two' => 'approver-b',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     private function newAsset(string $acquiredOn): string
     {
         $id = RandomIdentifier::new();
