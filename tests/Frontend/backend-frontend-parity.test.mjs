@@ -6,12 +6,14 @@ const containsAll = (source, markers, label) => {
   for (const marker of markers) assert.ok(source.includes(marker), `${label} is missing: ${marker}`);
 };
 
-const [resourceRoutes, resourceController, library, apiRoutes, placement, navigation] = await Promise.all([
+const [resourceRoutes, resourceController, library, apiRoutes, placement, teacher, hr, navigation] = await Promise.all([
   read('routes/resources-api.php'),
   read('app/Http/Controllers/Api/ResourcesApiController.php'),
   read('resources/js/library.tsx'),
   read('routes/api.php'),
   read('resources/js/placement.tsx'),
+  read('resources/js/teacher.tsx'),
+  read('resources/js/hr.tsx'),
   read('resources/js/core/navigation.ts'),
 ]);
 
@@ -55,7 +57,15 @@ containsAll(apiRoutes, [
   "Route::post('/attempts', [PlacementApiController::class, 'startAttempt'])",
   "Route::post('/attempts/{attemptId}/submit', [PlacementApiController::class, 'submitDigital'])",
   "Route::post('/attempts/{attemptId}/cancel', [PlacementApiController::class, 'cancelAttempt'])",
-], 'Placement API route contract');
+  "Route::prefix('teachers')->name('api.teachers.')",
+  "Route::get('/workspace', [TeacherApiController::class, 'workspace'])",
+  "Route::post('/profiles/{profileId}/qualifications', [TeacherApiController::class, 'qualification'])",
+  "Route::post('/qualifications/{qualificationId}/verify', [TeacherApiController::class, 'verifyQualification'])",
+  "Route::post('/assignments/{assignmentId}/skills', [TeacherApiController::class, 'assignSkill'])",
+  "Route::prefix('hr')->name('api.hr.')",
+  "Route::get('/workspace', [HrApiController::class, 'workspace'])",
+  "Route::post('/employ', [HrApiController::class, 'employ'])",
+], 'canonical People/Placement API route contract');
 
 containsAll(placement, [
   '/placement/attempts/${encodeURIComponent(attempt.id)}/submit',
@@ -66,6 +76,22 @@ containsAll(placement, [
   '/placement/profiles/${encodeURIComponent(profile.id)}/approve',
   '/placement/profiles/${encodeURIComponent(profile.id)}/release',
 ], 'Placement workspace lifecycle');
+
+containsAll(teacher, [
+  "getJson<{ data: TeacherWorkspace }>('/teachers/workspace')",
+  '`/teachers/profiles/${encodeURIComponent(selected.id)}/qualifications'",
+  '`/teachers/qualifications/${encodeURIComponent(item.id)}/verify'",
+  '`/teachers/assignments/${encodeURIComponent(assignmentId)}/skills'",
+  'React projection · domain commands own writes',
+], 'Teacher workspace lifecycle');
+
+containsAll(hr, [
+  "getJson<{ data: Workspace }>('/hr/workspace')",
+  "postJson('/hr/employ', { person_id: employPersonId })",
+  '`/hr/employments/${encodeURIComponent(selected.id)}/${action}'",
+  "'/hr/employments/${encodeURIComponent(selected.id)}/place-on-leave'",
+  '`/hr/employments/${encodeURIComponent(selected.id)}/leave'",
+], 'HR workspace lifecycle');
 
 assert.match(navigation, /['\"]\/library['\"]/);
 console.log('Backend↔frontend parity sentinels passed.');
