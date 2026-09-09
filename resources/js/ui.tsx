@@ -72,10 +72,14 @@ function NavigationLinks({ current, compact = false, onNavigate }: { current: st
 
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const resultRefs = useRef<Array<HTMLAnchorElement | null>>([]);
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
   useEffect(() => {
     if (!open) return;
     setQuery('');
+    setActiveIndex(0);
+    resultRefs.current = [];
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [open]);
   const results = useMemo(() => {
@@ -84,21 +88,42 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
     return navigation.filter((item) => `${item.label} ${item.group}`.toLowerCase().includes(term));
   }, [query]);
   useEffect(() => {
+    setActiveIndex((index) => Math.min(Math.max(index, 0), Math.max(results.length - 1, 0)));
+  }, [results.length]);
+  useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (!results.length) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActiveIndex((index) => (index + 1) % results.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveIndex((index) => (index - 1 + results.length) % results.length);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        resultRefs.current[activeIndex]?.click();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, results.length, activeIndex]);
+  useEffect(() => {
+    resultRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
   if (!open) return null;
   return <div className="command-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="command-palette" role="dialog" aria-modal="true" aria-label="Navigate TOEFL House">
-      <div className="command-palette-header"><Icon name="search" /><input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Jump to a workspace…" aria-label="Search workspaces" /><span className="command-palette-key">Esc</span></div>
-      <div className="command-palette-list">
-        {results.length === 0 ? <p className="command-palette-empty">No matching workspace.</p> : results.map((item) => <a key={item.key} className="command-palette-item" href={item.href} onClick={onClose}><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.group}</small></span><Icon name="chevron" /></a>)}
+      <div className="command-palette-header"><Icon name="search" /><input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} placeholder="Jump to a workspace…" aria-label="Search workspaces" aria-controls="command-palette-results" /><span className="command-palette-key">Esc</span></div>
+      <div id="command-palette-results" className="command-palette-list" role="listbox" aria-label="Workspace results">
+        {results.length === 0 ? <p className="command-palette-empty">No matching workspace.</p> : results.map((item, index) => <a key={item.key} ref={(node) => { resultRefs.current[index] = node; }} className={`command-palette-item ${index === activeIndex ? 'active' : ''}`} href={item.href} role="option" aria-selected={index === activeIndex} onMouseEnter={() => setActiveIndex(index)} onClick={onClose}><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.group}</small></span><Icon name="chevron" /></a>)}
       </div>
-      <div className="command-palette-footer"><span>Navigate by keyword</span><span>Use Ctrl/⌘ + K from anywhere</span></div>
+      <div className="command-palette-footer"><span>↑ ↓ move · Enter open · Esc close</span><span>Ctrl/⌘ + K</span></div>
     </div>
   </div>;
 }
