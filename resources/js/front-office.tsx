@@ -6,7 +6,8 @@ type Visitor = { id: string; visitor_code: string; full_name: string; phone: str
 type Applicant = { id: string; person?: { legal_name?: string | null } | null; program_interest: string; lifecycle_state: string };
 type Decision = { id: string; applicant_id: string; outcome: string; lifecycle_state: string };
 type Capabilities = { admission_initiate: boolean; admission_review: boolean; admission_approve: boolean; admission_register: boolean; };
-type StudentsIndex = { students: Array<{ id: string; student_code: string; person?: { legal_name?: string | null } | null; current_status?: string | null }>; applicants: Applicant[]; decisions: Decision[]; capabilities: Capabilities };
+type Student = { id: string; student_code: string; person?: { legal_name?: string | null } | null; current_status?: string | null };
+type StudentsIndex = { students: Student[]; applicants: Applicant[]; decisions: Decision[]; capabilities: Capabilities };
 type AcademicWorkspace = { classes?: unknown[]; sessions?: unknown[]; branches?: unknown[]; periods?: unknown[] };
 
 function humanize(value: string): string { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -45,6 +46,11 @@ export function FrontOfficeApp({ getJson, csrfToken }: ApiClient & { csrfToken: 
     if (!term) return open;
     return open.filter((visitor) => `${visitor.full_name} ${visitor.visitor_code} ${visitor.phone ?? ''} ${visitor.email ?? ''} ${visitor.status} ${visitor.interest ?? ''}`.toLowerCase().includes(term));
   }, [term, visitors]);
+  const visibleStudents = useMemo(() => {
+    if (!students) return [];
+    if (!term) return students.students.slice(0, 10);
+    return students.students.filter((student) => `${student.student_code} ${student.person?.legal_name ?? ''} ${student.current_status ?? ''}`.toLowerCase().includes(term)).slice(0, 10);
+  }, [students, term]);
   const admissionQueue = useMemo(() => {
     if (!students) return [];
     const decisionByApplicant = new Map(students.decisions.map((decision) => [decision.applicant_id, decision]));
@@ -72,7 +78,7 @@ export function FrontOfficeApp({ getJson, csrfToken }: ApiClient & { csrfToken: 
 
       <section className="front-office-toolbar panel" aria-label="Front Office search">
         <div><p className="eyebrow">Operator search</p><h2>Find the person who needs attention</h2></div>
-        <label className="directory-filter">Search visitor pipeline<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email, code, interest" /></label>
+        <label className="directory-filter">Search people<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, phone, email, code, interest" /></label>
       </section>
 
       <div className="front-office-grid">
@@ -86,6 +92,11 @@ export function FrontOfficeApp({ getJson, csrfToken }: ApiClient & { csrfToken: 
           {visibleVisitors.length === 0 ? <p className="empty">No open visitor records match the current search.</p> : <div className="front-office-list">{visibleVisitors.slice(0, 10).map((visitor) => <article className="front-office-item" key={visitor.id}><div><strong>{visitor.full_name}</strong><span>{humanize(visitor.status)} · {humanize(visitor.preferred_channel)}</span><small>{visitor.interest || visitor.phone || visitor.email || visitor.visitor_code}</small></div><a className="button secondary" href={`/crm?visitor=${encodeURIComponent(visitor.id)}`}>Open CRM</a></article>)}</div>}
         </section>
       </div>
+
+      <section className="panel" aria-labelledby="front-office-students-heading">
+        <div className="section-heading"><div><p className="eyebrow">Student lookup</p><h2 id="front-office-students-heading">Existing learners in scope</h2></div><span className="source-note">Directory facts · server scope enforced</span></div>
+        {visibleStudents.length === 0 ? <p className="empty">No student record matches the current search.</p> : <div className="front-office-list">{visibleStudents.map((student) => <article className="front-office-item" key={student.id}><div><strong>{student.person?.legal_name ?? 'Student'}</strong><span>{student.student_code} · {humanize(student.current_status ?? 'status unavailable')}</span></div><a className="button secondary" href={`/students/${encodeURIComponent(student.id)}`}>Open student</a></article>)}</div>}
+      </section>
 
       <section className="panel" aria-labelledby="front-office-context-heading">
         <div className="section-heading"><div><p className="eyebrow">Operating context</p><h2 id="front-office-context-heading">What the desk can see right now</h2></div><span className="source-note">Read projection only · no business decisions in React</span></div>
