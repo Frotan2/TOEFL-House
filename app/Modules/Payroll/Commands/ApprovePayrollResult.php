@@ -10,9 +10,7 @@ use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Payroll\Domain\PayrollLifecycle;
-use App\Modules\Payroll\Models\PayrollAdjustment;
 use App\Modules\Payroll\Models\PayrollCalculation;
-use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Modules\Payroll\Models\PayrollResult;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
@@ -24,16 +22,13 @@ use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Approved payable results and their corrections: approval is segregated
- * from preparation and from the beneficiary; corrections and reversals
- * append adjustments to the immutable result and are impossible once the
- * period is closed.
+ * Approves immutable Payroll payable evidence. Payroll does not create,
+ * correct, reverse, or post monetary facts; Finance is the sole authority for
+ * those operations.
  */
 final class ApprovePayrollResult
 {
     public const CAPABILITY_APPROVE = 'payroll.approve';
-
-    public const CAPABILITY_ADJUST = 'payroll.adjust';
 
     public function __construct(
         private readonly AccessDecision $access,
@@ -88,6 +83,7 @@ final class ApprovePayrollResult
                     $event = $this->audit->record($approver->actorId, 'payroll.result.approve', 'payroll_result', $result->id, null, [
                         'calculation_id' => $locked->id, 'amount' => $result->amount, 'originating_branch_id' => $branch->id,
                         'branch_id' => $branch->id, 'organization_id' => $scope->organizationId,
+                        'monetary_authority' => 'finance',
                     ]);
 
                     return ['result_id' => $result->id, 'correlation_id' => $event->correlation_id];
@@ -95,64 +91,6 @@ final class ApprovePayrollResult
             );
         } catch (AuthorizationDenied $denial) {
             $this->attemptedOperation->deniedByActor($denial, $approver, 'payroll.result.approve', 'payroll_result', $calculation->id);
-        }
-    }
-
-    /** @return array{adjustment_id: string, correlation_id: string} */
-    public function adjust(Actor $approver, PayrollResult $result, string $kind, string $amount, string $reason, string $idempotencyKey): array
-    {
-        $payload = hash('sha256', implode('|', ['payroll.result.adjust', $result->id, $kind, $amount, $reason, $approver->actorId]));
-
-        try {
-            return $this->idempotency->execute('payroll.result.adjust', $idempotencyKey, $payload,
-                fn (): array => DB::transaction(function () use ($approver, $result, $kind, $amount, $reason): array {
-                    if ($reason === '') {
-                        throw BusinessRejection::forCode('payroll.adjustment_reason', 'an adjustment requires a reason');
-                    }
-                    if (! in_array($kind, ['adjustment', 'reversal'], true)) {
-                        throw BusinessRejection::forCode('payroll.adjustment_kind', sprintf('unknown adjustment kind %s', $kind));
-                    }
-                    if (! is_numeric($amount)) {
-                        throw BusinessRejection::forCode('payroll.adjustment_amount', 'the adjustment amount must be numeric');
-                    }
-
-                    /** @var PayrollResult $lockedResult */
-                    $lockedResult = PayrollResult::query()->whereKey($result->id)->lockForUpdate()->firstOrFail();
-
-                    /** @var PayrollPeriod $period */
-                    $period = PayrollPeriod::query()->whereKey($lockedResult->period_id)->lockForUpdate()->firstOrFail();
-                    if ($period->lifecycle_state === PayrollLifecycle::PERIOD_CLOSED) {
-                        throw BusinessRejection::forCode('payroll.period_closed', 'a closed payroll period rejects mutation');
-                    }
-                    if ($kind === 'reversal' && PayrollAdjustment::query()->where('result_id', $lockedResult->id)->where('kind', 'reversal')->exists()) {
-                        throw BusinessRejection::forCode('payroll.reversal_exists', 'this result is already reversed');
-                    }
-
-                    $adjustmentBranchId = trim((string) $lockedResult->originating_branch_id);
-                    $adjustmentBranch = $adjustmentBranchId === '' ? null : Branch::query()->whereKey($adjustmentBranchId)->first();
-                    if ($adjustmentBranch === null || $adjustmentBranch->lifecycle_state !== 'active' || $adjustmentBranch->structureScope()->organizationId === '') {
-                        throw BusinessRejection::forCode('payroll.branch_provenance_missing', 'a Payroll adjustment requires active branch and organization provenance');
-                    }
-                    $adjustmentScope = $adjustmentBranch->structureScope();
-                    $this->require($approver, self::CAPABILITY_ADJUST, $adjustmentScope);
-                    $adjustment = PayrollAdjustment::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'result_id' => $lockedResult->id,
-                        'kind' => $kind,
-                        'amount' => $kind === 'reversal' ? bcmul($amount, '-1', 2) : $amount,
-                        'reason' => $reason,
-                        'approved_by' => $approver->actorId,
-                    ]);
-                    $event = $this->audit->record($approver->actorId, 'payroll.result.adjust', 'payroll_adjustment', $adjustment->id, null, [
-                        'result_id' => $lockedResult->id, 'kind' => $kind, 'amount' => $adjustment->amount,
-                        'branch_id' => $adjustmentBranch->id, 'organization_id' => $adjustmentScope->organizationId,
-                    ]);
-
-                    return ['adjustment_id' => $adjustment->id, 'correlation_id' => $event->correlation_id];
-                }),
-            );
-        } catch (AuthorizationDenied $denial) {
-            $this->attemptedOperation->deniedByActor($denial, $approver, 'payroll.result.adjust', 'payroll_adjustment', $result->id);
         }
     }
 
