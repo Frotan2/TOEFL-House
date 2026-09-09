@@ -2,7 +2,6 @@ import { Component, ErrorInfo, ReactNode } from 'react';
 
 type ErrorBoundaryProps = {
   children: ReactNode;
-  title?: string;
 };
 
 type ErrorBoundaryState = {
@@ -10,11 +9,16 @@ type ErrorBoundaryState = {
   errorId: string | null;
 };
 
+function recoveryId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export class AppErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false, errorId: null };
 
   static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true, errorId: crypto.randomUUID() };
+    return { hasError: true, errorId: recoveryId() };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
