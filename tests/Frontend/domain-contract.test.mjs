@@ -103,6 +103,15 @@ assert.match(workflow, /cancel-in-progress: true/, 'CI: superseded verification 
 assert.match(workflow, /NODE_VERSION: '22\.22\.3'/, 'CI: Node must match the verified runtime lock');
 assert.match(workflow, /npm ci --engine-strict/, 'CI: npm must enforce package engine constraints');
 assert.match(workflow, /timeout-minutes:/, 'CI: jobs must have bounded execution time');
+assert.match(workflow, /E2E_USERNAME=ci\.e2e\.owner/, 'CI: isolated bootstrap username must be passed to browser E2E');
+assert.match(workflow, /E2E_PASSWORD=\$E2E_PASSWORD/, 'CI: isolated bootstrap password must be passed to browser E2E');
+assert.match(workflow, /image: postgres:18\.4/, 'CI: browser/backend database version must be pinned');
+
+const retrySweep = fs.readFileSync(path.join(root, 'app', 'Modules', 'Integrations', 'Jobs', 'IntegrationRetrySweepJob.php'), 'utf8');
+assert.match(retrySweep, /DEFAULT_BATCH = 100/, 'integrations: retry sweep default batch missing');
+assert.match(retrySweep, /MAX_BATCH = 500/, 'integrations: retry sweep safety ceiling missing');
+assert.match(retrySweep, /->limit\(\$batch\)/, 'integrations: retry sweep must be bounded per invocation');
+assert.match(retrySweep, /integrations\.retry_operator_required/, 'integrations: retry sweep must require explicit operator identity');
 
 const hr = fs.readFileSync(path.join(jsRoot, 'hr.tsx'), 'utf8');
 assert.match(hr, /function confirmAction/, 'HR: lifecycle confirmation helper missing');
