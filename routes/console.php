@@ -7,8 +7,8 @@ use App\Modules\Integrations\Commands\ReplayConsumerReceipt;
 use App\Modules\Integrations\Domain\JobCatalog;
 use App\Modules\Integrations\Models\JobRun;
 use App\Modules\Integrations\Models\JobSchedule;
-use App\Modules\Outbox\Models\ConsumerReceipt;
 use App\Modules\Integrations\Queries\IntegrationHealth;
+use App\Modules\Outbox\Models\ConsumerReceipt;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use Illuminate\Support\Facades\Artisan;
@@ -74,7 +74,7 @@ Artisan::command('integrations:health {--run-by=}', function (): int {
 
     $actor = new Actor($runBy, 'Integration Monitor');
     $outcome = app(AccessDecision::class)->decide($actor, 'integrations.process', null);
-    if (! $outcome->allowed) {
+    if (!$outcome->allowed) {
         $this->error('integrations.process capability is required for health inspection.');
 
         return 1;
