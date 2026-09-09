@@ -21,6 +21,7 @@ final class PrivacyController extends Controller
     public function index(): RedirectResponse
     {
         $this->requireOrganizationRead('privacy.disclose', 'privacy.console.index');
+
         return redirect()->route('governance.privacy');
     }
 
@@ -28,6 +29,7 @@ final class PrivacyController extends Controller
     {
         $input = $request->validate(['name' => ['required', 'string', 'max:200'], 'channel' => ['required', 'string', 'max:120'], 'category' => ['required', 'string', 'max:120']]);
         app(DefineConsentPurpose::class)->define($this->actor(), $input['name'], $input['channel'], $input['category'], $this->idempotencyKey('privacy.purpose.define'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent purpose defined.');
     }
 
@@ -38,24 +40,28 @@ final class PrivacyController extends Controller
             'effective_from' => ['required', 'date'], 'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'],
         ]);
         app(RecordConsent::class)->record($this->actor(), $input['subject_person_id'], $input['purpose_id'], $input['evidence_ref'], CarbonImmutable::parse($input['effective_from']), (($input['effective_to'] ?? '') !== '') ? CarbonImmutable::parse($input['effective_to']) : null, $this->idempotencyKey('privacy.consent.record'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent recorded with evidence; it takes effect once verified and activated.');
     }
 
     public function submitConsent(Request $request, string $consentId): RedirectResponse
     {
         app(TransitionConsent::class)->submit($this->actor(), Consent::query()->findOrFail($consentId), $this->idempotencyKey('privacy.consent.submit'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent submitted for verification.');
     }
 
     public function verifyConsent(Request $request, string $consentId): RedirectResponse
     {
         app(TransitionConsent::class)->verify($this->actor(), Consent::query()->findOrFail($consentId), $this->idempotencyKey('privacy.consent.verify'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent verified against its evidence.');
     }
 
     public function activateConsent(Request $request, string $consentId): RedirectResponse
     {
         app(TransitionConsent::class)->activate($this->actor(), Consent::query()->findOrFail($consentId), $this->idempotencyKey('privacy.consent.activate'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent active.');
     }
 
@@ -63,12 +69,14 @@ final class PrivacyController extends Controller
     {
         $input = $request->validate(['scope' => ['required', 'string', 'max:200'], 'effect' => ['required', 'string', 'max:200']]);
         app(TransitionConsent::class)->revoke($this->actor(), Consent::query()->findOrFail($consentId), $input['scope'], $input['effect'], $this->idempotencyKey('privacy.consent.revoke'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent revoked with its scope and effect recorded.');
     }
 
     public function archiveConsent(Request $request, string $consentId): RedirectResponse
     {
         app(TransitionConsent::class)->archive($this->actor(), Consent::query()->findOrFail($consentId), $this->idempotencyKey('privacy.consent.archive'));
+
         return redirect()->route('governance.privacy')->with('success', 'Consent archived; history is retained.');
     }
 
@@ -80,6 +88,7 @@ final class PrivacyController extends Controller
             'scope_id' => ['required', 'string'], 'disclosed_category' => ['required', 'string', 'max:200'],
         ]);
         app(RecordDisclosure::class)->disclose($this->actor(), $input['subject_person_id'], $input['recipient'], $input['purpose'], $input['authority'], $input['scope_type'], $input['scope_id'], $input['disclosed_category'], $this->idempotencyKey('privacy.disclose'));
+
         return redirect()->route('governance.privacy')->with('success', 'Disclosure recorded as immutable release evidence.');
     }
 
@@ -87,6 +96,7 @@ final class PrivacyController extends Controller
     {
         $input = $request->validate(['subject_person_id' => ['required', 'string'], 'purpose' => ['required', 'string', 'max:500'], 'scope_type' => ['required', 'in:campus,branch,department,subject'], 'scope_id' => ['required', 'string']]);
         app(ExportSubjectData::class)->export($this->actor(), $input['subject_person_id'], $input['purpose'], $input['scope_type'], $input['scope_id'], $this->idempotencyKey('privacy.export'));
+
         return redirect()->route('governance.privacy')->with('success', 'Subject data exported; the disclosure is the release evidence.');
     }
 
@@ -94,18 +104,21 @@ final class PrivacyController extends Controller
     {
         $input = $request->validate(['subject_person_id' => ['required', 'string'], 'purpose' => ['required', 'string', 'max:500'], 'organization_id' => ['required', 'string']]);
         app(ExportSubjectData::class)->request($this->actor(), $input['subject_person_id'], $input['purpose'], $input['organization_id'], $this->idempotencyKey('privacy.export.request'));
+
         return redirect()->route('governance.privacy')->with('success', 'Organization-wide export requested; it requires two distinct approver sessions.');
     }
 
     public function approveExport(Request $request, string $requestId): RedirectResponse
     {
         app(ExportSubjectData::class)->approve($this->actor(), PrivacyExportRequest::query()->findOrFail($requestId), $this->idempotencyKey('privacy.export.approve'));
+
         return redirect()->route('governance.privacy')->with('success', 'Approval signed.');
     }
 
     public function executeExport(Request $request, string $requestId): RedirectResponse
     {
         app(ExportSubjectData::class)->execute($this->actor(), PrivacyExportRequest::query()->findOrFail($requestId), $this->idempotencyKey('privacy.export.execute'));
+
         return redirect()->route('governance.privacy')->with('success', 'Export executed; the disclosure is recorded as release evidence.');
     }
 }
