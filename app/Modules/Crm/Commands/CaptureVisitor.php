@@ -67,7 +67,7 @@ final class CaptureVisitor
         $payload = hash('sha256', implode('|', [
             'crm.visitor.capture', $personId ?? '', trim($fullName), $phone ?? '', strtolower(trim($email ?? '')),
             $preferredChannel, $visitorType, $sourceId ?? '', $campaignId ?? '', $originBranchId,
-            $interest ?? '', $actor->actorId,
+            $interest ?? '', $notes ?? '', $actor->actorId,
         ]));
 
         try {
@@ -105,8 +105,6 @@ final class CaptureVisitor
 
                     $resolvedSource = $this->resolveSource($sourceId);
                     $resolvedCampaign = $this->resolveCampaign($campaignId, $resolvedSource?->id);
-                    // A campaign attributes its source when the capture did not
-                    // name one explicitly — attribution is never left ambiguous.
                     if ($resolvedSource === null && $resolvedCampaign !== null && $resolvedCampaign->source_id !== null) {
                         $resolvedSource = $this->resolveSource($resolvedCampaign->source_id);
                     }
@@ -144,8 +142,6 @@ final class CaptureVisitor
                         'created_by' => $actor->actorId,
                     ]);
 
-                    // A database trigger owns the event clock so callers
-                    // cannot select a reporting cohort through created_at.
                     /** @var Visitor $visitor */
                     $visitor = Visitor::query()->whereKey($visitor->id)->firstOrFail();
                     $provenance = $this->visitorProvenance($visitor->origin_branch_id);
