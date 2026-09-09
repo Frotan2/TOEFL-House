@@ -22,6 +22,9 @@ This document is the completion contract for the unified employee experience. A 
 - No route introduced by this productization increment throws during initial render.
 - No missing import, invalid hook usage, or blank mount remains.
 - Shared product theme is registered as a Vite build input and loaded through the common console boundary.
+- Runtime environment verification passes against the exact supported PHP, Composer, Node, npm, Laravel and PostgreSQL contract.
+- CI uses the same pinned Node/PostgreSQL toolchain and enforces package engine constraints.
+- A genuine Chromium browser E2E run passes against a fresh isolated database and production-mode application configuration.
 
 **Required result:** PASS.
 
@@ -33,6 +36,8 @@ This document is the completion contract for the unified employee experience. A 
 - Concurrency verification passes.
 - PHP formatting and PHPStan pass.
 - Existing branch/scope authorization regression coverage remains green.
+- Scheduled integration work is bounded, idempotent and protected by durable claims/leases.
+- Background jobs require an explicit durable operator identity; no implicit system actor is accepted.
 
 **Required result:** PASS.
 
@@ -43,6 +48,10 @@ For every task-first workspace:
 `read projection -> next action -> authorized command -> server result -> refreshed projection -> visible feedback -> audit evidence`
 
 The browser must never infer success from a local state mutation when the server command has failed or been rejected.
+
+The same rule applies to background work:
+
+`durable schedule -> authorized job run -> claimed/leased work -> bounded execution -> durable outcome -> audit evidence`
 
 **Required result:** PASS across Home/My Work, Students & Admissions, Academic Operations, Placement, People & Faculty, Front Office/CRM, HR/Payroll, Finance/Funding, Reporting and Command Center.
 
@@ -81,6 +90,18 @@ Inspect desktop, tablet and mobile widths with keyboard-only navigation for:
 
 **Required result:** PASS.
 
+## Gate G — Deployment and recovery readiness
+
+- Production health/readiness endpoints report the actual dependency state rather than a framework-only liveness response.
+- First-run deployment creates the minimum valid organization/campus/branch/access genesis structure without dropping existing data.
+- Bootstrap credentials are supplied at runtime and never embedded in source or committed artifacts.
+- Backup output is integrity-checked before retention/rotation and restore verifies the dump before destructive replacement.
+- The deployment launcher builds the frontend before its own readiness gate.
+- Recovery paths are explicit for interrupted initialization and failed migrations.
+- A recovery drill or equivalent CI evidence must be attached to a release record; documentation alone does not count as proof of recovery.
+
+**Required result:** PASS for a production release; otherwise release status remains **NOT CERTIFIED**.
+
 ## Current implementation status
 
 Implemented in the current productization branch:
@@ -97,7 +118,11 @@ Implemented in the current productization branch:
 - shared theme registered in Vite and loaded at the Laravel console boundary;
 - responsive, reduced-motion, focus, dense-data and print styling contract;
 - canonical app-entrypoint mount regression coverage;
-- formal unified architecture, design-system and release-gate documentation.
+- formal unified architecture, design-system and release-gate documentation;
+- exact runtime verification in code and CI;
+- isolated real-Chromium E2E release gate with runtime-provided credentials;
+- bounded scheduled integration retry execution with durable operator identity and regression coverage;
+- CI concurrency cancellation, execution timeouts, least-privilege repository permissions and pinned Node/PostgreSQL versions.
 
 The remaining release decision is evidence-based: GitHub Verification and manual persona/responsive acceptance must complete successfully before the PR is marked ready or merged. Domain-specific UI expansion must consume authoritative server read projections and must not invent client-side truth where a source projection is absent.
 
