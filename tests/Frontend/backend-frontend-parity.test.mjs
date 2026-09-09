@@ -6,8 +6,9 @@ const containsAll = (source, markers, label) => {
   for (const marker of markers) assert.ok(source.includes(marker), `${label} is missing: ${marker}`);
 };
 
-const [resourceRoutes, library, placementRoutes, placement, navigation] = await Promise.all([
+const [resourceRoutes, resourceController, library, placementRoutes, placement, navigation] = await Promise.all([
   read('routes/resources-api.php'),
+  read('app/Http/Controllers/Api/ResourcesApiController.php'),
   read('resources/js/library.tsx'),
   read('routes/placement-api.php'),
   read('resources/js/placement.tsx'),
@@ -20,6 +21,12 @@ containsAll(resourceRoutes, [
   "'/disposals/{requestId}/approve'", "'/disposals/{requestId}/execute'", "'/work-orders'", "'/work-orders/{orderId}/approve'",
   "'/work-orders/{orderId}/start'", "'/work-orders/{orderId}/complete'", "'/work-orders/{orderId}/cancel'",
 ], 'Resources API route contract');
+
+containsAll(resourceController, [
+  "'borrower_id' => ['required', 'string']",
+  "'custodian_id' => ['required', 'string']",
+  "'disposed_on' => ['required', 'date']",
+], 'Resources transport validation contract');
 
 containsAll(library, [
   '/resources/books/${copy.id}/issue',
@@ -34,6 +41,12 @@ containsAll(library, [
   '/resources/work-orders/${work.id}/start',
   '/resources/work-orders/${work.id}/complete',
   '/resources/work-orders/${work.id}/cancel',
+  'selectedBorrowerId',
+  'selectedCustodianId',
+  "{ borrower_id: borrower.id, issued_on: today(), due_on: due }",
+  "{ custodian_id: person.id, assigned_on: assigned }",
+  "{ disposed_on: disposedOn }",
+  'function executeDisposal(request: RecordMap)',
 ], 'Library workspace capability contract');
 
 containsAll(placementRoutes, [
