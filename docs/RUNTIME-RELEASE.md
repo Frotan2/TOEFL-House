@@ -5,7 +5,7 @@
 **Last reconciled:** 2026-09-09  
 **Purpose:** Single source of truth for supported runtime, verification layers, evidence semantics and release certification.
 
-> This document is the only current runtime/release control document. Historical reports are provenance only.
+> This is the only current runtime/release control document. It deliberately does not hard-code a commit SHA or workflow run number because every material repository change can supersede the previous evidence.
 
 ## 1. Locked verification environment
 
@@ -67,19 +67,11 @@ A test's existence is not proof of execution. A green old run is not proof of a 
 
 Current release truth is always calculated from:
 
-`current main HEAD → latest non-superseded Verification evidence → applicable manual release evidence`
+`actual main HEAD → latest non-superseded Verification workflow for that HEAD → applicable manual release evidence`
 
 Certification is attached to an exact commit. Any later commit requires fresh applicable verification.
 
-Current snapshot at reconciliation:
-
-- **main HEAD:** `e16a0c9ccd716d7853f27d3ce56de0a6bcbe30cf`
-- **Latest Verification:** run #465 / workflow id `34369571962`
-- **Status:** PENDING
-- **Conclusion:** not yet available
-- **Release state:** **NOT RELEASE CERTIFIED**
-
-Run #464 on the immediately previous documentation commit was cancelled and does not certify the current HEAD.
+At the current documentation baseline the release state remains **NOT RELEASE CERTIFIED** until the latest workflow for the actual `main` HEAD has a final successful conclusion across all required gates.
 
 ## 5. Domain release gate
 
@@ -101,4 +93,4 @@ A release claim is prohibited when any required gate is unexecuted, pending, blo
 
 ## 8. Documentation evidence rule
 
-Documentation records control rules and interpretation. It does not create execution evidence. After a material change, current status must be derived from the actual repository and latest workflow rather than copied from older reports.
+Documentation records control rules and interpretation. It does not create execution evidence. After a material change, derive current status from the actual repository and latest workflow rather than copying an older report.
