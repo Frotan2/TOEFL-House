@@ -1,0 +1,114 @@
+/* Transitional Blade domains share the same product language while their server-rendered workflows remain authoritative. */
+
+.legacy-domain-page .card,
+body:has(.card) .card {
+  scroll-margin-top: 96px;
+}
+
+body:has(.card) table.grid {
+  min-width: 44rem;
+}
+
+body:has(.card) .card > form,
+body:has(.card) table.grid form {
+  max-width: 100%;
+}
+
+body:has(.card) table.grid td:last-child {
+  min-width: 14rem;
+}
+
+body:has(.card) table.grid td form {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 3px 4px 3px 0;
+  vertical-align: middle;
+}
+
+body:has(.card) table.grid td form input,
+body:has(.card) table.grid td form select {
+  width: auto;
+  min-width: 9rem;
+}
+
+body:has(.card) table.grid td form input[type="hidden"] {
+  display: none;
+}
+
+body:has(.card) .sub {
+  max-width: 78rem;
+  text-wrap: pretty;
+}
+
+body:has(.card) .actions {
+  align-items: center;
+}
+
+body:has(.card) details {
+  border: 1px solid var(--line, #dde5ef);
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin: 4px 0;
+}
+
+body:has(.card) details[open] {
+  background: var(--surface-2, #f8fafc);
+}
+
+body:has(.card) details > form {
+  min-width: min(28rem, 100%);
+}
+
+@media (max-width: 900px) {
+  body:has(.card) main {
+    padding-inline: 16px;
+  }
+
+  body:has(.card) table.grid {
+    min-width: 42rem;
+  }
+}
+
+@media (max-width: 620px) {
+  body:has(.card) .card {
+    padding: 16px;
+  }
+
+  body:has(.card) table.grid {
+    min-width: 38rem;
+  }
+
+  body:has(.card) table.grid td form {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+
+  body:has(.card) table.grid td form input,
+  body:has(.card) table.grid td form select,
+  body:has(.card) table.grid td form button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media print {
+  body:has(.card) table.grid {
+    min-width: 0;
+  }
+
+  body:has(.card) table.grid td:last-child,
+  body:has(.card) form,
+  body:has(.card) details,
+  body:has(.card) nav.main,
+  body:has(.card) header.top .who form {
+    display: none !important;
+  }
+
+  body:has(.card) .card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
