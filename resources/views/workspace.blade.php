@@ -8,6 +8,7 @@
     @vite('resources/js/product-theme.css')
     <link rel="stylesheet" href="{{ asset('css/toefl-house-ultimate.css') }}">
     <link rel="stylesheet" href="{{ asset('css/toefl-house-route-state.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/toefl-house-placement.css') }}">
     @if (($view ?? 'workspace') === 'reporting')
         @vite('resources/js/reporting.tsx')
     @else
