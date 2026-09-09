@@ -1,0 +1,134 @@
+:root {
+  --placement-line: color-mix(in srgb, var(--border-subtle, #d7dde7) 82%, transparent);
+}
+
+body:has(#react-console[data-view="placement"]) .workspace {
+  container-type: inline-size;
+}
+
+body:has(#react-console[data-view="placement"]) .workspace-header {
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+body:has(#react-console[data-view="placement"]) .workspace-header .lede {
+  max-width: 72rem;
+}
+
+body:has(#react-console[data-view="placement"]) .summary-grid {
+  position: relative;
+  z-index: 1;
+}
+
+body:has(#react-console[data-view="placement"]) .summary-grid .panel {
+  min-height: 7rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+body:has(#react-console[data-view="placement"]) main.workspace > .panel {
+  overflow: clip;
+}
+
+body:has(#react-console[data-view="placement"]) main.workspace > .panel .section-heading {
+  align-items: flex-start;
+}
+
+body:has(#react-console[data-view="placement"]) main.workspace > .panel .source-note {
+  max-width: 34rem;
+  text-wrap: balance;
+}
+
+body:has(#react-console[data-view="placement"]) .fact-list > li {
+  gap: 1rem;
+  padding-block: 1rem;
+  border-block-end: 1px solid var(--placement-line);
+}
+
+body:has(#react-console[data-view="placement"]) .fact-list > li:last-child {
+  border-block-end: 0;
+}
+
+body:has(#react-console[data-view="placement"]) .inline-actions {
+  align-items: center;
+}
+
+body:has(#react-console[data-view="placement"]) textarea,
+body:has(#react-console[data-view="placement"]) input,
+body:has(#react-console[data-view="placement"]) select {
+  min-height: 2.75rem;
+}
+
+body:has(#react-console[data-view="placement"]) textarea {
+  min-width: min(34rem, 100%);
+  resize: vertical;
+}
+
+body:has(#react-console[data-view="placement"]) .action-form {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--placement-line);
+}
+
+/* Preserve the actual state machine as a visual sequence without duplicating server authority. */
+body:has(#react-console[data-view="placement"]) main.workspace > .panel:nth-of-type(2) {
+  border-inline-start: 3px solid var(--accent, currentColor);
+}
+
+body:has(#react-console[data-view="placement"]) main.workspace > .panel:nth-of-type(4) {
+  border-inline-start: 3px solid color-mix(in srgb, var(--accent, currentColor) 72%, transparent);
+}
+
+body:has(#react-console[data-view="placement"]) main.workspace > .panel:nth-of-type(5) {
+  border-inline-start: 3px solid color-mix(in srgb, var(--accent, currentColor) 88%, transparent);
+}
+
+body:has(#react-console[data-view="placement"]) main.workspace > .panel:nth-of-type(6) {
+  border-inline-start: 3px solid color-mix(in srgb, var(--accent, currentColor) 100%, transparent);
+}
+
+@container (max-width: 860px) {
+  body:has(#react-console[data-view="placement"]) .workspace-header {
+    flex-direction: column;
+  }
+
+  body:has(#react-console[data-view="placement"]) .workspace-header > a,
+  body:has(#react-console[data-view="placement"]) .workspace-header .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  body:has(#react-console[data-view="placement"]) .summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body:has(#react-console[data-view="placement"]) .summary-grid .panel {
+    min-height: 6rem;
+  }
+
+  body:has(#react-console[data-view="placement"]) .inline-actions,
+  body:has(#react-console[data-view="placement"]) .compact-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  body:has(#react-console[data-view="placement"]) .inline-actions .button,
+  body:has(#react-console[data-view="placement"]) .inline-actions .text-button {
+    width: 100%;
+  }
+}
+
+@media print {
+  body:has(#react-console[data-view="placement"]) .inline-actions,
+  body:has(#react-console[data-view="placement"]) form,
+  body:has(#react-console[data-view="placement"]) .workspace-header > a {
+    display: none !important;
+  }
+
+  body:has(#react-console[data-view="placement"]) main.workspace > .panel {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+}
