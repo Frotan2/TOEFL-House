@@ -1,1 +1,0 @@
-The Windows restore script is required to verify the dump, create a pre-restore safety snapshot, stop on restore errors, and fail closed on post-restore verification.
