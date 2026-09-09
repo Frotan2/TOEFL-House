@@ -6,7 +6,7 @@ type AppShellProps = {
   children?: ReactNode;
 };
 
-type IconProps = SVGProps<SVGSVGElement> & { name: 'home' | 'users' | 'academic' | 'teacher' | 'crm' | 'finance' | 'reporting' | 'management' | 'menu' | 'logout' | 'chevron' };
+type IconProps = SVGProps<SVGSVGElement> & { name: 'home' | 'users' | 'academic' | 'teacher' | 'crm' | 'finance' | 'reporting' | 'management' | 'menu' | 'logout' | 'chevron' | 'settings' | 'tasks' };
 
 export function Icon({ name, width = 17, height = 17, ...props }: IconProps) {
   const common = { width, height, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
@@ -19,6 +19,8 @@ export function Icon({ name, width = 17, height = 17, ...props }: IconProps) {
     finance: <><path d="M3 7h18M5 4h14v16H5z"/><path d="M8 12h8M8 15h5"/></>,
     reporting: <><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 5-7"/></>,
     management: <><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 15v-3M12 15V9M16 15v-6"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .04 2l.04.04-1.7 1.7-.04-.04a1.8 1.8 0 0 0-2-.04l-.3.17a1.8 1.8 0 0 0-1 1.63V21h-2.4v-.58a1.8 1.8 0 0 0-1-1.63l-.3-.17a1.8 1.8 0 0 0-2 .04l-.04.04-1.7-1.7.04-.04a1.8 1.8 0 0 0 .04-2l-.17-.3a1.8 1.8 0 0 0-1.63-1H3.7v-2.4h.58a1.8 1.8 0 0 0 1.63-1l.17-.3a1.8 1.8 0 0 0-.04-2L6 7.96l1.7-1.7.04.04a1.8 1.8 0 0 0 2 .04l.3-.17a1.8 1.8 0 0 0 1-1.63V4h2.4v.58a1.8 1.8 0 0 0 1 1.63l.3.17a1.8 1.8 0 0 0 2-.04l.04-.04 1.7 1.7-.04.04a1.8 1.8 0 0 0-.04 2l.17.3a1.8 1.8 0 0 0 1.63 1H21v2.4h-.58a1.8 1.8 0 0 0-1.63 1l-.17.3Z"/></>,
+    tasks: <><path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 6 1.5 1.5L6.5 5M3 12l1.5 1.5L6.5 11M3 18l1.5 1.5L6.5 17"/></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
     logout: <><path d="M9 5H5v14h4"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9"/></>,
     chevron: <path d="m9 18 6-6-6-6"/>,
@@ -27,14 +29,14 @@ export function Icon({ name, width = 17, height = 17, ...props }: IconProps) {
 }
 
 const navigation = [
-  { href: '/workspace', label: 'Workspace', key: 'workspace', icon: 'home' as const },
-  { href: '/students', label: 'Students', key: 'students', icon: 'users' as const },
-  { href: '/academic', label: 'Academic', key: 'academic', icon: 'academic' as const },
-  { href: '/teachers', label: 'People', key: 'teachers', icon: 'teacher' as const },
-  { href: '/crm', label: 'CRM', key: 'crm', icon: 'crm' as const },
+  { href: '/workspace', label: 'Home', key: 'workspace', icon: 'home' as const },
+  { href: '/students', label: 'Students & Admissions', key: 'students', icon: 'users' as const },
+  { href: '/academic', label: 'Academic Operations', key: 'academic', icon: 'academic' as const },
+  { href: '/teachers', label: 'People & Faculty', key: 'teachers', icon: 'teacher' as const },
+  { href: '/crm', label: 'Front Office / CRM', key: 'crm', icon: 'crm' as const },
   { href: '/finance', label: 'Finance', key: 'finance', icon: 'finance' as const },
   { href: '/reporting', label: 'Reports', key: 'reporting', icon: 'reporting' as const },
-  { href: '/management', label: 'Management', key: 'management', icon: 'management' as const },
+  { href: '/management', label: 'Command Center', key: 'management', icon: 'management' as const },
 ];
 
 function NavigationLinks({ current }: { current: string }) {
@@ -53,13 +55,14 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
       <a className="skip-link" href="#workspace-main">Skip to main content</a>
       <header className="app-header">
         <div className="app-header-inner">
-          <a className="app-brand" href="/workspace" aria-label="The TOEFL House workspace">
+          <a className="app-brand" href="/workspace" aria-label="The TOEFL House home">
             <span className="brand-mark" aria-hidden="true">T</span>
             <span className="brand-copy"><strong>TOEFL House</strong><small>Operations platform</small></span>
           </a>
           <nav className="app-nav" aria-label="Primary navigation"><NavigationLinks current={current} /></nav>
           <div className="app-header-actions">
-            <a className="header-utility" href="/workspace" title="Return to your workspace"><span className="utility-dot" aria-hidden="true" />My workspace</a>
+            <a className="header-utility" href="/workspace#work-queue" title="Open your current work queue"><Icon name="tasks" />My work</a>
+            <a className="header-utility" href="/management?view=administration" title="Open administration and setup"><Icon name="settings" />Administration</a>
             <details className="mobile-nav">
               <summary aria-label="Open primary navigation"><Icon name="menu" /><span className="sr-only">Open navigation</span></summary>
               <nav aria-label="Mobile primary navigation"><NavigationLinks current={current} /></nav>
