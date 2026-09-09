@@ -1,2 +1,0 @@
-The Windows restore contract is regression-tested by tests/Unit/Deployment/RestoreContractTest.php.
-Production release requires a verified dump, a pre-restore safety snapshot, exit-on-error restore, and fail-closed post-restore semantic checks.
