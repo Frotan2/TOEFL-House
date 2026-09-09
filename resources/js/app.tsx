@@ -6,6 +6,7 @@ import './student-journey.css';
 import './teacher-day.css';
 import './front-office.css';
 import './command-palette.css';
+import './product-theme.css';
 import { AcademicApp } from './academic';
 import { AcademicSetupApp } from './academic-setup';
 import { TeacherApp } from './teacher';
