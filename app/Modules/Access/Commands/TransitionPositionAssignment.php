@@ -12,6 +12,7 @@ use App\Modules\Audit\AuditRecorder;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\PersonBranchScope;
+use App\Support\Authorization\PositionConferability;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
@@ -27,6 +28,7 @@ final class TransitionPositionAssignment
 
     public function __construct(
         private readonly AccessDecision $access,
+        private readonly PositionConferability $positionConferability,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
@@ -59,10 +61,7 @@ final class TransitionPositionAssignment
                     if ($position === null || trim((string) $position->organization_id) !== trim($scope->organizationId)) {
                         throw BusinessRejection::forCode('access.position_scope_mismatch', 'a position assignment must remain inside the person home organization');
                     }
-                    $outcome = $this->access->decide($actor, self::CAPABILITY, $scope);
-                    if (! $outcome->allowed) {
-                        throw AuthorizationDenied::forCode('access.position_transition_denied', $outcome->reason);
-                    }
+                    $this->positionConferability->require($actor, $position, $scope);
                     AccessLifecycle::requireTransition($locked->lifecycle_state, $toState);
 
                     $before = ['lifecycle_state' => $locked->lifecycle_state];

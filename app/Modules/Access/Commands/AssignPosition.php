@@ -12,6 +12,7 @@ use App\Modules\Audit\AuditRecorder;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\PersonBranchScope;
+use App\Support\Authorization\PositionConferability;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
@@ -31,6 +32,7 @@ final class AssignPosition
 
     public function __construct(
         private readonly AccessDecision $access,
+        private readonly PositionConferability $positionConferability,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
@@ -49,7 +51,7 @@ final class AssignPosition
                     if ($position === null || trim((string) $position->organization_id) !== trim($scope->organizationId)) {
                         throw BusinessRejection::forCode('access.position_scope_mismatch', 'a position assignment must remain inside the person home organization');
                     }
-                    $this->requireAssigner($assigner, $scope);
+                    $this->requireAssigner($assigner, $position, $scope);
 
                     $prior = PositionAssignment::query()
                         ->where('person_id', $personId)
@@ -89,11 +91,8 @@ final class AssignPosition
         }
     }
 
-    private function requireAssigner(Actor $assigner, StructureScope $scope): void
+    private function requireAssigner(Actor $assigner, Position $position, StructureScope $scope): void
     {
-        $outcome = $this->access->decide($assigner, self::CAPABILITY, $scope);
-        if (! $outcome->allowed) {
-            throw AuthorizationDenied::forCode('access.assign_position_denied', $outcome->reason);
-        }
+        $this->positionConferability->require($assigner, $position, $scope);
     }
 }
