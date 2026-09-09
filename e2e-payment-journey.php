@@ -241,8 +241,12 @@ $me = $owner->get('/api/v1/me');
 ($me['status'] === 200 && ($me['json']['data']['username'] ?? '') === 'owner') ? pass('owner signed in; /api/me → owner') : fail('owner.login', "/api/v1/me {$me['status']}");
 
 $positionId = qv('SELECT id FROM positions ORDER BY id LIMIT 1');
-$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId): Browser {
-    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1985-07-07']);
+// Genesis structure: the first-run bootstrap provisions the campus + branch
+// every branch-mandated intake needs (see the final certification report).
+$branchId = qv('SELECT id FROM branches ORDER BY created_at LIMIT 1');
+$branchId !== '' ? pass('bootstrap provisioned the genesis branch') : fail('bootstrap.structure', 'no branch');
+$provision = function (string $fullName, string $username, string $password) use ($owner, $positionId, $branchId): Browser {
+    $owner->post('/identity/people', ['legal_name' => $fullName, 'date_of_birth' => '1985-07-07', 'home_branch_id' => $branchId]);
     $pid = qv('SELECT id FROM people WHERE legal_name=? ORDER BY id DESC LIMIT 1', [$fullName]);
     $owner->post("/identity/people/$pid/verify", ['identity_key' => "nid-$username", 'evidence_ref' => "id/$username"]);
     $owner->post('/identity/accounts', ['person_id' => $pid, 'username' => $username]);
@@ -268,11 +272,11 @@ pass('finance + refund-requester + refund-approver provisioned');
 // ---------- student ----------
 step('STAGE 2 — register a real student through the actual workflow');
 // person intake + verify
-$owner->post('/identity/people', ['legal_name' => 'Paying Student', 'date_of_birth' => '2007-04-22']);
+$owner->post('/identity/people', ['legal_name' => 'Paying Student', 'date_of_birth' => '2007-04-22', 'home_branch_id' => $branchId]);
 $studentPersonId = qv("SELECT id FROM people WHERE legal_name='Paying Student'");
 $owner->post("/identity/people/$studentPersonId/verify", ['identity_key' => 'nid-PAY-001', 'evidence_ref' => 'passport/PAY-001']);
 // applicant register (finance officer is omnipotent via position)
-$finance->post('/students/applicants', ['person_id' => $studentPersonId, 'program_interest' => 'TOEFL Preparation']);
+$finance->post('/students/applicants', ['person_id' => $studentPersonId, 'program_interest' => 'TOEFL Preparation', 'branch_id' => $branchId]);
 $applicantId = qv('SELECT id FROM applicants WHERE person_id=?', [$studentPersonId]);
 // 3-signature admission: initiator (finance) -> reviewer (refunder) -> approver (refundApprover)
 $finance->post("/students/applicants/$applicantId/initiate", ['decision' => 'admit', 'reason' => 'meets policy', 'evidence_ref' => 'adm/PAY-001']);

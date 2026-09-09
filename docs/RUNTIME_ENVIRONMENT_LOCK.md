@@ -198,6 +198,14 @@ in `.runtime/bin` export `LD_LIBRARY_PATH` and `PHPRC` so even a child process
 spawned via `proc_open`/`PHP_BINARY` (e.g. the concurrency race children)
 inherits a fully-configured interpreter.
 
+**One exception, verified 2026-09-09:** `php artisan serve` filters the child
+`php -S` environment down to `ServeCommand::$passthroughVariables` whenever a
+`.env` file exists, so `LD_LIBRARY_PATH`/`PHPRC` are stripped and the child
+fails to load the self-contained PHP build. Serve the app with the built-in
+server through the launcher instead — `.runtime/bin/php -S 127.0.0.1:8999 -t
+public public/index.php` (this is how the root E2E journeys run; set
+`PHP_CLI_SERVER_WORKERS` > 1 for the concurrent-allocation stages).
+
 ### Building PHP from source (only if the npm build ever disappears)
 
 Fallback narrative in `docs/RUNTIME_ENVIRONMENT.md`. Fetch the official PHP

@@ -7,6 +7,7 @@ namespace Tests\Feature\Deployment;
 use App\Modules\Identity\Models\UserAccount;
 use Database\Seeders\FirstRunBootstrapSeeder;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -234,6 +235,34 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
         $this->assertAuthenticated();
     }
 
+    public function test_first_run_bootstrap_provisions_the_genesis_structure(): void
+    {
+        // Person intake (Person.home_branch_id) is branch-mandated, and every
+        // post-bootstrap structure change requires the four-actor structure
+        // SoD chain — impossible before a second person exists. The bootstrap
+        // therefore provisions the genesis campus + branch itself; without
+        // them a fresh installation cannot onboard its first employee or
+        // student (see the final certification report, finding FC-1).
+        $this->seedFirstRun('owner.one', 'Owner One');
+
+        $this->assertDatabaseCount('campuses', 1);
+        $this->assertDatabaseHas('campuses', ['name' => 'Main Campus', 'lifecycle_state' => 'active']);
+        $this->assertDatabaseCount('branches', 1);
+        $this->assertDatabaseHas('branches', ['name' => 'Central Branch', 'lifecycle_state' => 'active']);
+        $this->assertDatabaseCount('campus_assignments', 1);
+
+        $assignment = DB::table('campus_assignments')->first();
+        $this->assertNull($assignment->effective_to, 'the genesis branch attribution must be open-ended');
+        $this->assertSame(
+            DB::table('branches')->value('id'),
+            $assignment->branch_id,
+        );
+        $this->assertSame(
+            DB::table('campuses')->value('id'),
+            $assignment->campus_id,
+        );
+    }
+
     public function test_first_run_bootstrap_is_a_no_op_on_a_live_system(): void
     {
         $this->seedFirstRun('owner.one', 'Owner One');
@@ -248,6 +277,8 @@ final class WindowsOneClickDeploymentContractTest extends TestCase
 
         $this->assertDatabaseCount('user_accounts', 1);
         $this->assertDatabaseCount('organizations', 1);
+        $this->assertDatabaseCount('campuses', 1);
+        $this->assertDatabaseCount('branches', 1);
         $this->assertDatabaseMissing('user_accounts', ['username' => 'intruder.two']);
     }
 

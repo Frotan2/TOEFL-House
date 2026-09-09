@@ -59,6 +59,12 @@ Use `CANONICAL_TERMINOLOGY.md` for current domain names. New synonyms for an exi
 
 ## Audit and reconciliation records (non-normative)
 
+- [`AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](AUDIT-2026-09-09-FINAL-CERTIFICATION.md) —
+  **the current release authority.** Final principal-architect certification:
+  locked runtime re-provisioned, full CI-equivalent gate chain re-executed,
+  986-test suite green, and all three real-HTTP business journeys converged
+  and executed green from a true first boot (including the fixed first-run
+  genesis structure, finding FC-1).
 - [`AUDIT-2026-09-08-RECONCILIATION.md`](AUDIT-2026-09-08-RECONCILIATION.md) — the
   branch reconciliation of the `01a0814a` certification line with the `01a080c8`
   verified line, the corrections applied to it, and the fresh verification record

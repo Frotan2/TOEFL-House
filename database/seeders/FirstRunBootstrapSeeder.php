@@ -13,6 +13,10 @@ use App\Modules\Identity\Models\Person;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Integrations\Domain\JobCatalog;
 use App\Modules\Integrations\Models\JobSchedule;
+use App\Modules\Organization\Domain\OrganizationLifecycle;
+use App\Modules\Organization\Models\Branch;
+use App\Modules\Organization\Models\Campus;
+use App\Modules\Organization\Models\CampusAssignment;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
@@ -26,7 +30,8 @@ use Illuminate\Support\Facades\Hash;
  * identity.admin, so the console cannot create the first administrator.
  *
  * This seeder writes the same authoritative records the governed access
- * model uses (bootstrap organization, a role with the complete canonical
+ * model uses (bootstrap organization, the genesis campus + branch every
+ * branch-mandated intake needs, a role with the complete canonical
  * capability set, a position bound to that role, an active assignment, and
  * the owner's verified person + user account). It is a deployment
  * bootstrap, not a parallel workflow:
@@ -127,6 +132,36 @@ final class FirstRunBootstrapSeeder extends Seeder
                 'lifecycle_state' => 'active',
             ]);
 
+            // Genesis structure: person intake, admissions, HR and academic
+            // delivery all mandate a branch (e.g. Person.home_branch_id), and
+            // every post-bootstrap structure change is governed by the
+            // four-actor separation-of-duties chain in StructureDecision. At
+            // genesis no second actor exists yet, so the bootstrap provisions
+            // the first campus and branch directly — the same sanctioned
+            // genesis-exception class as the owner's self-verified identity
+            // above. This is the ONLY place structure facts may be written
+            // outside CreateStructureUnit/TransitionStructureUnit; renaming or
+            // relocating it breaks that guarantee.
+            $campus = Campus::query()->create([
+                'id' => RandomIdentifier::new(),
+                'organization_id' => $organization->id,
+                'name' => 'Main Campus',
+                'lifecycle_state' => OrganizationLifecycle::STATE_ACTIVE,
+            ]);
+            $branch = Branch::query()->create([
+                'id' => RandomIdentifier::new(),
+                'name' => 'Central Branch',
+                'lifecycle_state' => OrganizationLifecycle::STATE_ACTIVE,
+            ]);
+            CampusAssignment::query()->create([
+                'id' => RandomIdentifier::new(),
+                'branch_id' => $branch->id,
+                'campus_id' => $campus->id,
+                'effective_from' => $today,
+                'effective_to' => null,
+                'transfer_correlation_id' => 'first-run-bootstrap',
+            ]);
+
             $role = Role::query()->create([
                 'id' => RandomIdentifier::new(),
                 'name' => 'Owner',
@@ -196,7 +231,7 @@ final class FirstRunBootstrapSeeder extends Seeder
             }
         });
 
-        $this->command?->info('First-run bootstrap complete: organization "The TOEFL House", Owner role ('.count(self::OWNER_CAPABILITIES).' capabilities) and account "'.$username.'" created.');
+        $this->command?->info('First-run bootstrap complete: organization "The TOEFL House", genesis campus "Main Campus" + branch "Central Branch", Owner role ('.count(self::OWNER_CAPABILITIES).' capabilities) and account "'.$username.'" created.');
         $this->command?->info('Sign in with that account to begin. From now on every further account is created through the console access workflow.');
     }
 
