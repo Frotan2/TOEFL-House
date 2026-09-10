@@ -67,6 +67,7 @@ assert.match(crm, /id="crm-origin-branch"/, 'CRM capture: origin branch needs a 
 assert.match(crm, /htmlFor="crm-origin-branch"/, 'CRM capture: origin branch label must identify its control');
 assert.match(crmBrowserE2e, /#crm-origin-branch/, 'CRM browser E2E must use the stable branch control selector');
 assert.doesNotMatch(crmBrowserE2e, /\.crm-capture select:nth-of-type\(3\)/, 'CRM browser E2E must not depend on sibling-position selectors');
+assert.match(crmBrowserE2e, /const waitForVisitor =/, 'CRM browser E2E must wait for its asynchronously refreshed captured visitor');
 assert.ok(fs.existsSync(path.join(root, 'public', 'favicon.svg')), 'public favicon asset missing');
 for (const view of ['workspace.blade.php', 'layouts/app.blade.php', 'finance/index.blade.php', 'library/index.blade.php']) {
   assert.match(fs.readFileSync(path.join(viewsRoot, view), 'utf8'), /favicon\.svg/, `${view}: favicon link missing`);

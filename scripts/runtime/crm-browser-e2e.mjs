@@ -161,6 +161,11 @@ const waitForNotice = async (page, expected) => {
   }, { timeout: 15_000 }, expected);
 };
 
+const waitForVisitor = async (page, expected) => {
+  await page.waitForFunction((name) => [...document.querySelectorAll('.visitor-list .visitor-row strong')]
+    .some((node) => node.textContent?.trim() === name), { timeout: 15_000 }, expected);
+};
+
 const browser = await puppeteer.launch({
   executablePath: EXECUTABLE,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
@@ -214,7 +219,8 @@ try {
   const captureInputs = await page.$$('.crm-capture input');
   if (captureInputs.length < 3) throw new Error('CRM capture form no longer exposes name/phone/email controls');
   const uniqueSuffix = `${Date.now()}`;
-  await captureInputs[0].type(`Browser CRM ${uniqueSuffix}`);
+  const visitorName = `Browser CRM ${uniqueSuffix}`;
+  await captureInputs[0].type(visitorName);
   await captureInputs[2].type(`crm-browser-${uniqueSuffix}@example.test`);
   const branchValue = branchState.options.find(Boolean);
   if (!branchValue) throw new Error('CRM capture has no selectable authorized origin branch');
@@ -223,7 +229,7 @@ try {
   await waitForNotice(page, 'Visitor captured in the CRM source of truth.');
   record('Visitor capture succeeds through the canonical API', true, 'capture acknowledgement received');
 
-  const visitorName = await page.$eval('.visitor-list .visitor-row strong', (node) => node.textContent.trim());
+  await waitForVisitor(page, visitorName);
   await clickButtonByText(page, visitorName);
   await page.waitForFunction((expected) => document.querySelector('#detail-title')?.textContent?.trim() === expected, {}, visitorName);
   record('Captured visitor can be reopened from the authorized directory', true, visitorName);
