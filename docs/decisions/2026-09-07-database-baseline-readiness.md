@@ -1,12 +1,12 @@
 # ADR — Database Baseline Readiness and Migration Consolidation
 
 **Date:** 2026-09-07  
-**Status:** CURRENT  
-**Decision:** Defer physical migration consolidation until a PostgreSQL schema freeze and runtime verification are available.
+**Status:** CURRENT — updated 2026-09-10
+**Decision:** Defer physical migration consolidation until a PostgreSQL schema freeze; runtime verification is a required baseline input and is now available.
 
 ## Context
 
-TOEFL House currently has exactly 185 migration files (ordinals `000001`–`000190`; the `000175`–`000179` numbering gap is historical — this paragraph originally said 190 and was corrected 2026-09-09). Many of the newest migrations are not disposable history: they contain active domain convergence and database integrity hardening. The project is still pre-production, so a clean baseline is desirable once the schema is stable.
+TOEFL House currently has exactly 202 migration files (ordinals `000001`–`000207`; the `000175`–`000179` numbering gap is historical). Many of the newest migrations are not disposable history: they contain active domain convergence and database integrity hardening. The project is still pre-production, so a clean baseline is desirable once the schema is stable.
 
 A migration count is not a correctness metric. The engineering objective is one canonical schema with controlled versioned evolution, not the smallest possible number of files.
 
@@ -23,9 +23,15 @@ A migration count is not a correctness metric. The engineering objective is one 
 
 ## Why consolidation is not executed yet
 
-The current verification environment has PHP but lacks Composer/vendor dependencies, `psql`, Docker, and a reachable PostgreSQL instance. Therefore the team cannot currently produce the evidence required to prove that a hand-built baseline is equivalent to the resulting PostgreSQL schema.
+The locked runtime can now replay the current chain on PostgreSQL 18.4, so an
+unavailable environment is no longer the blocker. Physical consolidation still
+requires an explicit schema freeze, a reviewed schema-only capture, and a
+baseline-versus-chain equivalence replay. None of those may be inferred merely
+from a successful migration run.
 
-Creating a guessed baseline now would risk silently dropping functions, triggers, exclusion constraints, defaults, indexes, or late hardening. That would violate the project's evidence-first and migration-truth rules.
+Creating a guessed baseline now would risk silently dropping functions, triggers,
+exclusion constraints, defaults, indexes, or late hardening. That would violate
+the project's evidence-first and migration-truth rules.
 
 ## Consequences
 

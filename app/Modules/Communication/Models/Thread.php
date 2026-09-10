@@ -23,6 +23,7 @@ final class Thread extends Model
         'last_activity_at' => 'datetime',
     ];
 
+    /** @return HasMany<ThreadParticipant, $this> */
     public function participants(): HasMany
     {
         return $this->hasMany(ThreadParticipant::class, 'thread_id');

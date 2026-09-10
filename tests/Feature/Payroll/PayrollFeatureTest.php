@@ -6,6 +6,11 @@ namespace Tests\Feature\Payroll;
 
 use App\Modules\Finance\Commands\MaintainEmploymentSettlement;
 use App\Modules\Finance\Commands\MaintainFinancialPeriod;
+use App\Modules\Finance\Commands\PostJournal;
+use App\Modules\Finance\Commands\RecognizePayrollLiability;
+use App\Modules\Finance\Models\FinancialPeriod;
+use App\Modules\Finance\Models\Journal;
+use App\Modules\Finance\Models\PayrollLiabilityFact;
 use App\Modules\Hr\Commands\MaintainContractVersion;
 use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Models\ContractVersion;
@@ -18,7 +23,6 @@ use App\Modules\Payroll\Commands\MaintainPayrollPeriod;
 use App\Modules\Payroll\Commands\SettleEmployment;
 use App\Modules\Payroll\Models\PayrollCalculation;
 use App\Modules\Payroll\Models\PayrollPeriod;
-use App\Modules\Payroll\Models\PayrollResult;
 use App\Modules\Payroll\Models\SettlementProposal;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
@@ -33,8 +37,9 @@ use Tests\TestCase;
  * Payroll mechanics on the single authoritative compensation path:
  * versioned contract resolution with calendar-day proration, held
  * contract-silent cases, recalculation supersession, approval SoD,
- * immutable results with appending adjustments/reversals, period
- * closure, termination settlement and capability denials.
+ * immutable Payroll evidence with Finance-owned liability recognition and
+ * compensating journal reversals, period closure, termination settlement and
+ * capability denials.
  */
 final class PayrollFeatureTest extends TestCase
 {
@@ -45,6 +50,8 @@ final class PayrollFeatureTest extends TestCase
     private string $personId = 'pay-teacher-1';
 
     private string $periodId;
+
+    private string $financialPeriodId;
 
     protected function setUp(): void
     {
@@ -77,7 +84,8 @@ final class PayrollFeatureTest extends TestCase
 
         // Settlement recording is a Finance domain action: it requires one
         // open Finance financial period containing the record date.
-        app(MaintainFinancialPeriod::class)->open($this->grantedActor('pay-fperiod-1', ['finance.period']), '2026-09', '2026-09-01', '2026-09-30', 'pay-fper-1');
+        $financialPeriod = app(MaintainFinancialPeriod::class)->open($this->grantedActor('pay-fperiod-1', ['finance.period']), '2026-09', '2026-09-01', '2026-09-30', 'pay-fper-1');
+        $this->financialPeriodId = $financialPeriod['period_id'];
     }
 
     private function financeManager(): Actor
@@ -173,12 +181,12 @@ final class PayrollFeatureTest extends TestCase
         $this->assertSame($row->snapshot['contract_version_id'], $firstRow->snapshot['contract_version_id']);
     }
 
-    public function test_approval_sod_and_immutable_result_with_appending_adjustments(): void
+    public function test_approval_sod_and_immutable_result_with_finance_owned_liability_reversal(): void
     {
         $preparer = $this->grantedActor('pay-calc-1', ['payroll.calculate', 'payroll.approve']);
         $calculation = app(CalculatePayroll::class)->prepare($preparer, PayrollPeriod::query()->findOrFail($this->periodId), Employment::query()->findOrFail($this->employmentId), 'pay-calc-6');
 
-        $approver = $this->grantedActor('pay-approve-1', ['payroll.approve', 'payroll.adjust']);
+        $approver = $this->grantedActor('pay-approve-1', ['payroll.approve']);
         try {
             app(ApprovePayrollResult::class)->approve($preparer, PayrollCalculation::query()->findOrFail($calculation['calculation_id']), 'pay-res-1');
             $this->fail('the preparer may not approve');
@@ -205,42 +213,87 @@ final class PayrollFeatureTest extends TestCase
             $this->assertSame('payroll.calculation_not_prepared', $rejection->errorCode());
         }
 
-        $adjustment = app(ApprovePayrollResult::class)->adjust($approver, PayrollResult::query()->findOrFail($result['result_id']), 'adjustment', '1500.00', 'overtime correction per review', 'pay-adj-1');
-        $this->assertDatabaseHas('payroll_adjustments', ['id' => $adjustment['adjustment_id'], 'kind' => 'adjustment', 'amount' => '1500.00']);
+        // Payroll ends at immutable approved evidence. A separate Finance actor
+        // recognizes the exact liability and the Finance ledger appends an
+        // immutable compensating reversal when a correction is required.
+        $finance = $this->grantedActor('pay-finance-liability-1', ['finance.payroll_liability', 'finance.journal']);
+        $recognized = app(RecognizePayrollLiability::class)->recognize(
+            $finance,
+            'payroll_result',
+            $result['result_id'],
+            '42000.00',
+            'payroll/result/'.$result['result_id'],
+            'pay-liability-1',
+        );
+        $this->assertFalse($recognized['duplicate']);
+        $this->assertDatabaseHas('payroll_liability_facts', [
+            'id' => $recognized['liability_id'],
+            'source_type' => 'payroll_result',
+            'source_id' => $result['result_id'],
+            'amount' => '42000.00',
+            'recognized_by' => $finance->actorId,
+        ]);
+        $liability = PayrollLiabilityFact::query()->findOrFail($recognized['liability_id']);
+        $original = Journal::query()
+            ->where('source_type', 'payroll_liability')
+            ->where('source_id', $liability->id)
+            ->firstOrFail();
 
-        $reversal = app(ApprovePayrollResult::class)->adjust($approver, PayrollResult::query()->findOrFail($result['result_id']), 'reversal', '42000.00', 'result voided after evidence review', 'pay-adj-2');
-        $this->assertDatabaseHas('payroll_adjustments', ['id' => $reversal['adjustment_id'], 'amount' => '-42000.00']);
+        $reversal = app(PostJournal::class)->reverse($finance, $original, 'recognized payroll liability reversed after evidence review', 'pay-journal-reversal-1');
+        $this->assertDatabaseHas('journals', [
+            'id' => $reversal['journal_id'],
+            'source_type' => 'journal',
+            'source_id' => $original->id,
+            'reversal_of_id' => $original->id,
+        ]);
         try {
-            app(ApprovePayrollResult::class)->adjust($approver, PayrollResult::query()->findOrFail($result['result_id']), 'reversal', '42000.00', 'again', 'pay-adj-3');
-            $this->fail('double reversal must be rejected');
+            app(PostJournal::class)->reverse($finance, $original, 'a second reversal must be impossible', 'pay-journal-reversal-2');
+            $this->fail('a Finance journal may have only one compensating reversal');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('payroll.reversal_exists', $rejection->errorCode());
+            $this->assertSame('finance.journal_already_reversed', $rejection->errorCode());
         }
 
         $this->expectException(QueryException::class);
         DB::statement('UPDATE payroll_results SET amount = 999999 WHERE id = ?', [$result['result_id']]);
     }
 
-    public function test_closed_period_rejects_mutation(): void
+    public function test_closed_periods_reject_mutation_on_their_respective_authorities(): void
     {
         $preparer = $this->payrollPreparer();
         $calculation = app(CalculatePayroll::class)->prepare($preparer, PayrollPeriod::query()->findOrFail($this->periodId), Employment::query()->findOrFail($this->employmentId), 'pay-calc-7');
-        $approver = $this->grantedActor('pay-approve-1', ['payroll.approve', 'payroll.adjust']);
+        $approver = $this->grantedActor('pay-approve-1', ['payroll.approve']);
         $result = app(ApprovePayrollResult::class)->approve($approver, PayrollCalculation::query()->findOrFail($calculation['calculation_id']), 'pay-res-5');
+        $finance = $this->grantedActor('pay-finance-liability-2', ['finance.payroll_liability', 'finance.journal']);
+        $recognized = app(RecognizePayrollLiability::class)->recognize(
+            $finance,
+            'payroll_result',
+            $result['result_id'],
+            '42000.00',
+            'payroll/result/'.$result['result_id'],
+            'pay-liability-2',
+        );
+        $original = Journal::query()
+            ->where('source_type', 'payroll_liability')
+            ->where('source_id', $recognized['liability_id'])
+            ->firstOrFail();
 
         $closer = $this->grantedActor('pay-period-1', ['payroll.period']);
         app(MaintainPayrollPeriod::class)->close($closer, PayrollPeriod::query()->findOrFail($this->periodId), 'pay-per-3');
+        $financeCloser = $this->grantedActor('pay-finance-period-closer', ['finance.period']);
+        app(MaintainFinancialPeriod::class)->close($financeCloser, FinancialPeriod::query()->findOrFail($this->financialPeriodId), 'pay-finance-period-close-1');
 
+        // Payroll closure blocks new Payroll calculations; financial closure
+        // independently blocks the Finance correction path.
         try {
-            app(ApprovePayrollResult::class)->adjust($approver, PayrollResult::query()->findOrFail($result['result_id']), 'adjustment', '10.00', 'late entry', 'pay-adj-4');
-            $this->fail('a closed period must reject mutation');
+            app(PostJournal::class)->reverse($finance, $original, 'late reversal after financial close', 'pay-journal-reversal-after-close');
+            $this->fail('a closed Finance period must reject a payroll-liability journal reversal');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('payroll.period_closed', $rejection->errorCode());
+            $this->assertSame('finance.period_not_open', $rejection->errorCode());
         }
 
         try {
             app(CalculatePayroll::class)->prepare($preparer, PayrollPeriod::query()->findOrFail($this->periodId), Employment::query()->findOrFail($this->employmentId), 'pay-calc-8');
-            $this->fail('a closed period must reject new calculations');
+            $this->fail('a closed Payroll period must reject new calculations');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('payroll.period_not_open', $rejection->errorCode());
         }

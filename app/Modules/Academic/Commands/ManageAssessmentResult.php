@@ -278,7 +278,13 @@ final class ManageAssessmentResult
                     $locked->forceFill(['lifecycle_state' => AssessmentResultLifecycle::STATE_CORRECTED]);
                     $locked->save();
 
-                    $corrected = AssessmentResult::query()->create([
+                    // AssessmentResult deliberately permits mass assignment only
+                    // for the initial scored evidence. A correction is trusted
+                    // workflow output, so preserve its complete sign-off chain
+                    // explicitly rather than silently dropping the protected
+                    // moderation, approval, and release attributes.
+                    $corrected = new AssessmentResult;
+                    $corrected->forceFill([
                         'id' => RandomIdentifier::new(),
                         'attempt_id' => $locked->attempt_id,
                         'score' => $lockedCorrection->score,
@@ -290,6 +296,7 @@ final class ManageAssessmentResult
                         'approved_by' => $approver->actorId,
                         'released_by' => $approver->actorId,
                     ]);
+                    $corrected->save();
 
                     $event = $this->audit->record($approver->actorId, 'academic.result.correction.approve', 'assessment_result', $corrected->id, [
                         'score' => $locked->score,

@@ -27,8 +27,8 @@ for (const filename of transportEntrypoints) {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.equal(packageJson.engines?.node, '22.22.3', 'package: Node engine drift');
-assert.equal(packageJson.engines?.npm, '10.9.8', 'package: npm engine drift');
+assert.equal(packageJson.engines?.node, '>=22.0 <23.0', 'package: Node compatibility range drift');
+assert.equal(packageJson.engines?.npm, '>=10.0 <11.0', 'package: npm compatibility range drift');
 
 const app = fs.readFileSync(path.join(jsRoot, 'app.tsx'), 'utf8');
 assert.match(app, /react-console/);
@@ -62,7 +62,7 @@ assert.match(browserE2e, /required\('CHROMIUM_PATH'\)/);
 assert.doesNotMatch(browserE2e, /Runtime-Pass-12345|runtime\.owner|definitely-the-wrong-password/i);
 
 const environment = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'verify-environment.mjs'), 'utf8');
-for (const version of ["php: { exact: '8.4.25'", "composer: { exact: '2.10.3'", "node: { exact: '22.22.3'", "npm: { exact: '10.9.8'", "postgres: { exact: '18.4'"]) assert.match(environment, new RegExp(version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+for (const range of ["php: { range: '>=8.2 <8.5'", "composer: { range: '>=2.5 <3'", "node: { range: '>=22.0 <23.0'", "npm: { range: '>=10.0 <11.0'", "postgres: { range: '>=18.0 <19.0'"]) assert.match(environment, new RegExp(range.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'verification.yml'), 'utf8');
 for (const pattern of [

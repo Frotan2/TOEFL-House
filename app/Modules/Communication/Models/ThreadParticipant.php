@@ -23,6 +23,7 @@ final class ThreadParticipant extends Model
         'left_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Thread, $this> */
     public function thread(): BelongsTo
     {
         return $this->belongsTo(Thread::class, 'thread_id');

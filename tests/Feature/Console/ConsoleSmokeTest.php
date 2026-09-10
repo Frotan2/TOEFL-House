@@ -43,11 +43,17 @@ final class ConsoleSmokeTest extends TestCase
             ->assertRedirect('/');
         $this->assertAuthenticated();
 
-        // Compat redirects: GET routes that point at the React boundary
-        // instead of owning a Blade page (home -> workspace, legacy academic
-        // sessions -> academic shell). Rendering is covered on their target
-        // pages below; a redirect is the designed behavior, not a page.
-        $skipped = ['api.me', 'health', 'login', 'home', 'academic.sessions'];
+        // Compatibility endpoints deliberately redirect to their canonical
+        // React surface. Verify those contracts instead of treating a valid
+        // redirect as a failed page render; the destination is exercised in
+        // the same loop below.
+        $compatibilityRedirects = [
+            'home' => 'workspace',
+            'academic.sessions' => 'academic.index',
+            'privacy.index' => 'governance.privacy',
+            'audit.index' => 'governance.audit',
+        ];
+        $skipped = ['api.me', 'health', 'login'];
         foreach (Route::getRoutes()->getRoutes() as $route) {
             $name = (string) ($route->getName() ?? '');
             $uri = '/'.ltrim((string) $route->uri(), '/');
@@ -58,6 +64,11 @@ final class ConsoleSmokeTest extends TestCase
                 continue;
             }
             if (in_array($name, $skipped, true)) {
+                continue;
+            }
+            if (isset($compatibilityRedirects[$name])) {
+                $this->get($uri)->assertRedirectToRoute($compatibilityRedirects[$name]);
+
                 continue;
             }
 

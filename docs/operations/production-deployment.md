@@ -10,10 +10,11 @@ the exact value to supply is called out as a `TODO`.
 
 | Component | Requirement | Verified with |
 |---|---|---|
-| PHP | `>=8.2 <8.5` (CLI + FPM) with `pdo_pgsql`/`pgsql`, `mbstring`, `openssl`, `bcmath`, `intl`, `xml` | 8.4.14 |
+| PHP | `>=8.2 <8.5` (CLI + FPM) with `pdo_pgsql`/`pgsql`, `mbstring`, `openssl`, `bcmath`, `intl`, `xml` | 8.4.14 local / 8.4.25 CI |
+| Composer | `>=2.5 <3` | 2.9.2 local / 2.10.3 CI |
 | PostgreSQL | `>=18.0 <19.0` with `pgcrypto` and `btree_gist` available | 18.4 |
 | Node.js | `>=22.0 <23.0` (`package.json` engines) | 22.22.3 |
-| npm | `>=10.0` (`package.json` engines, enforced with `--engine-strict`) | 10.9.8 |
+| npm | `>=10.0 <11.0` (`package.json` engines, enforced with `--engine-strict`) | 10.9.8 |
 | Web server | nginx (TLS termination) + PHP-FPM | nginx 1.x / php-fpm |
 | OS | Any Linux that ships the above (Debian/Ubuntu reference) | — |
 
@@ -54,8 +55,8 @@ CREATE DATABASE toefl_house;
 ```
 
 Point `DB_*` in the `.env` at it. The application requires PostgreSQL extensions `pgcrypto` and `btree_gist`. The
-deployment preflight verifies PostgreSQL 18.4, checks that both extensions are
-available, and refuses to continue when an uninstalled extension cannot be
+deployment preflight verifies the supported PostgreSQL 18.x range, checks that
+both extensions are available, and refuses to continue when an uninstalled extension cannot be
 provisioned by the deployment role. Keep the
 database on the same host (or a trusted private network); `DB_SSLMODE=require`, `verify-ca`, or `verify-full` if it is remote; the
 deployment script rejects weaker remote settings. Timezone: the app uses
@@ -158,7 +159,7 @@ refuses to build when the manifest and lockfile disagree.
 goes live, so a failing migration aborts the deployment. If a later health check
 fails after the schema advanced, the script does not perform an unsafe application-only rollback. Migrations are **forward-only and never destructive** as part of
 normal deployment — the app never drops or rewrites business tables in a
-deploy (see `database/migrations`, currently 185 migrations).
+deploy (see `database/migrations`, currently 202 migrations).
 
 ## 8. Generating caches
 
@@ -335,7 +336,7 @@ scripted or trusted, so the script handles database existence itself.
 successfully in a recovery drill.** The final drill run (2026-09-08, UTC
 19:51:11) backed up the production-shaped database, dropped it entirely with
 `DROP DATABASE ... WITH (FORCE)` — 169 tables (168 application tables plus one
-drill marker table), 346 rows, 185 migrations — and restored it with
+drill marker table), 346 rows, 185 migrations at that dated drill point — and restored it with
 `deploy/restore.sh --latest --confirm`: exit 0, restore 0.88 s, verification
 0.10 s, content digest identical to the pre-loss fingerprint
 (`7055417d9a2f…`, md5 over the ordered row text of every non-empty table), the
@@ -582,17 +583,40 @@ measured, and no load generator is part of the toolchain.
 
 ## Verification gate (run after any change)
 
-Before declaring a deployment healthy, the full gate must be green:
+Before declaring a deployment healthy, the full gate must be green against the
+exact commit being released:
 
-```
-php artisan migrate:fresh --seed:off   # disposable clean-schema verification
-npm ci --no-audit --no-fund --engine-strict && npm run build
-vendor/bin/phpunit                     # full feature suite
-vendor/bin/phpstan analyse             # static analysis
-vendor/bin/pint --test                 # formatting
-# then, on the live host:
+```bash
+# Disposable verification database only — never the live DB. The release
+# switch itself uses `php artisan migrate --force`, never migrate:fresh.
+DB_DATABASE=toefl_house_verify php artisan migrate:fresh --force
+DB_DATABASE=toefl_house_verify php artisan db:seed --class=StandardFinanceChartSeeder --force
+DB_DATABASE=toefl_house_verify npm run verify:invariants
+DB_DATABASE=toefl_house_verify npm run verify:concurrency
+
+npm ci --no-audit --no-fund --engine-strict
+npm run verify:environment
+composer validate --strict && composer check-platform-reqs
+vendor/bin/pint --test
+vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+vendor/bin/phpunit --no-coverage
+npm run typecheck && npm run build && npm run test:frontend
+npm run test:runtime-safety
+# Run npm run verify:browser where its Chromium prerequisite is available.
+
+# Then, on the live host after the reviewed deployment procedure:
 curl -fsS https://<host>/health        # expect 200 {"status":"ok",...}
 ```
 
-A deployment is production-ready only when these pass against the exact
-commit being released.
+The PostgreSQL probe commands write short-lived verification fixtures and refuse
+non-disposable database names unless an operator sets the reviewed rehearsal
+escape hatch described in `docs/RUNTIME-RELEASE.md`. Configure the disposable
+verification database with a **dedicated verifier role**, not the live application
+role: it must be able to `SET LOCAL session_replication_role = 'replica'` (a
+superuser or explicit `GRANT SET ON PARAMETER session_replication_role`) and have
+the preflighted fixture-table rights. `verify:invariants` additionally requires
+permission for `ALTER TABLE ... DISABLE TRIGGER USER` on its named target tables.
+The commands fail before fixture writes if this role is insufficient. Do not run
+them concurrently with migration or PHPUnit processes. A deployment is
+production-ready only when these gates pass and their evidence applies to the
+exact commit being released.

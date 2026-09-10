@@ -437,25 +437,28 @@ final class AcademicOperationalCompletionConsoleTest extends TestCase
         $this->assertSame(2, DB::table($this->prefix().'attendance_facts')->where('enrollment_id', $seatId)->count());
         $this->signOut();
 
-        // Once the seat leaves active the two laws split: correcting a fact
-        // that was recorded while the seat was active stays lawful (the
-        // append-only lineage pins history, the new fact carries the
-        // reason), while recording a NEW fact requires an active seat.
+        // Once the seat leaves active the two laws split: correcting the
+        // current fact in the existing lineage stays lawful (the append-only
+        // lineage pins history, and every fact can have only one direct
+        // correction), while recording a NEW fact requires an active seat.
         $this->signIn('correction-officer');
         $this->post('/academic/enrollments/'.$seatId.'/freeze', ['reason' => 'fee review'])->assertRedirect('/academic');
         $this->signOut();
 
         $this->signIn('correction-recorder');
-        $this->post('/academic/sessions/facts/'.$factId.'/correct', [
+        $this->post('/academic/sessions/facts/'.$correctionId.'/correct', [
             'status' => 'excused',
             'reason' => 'late evidence arrived',
         ])->assertRedirect('/academic/sessions');
-        $correctionAfterFreezeId = DB::table($this->prefix().'attendance_facts')->where('corrects_id', $factId)->where('status', 'excused')->value('id');
+        $correctionAfterFreezeId = DB::table($this->prefix().'attendance_facts')->where('corrects_id', $correctionId)->where('status', 'excused')->value('id');
         $this->assertNotNull($correctionAfterFreezeId);
         $this->assertSame(3, DB::table($this->prefix().'attendance_facts')->where('enrollment_id', $seatId)->count());
-        // The original fact is still untouched history.
+        // The original fact and its direct correction are still untouched history.
         $this->assertDatabaseHas($this->prefix().'attendance_facts', [
             'id' => $factId, 'status' => 'absent', 'corrects_id' => null,
+        ]);
+        $this->assertDatabaseHas($this->prefix().'attendance_facts', [
+            'id' => $correctionId, 'status' => 'present', 'corrects_id' => $factId,
         ]);
 
         $this->post('/academic/sessions/'.$sessionId.'/attendance', [

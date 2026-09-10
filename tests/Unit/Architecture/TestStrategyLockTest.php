@@ -9,10 +9,10 @@ use PHPUnit\Framework\TestCase as PHPUnitTestCase;
 /**
  * Locks the testing strategy defined in docs/TESTING_STRATEGY_LOCK.md.
  *
- * The repository previously used DatabaseMigrations, which replays all 185
- * migrations before every single test. With 867 tests that made the suite
- * effectively unrunnable (~21x slower on a measured sample) and hid real
- * defects because a full result was never obtainable.
+ * The repository previously used DatabaseMigrations, which replays the full
+ * migration chain before every single test. That made the suite effectively
+ * unrunnable (~21x slower on a measured sample) and hid real defects because a
+ * full result was never obtainable.
  *
  * This test fails if that strategy is reintroduced, so the decision survives
  * as an enforced repository default rather than tribal knowledge.
@@ -43,7 +43,7 @@ final class TestStrategyLockTest extends PHPUnitTestCase
         $this->assertStringNotContainsString(
             'DatabaseMigrations',
             $source,
-            'DatabaseMigrations replays all 185 migrations per test and must not be '
+            'DatabaseMigrations replays the full migration chain per test and must not be '
             .'reintroduced in the base TestCase. See docs/TESTING_STRATEGY_LOCK.md §1.'
         );
     }

@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Builder;
 final class ScopedAuditQuery
 {
     /**
-     * @param list<string> $organizationIds
-     * @param list<string> $branchIds
+     * @param  list<string>  $organizationIds
+     * @param  list<string>  $branchIds
      * @return Builder<AuditEvent>
      */
     public static function forScope(array $organizationIds, array $branchIds): Builder

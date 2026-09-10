@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Academic;
 
-use App\Modules\Academic\Commands\DecideProgression;
 use App\Modules\Academic\Commands\MaintainAcademicStructure;
 use App\Modules\Academic\Commands\MaintainClass;
 use App\Modules\Academic\Commands\MaintainEnrollment;
@@ -15,10 +14,11 @@ use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\Program;
-use App\Modules\Academic\Placement\Commands\DecidePlacement;
 use App\Modules\Academic\Placement\Models\PlacementProfile;
+use App\Modules\Admissions\Commands\EnrollAdmittedApplicant;
+use App\Modules\Admissions\Commands\RegisterApplicant;
+use App\Modules\Admissions\Models\Applicant;
 use App\Support\Errors\AuthorizationDenied;
-use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -234,7 +234,7 @@ final class ReleaseSignoffIndependenceFeatureTest extends TestCase
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'release-sod-class-active');
 
         $person = $this->personWithAuthority('release-sod-student-person', []);
-        $registered = app(\App\Modules\Admissions\Commands\RegisterApplicant::class)->register(
+        $registered = app(RegisterApplicant::class)->register(
             $this->admissionsClerk('release-sod-clerk'),
             $person->id,
             'Release SOD Program',
@@ -242,8 +242,8 @@ final class ReleaseSignoffIndependenceFeatureTest extends TestCase
             null,
             $this->bootstrapBranchId(),
         );
-        /** @var \App\Modules\Admissions\Models\Applicant $applicant */
-        $applicant = \App\Modules\Admissions\Models\Applicant::query()->findOrFail($registered['applicant_id']);
+        /** @var Applicant $applicant */
+        $applicant = Applicant::query()->findOrFail($registered['applicant_id']);
         $this->runAdmissionDecision(
             $this->admissionsClerk('release-sod-clerk-2'),
             $this->admissionsReviewer('release-sod-admissions-review'),
@@ -254,7 +254,7 @@ final class ReleaseSignoffIndependenceFeatureTest extends TestCase
             'evidence/release-sod-admission',
             'release-sod-admission',
         );
-        $this->studentId = app(\App\Modules\Admissions\Commands\EnrollAdmittedApplicant::class)->convert(
+        $this->studentId = app(EnrollAdmittedApplicant::class)->convert(
             $this->admissionsApprover('release-sod-admissions-approve-2'),
             $applicant,
             'release-sod-convert',
@@ -277,7 +277,13 @@ final class ReleaseSignoffIndependenceFeatureTest extends TestCase
     private function assertSqlRejected(callable $operation, string $expectedMessage): void
     {
         try {
-            $operation();
+            // A PostgreSQL constraint violation aborts its transaction. The
+            // test case itself runs in a transaction, so contain the expected
+            // rejection in a nested transaction/savepoint before inspecting
+            // the untouched fixture below.
+            DB::transaction(function () use ($operation): void {
+                $operation();
+            });
             $this->fail('raw SQL unexpectedly bypassed the release signoff boundary');
         } catch (QueryException $exception) {
             $this->assertStringContainsString($expectedMessage, $exception->getMessage());

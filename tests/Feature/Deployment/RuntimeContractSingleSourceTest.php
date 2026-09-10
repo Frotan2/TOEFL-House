@@ -53,6 +53,26 @@ final class RuntimeContractSingleSourceTest extends TestCase
         }
     }
 
+    public function test_the_technical_lock_enforcer_and_release_control_agree_on_every_runtime_range(): void
+    {
+        $lock = (string) file_get_contents(base_path(self::LOCK_DOC));
+        $enforcer = (string) file_get_contents(base_path('scripts/runtime/verify-environment.mjs'));
+        $releaseControl = (string) file_get_contents(base_path('docs/RUNTIME-RELEASE.md'));
+
+        foreach ([
+            'PHP' => '>=8.2 <8.5',
+            'Composer' => '>=2.5 <3',
+            'Laravel' => '>=12.67 <13.0',
+            'PostgreSQL' => '>=18.0 <19.0',
+            'Node' => '>=22.0 <23.0',
+            'npm' => '>=10.0 <11.0',
+        ] as $component => $range) {
+            $this->assertStringContainsString($range, $lock, "{$component} range is absent from ".self::LOCK_DOC);
+            $this->assertStringContainsString($range, $enforcer, "{$component} range is absent from the runtime enforcer");
+            $this->assertStringContainsString($range, $releaseControl, "{$component} range is absent from release control");
+        }
+    }
+
     public function test_the_deployment_documentation_states_the_same_ranges_as_the_lock(): void
     {
         $doc = (string) file_get_contents(base_path('docs/operations/production-deployment.md'));

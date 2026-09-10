@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Resources;
 
 use App\Modules\Identity\Models\UserAccount;
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Resources\Models\BookCopy;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\Hash;
@@ -16,8 +17,11 @@ final class ResourcesApiScopeTest extends TestCase
     use BuildsActors;
 
     private string $branchA;
+
     private string $branchB;
+
     private string $copyA;
+
     private string $copyB;
 
     protected function setUp(): void
@@ -47,7 +51,7 @@ final class ResourcesApiScopeTest extends TestCase
 
     private function newBranch(string $id, string $name): void
     {
-        \App\Modules\Organization\Models\Branch::query()->create([
+        Branch::query()->create([
             'id' => $id,
             'name' => $name,
             'lifecycle_state' => 'active',

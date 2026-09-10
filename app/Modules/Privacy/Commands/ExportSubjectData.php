@@ -63,6 +63,7 @@ final class ExportSubjectData
                         'scope' => $scopeType.':'.$scopeId, 'as_of' => (new CarbonImmutable)->toDateString(),
                         'branch_id' => $subjectScope->branchId, 'organization_id' => $subjectScope->organizationId,
                     ]);
+
                     return ['export_id' => RandomIdentifier::new(), 'disclosure_id' => $disclosure->id, 'dataset' => $dataset, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -91,6 +92,7 @@ final class ExportSubjectData
                     $event = $this->audit->record($requester->actorId, 'privacy.export.request', 'privacy_export_request', $request->id, null, [
                         'subject_person_id' => $subjectPersonId, 'purpose' => $purpose, 'organization_id' => $organizationId, 'branch_id' => $subjectScope->branchId,
                     ]);
+
                     return ['request_id' => $request->id, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -131,6 +133,7 @@ final class ExportSubjectData
                         'lifecycle_state' => $state, 'approver_one_id' => $locked->approver_one_id, 'approver_two_id' => $locked->approver_two_id,
                         'branch_id' => $subjectScope->branchId, 'organization_id' => $organizationScope->organizationId,
                     ]);
+
                     return ['request_id' => $locked->id, 'lifecycle_state' => $state, 'correlation_id' => $event->correlation_id];
                 }),
             );
@@ -170,6 +173,7 @@ final class ExportSubjectData
                         'scope' => 'organization:'.$locked->organization_id, 'request_id' => $locked->id,
                         'as_of' => (new CarbonImmutable)->toDateString(), 'branch_id' => $subjectScope->branchId, 'organization_id' => $organizationScope->organizationId,
                     ]);
+
                     return ['export_id' => RandomIdentifier::new(), 'disclosure_id' => $disclosure->id, 'dataset' => $dataset, 'correlation_id' => $event->correlation_id];
                 }),
             );

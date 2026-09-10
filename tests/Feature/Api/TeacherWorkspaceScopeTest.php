@@ -65,15 +65,23 @@ final class TeacherWorkspaceScopeTest extends TestCase
         $profiles = app(MaintainTeacherProfile::class);
         $from = CarbonImmutable::today()->subDay()->toDateString();
 
+        // Workload limits are approval facts. The workspace reader also needs
+        // teacher_manage, but each fixture writer must hold the separate,
+        // branch-scoped teacher_approve capability used by setWorkloadLimit().
         $managerAId = 'workspace-manager-a';
-        $managerA = $this->grantedActor($managerAId, ['academic.teacher_manage']);
-        $this->grantScopeAuthority($managerAId, ['academic.teacher_manage'], 'branch', $this->branchA);
+        // Start without a role-derived organization-wide policy. The named
+        // ScopeGrant below is the complete authority under test, rather than a
+        // second, broader source that would make every branch appear visible.
+        $managerA = $this->grantedActor($managerAId, []);
+        $this->grantScopeAuthority($managerAId, ['academic.teacher_manage', 'academic.teacher_approve'], 'branch', $this->branchA);
 
         $managerBId = 'workspace-manager-b';
-        $managerB = $this->grantedActor($managerBId, ['academic.teacher_manage']);
-        $this->grantScopeAuthority($managerBId, ['academic.teacher_manage'], 'branch', $this->branchB);
+        $managerB = $this->grantedActor($managerBId, []);
+        $this->grantScopeAuthority($managerBId, ['academic.teacher_manage', 'academic.teacher_approve'], 'branch', $this->branchB);
 
-        $approver = $this->grantedActor('workspace-approver', ['academic.teacher_approve']);
+        $approverId = 'workspace-approver';
+        $approver = $this->grantedActor($approverId, []);
+        $this->grantScopeAuthority($approverId, ['academic.teacher_approve'], 'branch', $this->branchB);
 
         // The same teacher legitimately has branch-B authority, but the
         // branch-A manager must not receive branch-B operational evidence.
@@ -84,7 +92,10 @@ final class TeacherWorkspaceScopeTest extends TestCase
             $from,
             null,
             'workspace scope regression',
-            'workspace-xbranch',
+            // BuildsTeachers reserves the `workspace-xbranch` idempotency key
+            // while establishing the initial teacher fixture. This is a later,
+            // distinct branch-authorization command, so it needs its own key.
+            'workspace-branch-b-authorization',
         );
         $profiles->declareAvailability(
             $managerA,

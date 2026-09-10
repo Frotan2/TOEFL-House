@@ -10,6 +10,7 @@ use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Queries\VisitorListQuery;
 use App\Modules\Crm\Queries\VisitorTimelineQuery;
 use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
@@ -87,14 +88,14 @@ final class CrmProvenanceRegressionTest extends TestCase
         try {
             app(VisitorListQuery::class)->detail($legacy);
             $this->fail('unknown provenance must not be exposed through visitor detail');
-        } catch (\App\Support\Errors\BusinessRejection $rejection) {
+        } catch (BusinessRejection $rejection) {
             $this->assertSame('crm.visitor_provenance_unknown', $rejection->errorCode());
         }
 
         try {
             app(VisitorTimelineQuery::class)->for($legacy);
             $this->fail('unknown provenance must not be exposed through visitor timeline');
-        } catch (\App\Support\Errors\BusinessRejection $rejection) {
+        } catch (BusinessRejection $rejection) {
             $this->assertSame('crm.visitor_provenance_unknown', $rejection->errorCode());
         }
     }

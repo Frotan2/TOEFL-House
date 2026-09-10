@@ -76,7 +76,7 @@ final class PlacementProfile extends Model
 
     protected static function booted(): void
     {
-        static::updating(function (self $profile): void {
+        self::updating(function (self $profile): void {
             if ($profile->getOriginal('lifecycle_state') !== self::STATE_APPROVED
                 || $profile->lifecycle_state !== self::STATE_RELEASED) {
                 return;

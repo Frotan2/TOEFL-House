@@ -10,15 +10,16 @@ use Tests\TestCase;
  * Rollback discipline is enforced by `scripts/database-migration-audit.php`, which
  * GitHub Actions runs on every push. These tests exist for one reason: a CI rule that
  * nobody exercises is a rule that can be deleted, or silently broken, without anyone
- * noticing — the reconciliation register already carried "a 185-migration `down()`
- * chain has never been exercised" as an open item, and the first two drafts of these
+ * noticing — the historical reconciliation register already carried "a 185-migration
+ * `down()` chain has never been exercised" as an open item, and the first two drafts of these
  * rules produced false positives (they flagged a 140-character refusal message because
  * the message contains a semicolon, and they flagged the English word "concurrently"
  * in migration prose). Both are covered here as fixtures so the rules are tested in
  * both directions.
  *
- * Measured while writing them (2026-09-08, scratch database `toefl_house_c_scratch`):
- * 185 migrations apply to an empty database in 1.7 s; a migration that throws *after*
+ * Historical measurement while writing them (2026-09-08, then-current scratch
+ * database `toefl_house_c_scratch`): 185 migrations applied to an empty database
+ * in 1.7 s; a migration that throws *after*
  * issuing DDL leaves no residue at all — no table, no `migrations` row — because
  * PostgreSQL DDL is transactional and Laravel wraps each migration, which is what makes
  * an interrupted deployment resumable and, with it, `deploy.sh`'s refusal to roll the
@@ -146,6 +147,49 @@ final class MigrationDisciplineAuditTest extends TestCase
         $this->assertStringContainsString('per-migration transaction', $out);
     }
 
+    public function test_the_audit_rejects_a_trigger_redefinition_without_dropping_the_active_binding(): void
+    {
+        $first = $this->migration(908, <<<'PHP'
+            public function up(): void
+            {
+                DB::statement('CREATE TRIGGER gate_c_guard BEFORE INSERT ON gate_c_records FOR EACH ROW EXECUTE FUNCTION gate_c_guard()');
+            }
+            PHP, down: "public function down(): void\n    {\n        DB::statement('DROP TRIGGER IF EXISTS gate_c_guard ON gate_c_records');\n    }");
+        $second = $this->migration(909, <<<'PHP'
+            public function up(): void
+            {
+                DB::statement('CREATE TRIGGER gate_c_guard BEFORE INSERT ON gate_c_records FOR EACH ROW EXECUTE FUNCTION gate_c_guard_v2()');
+            }
+            PHP, down: "public function down(): void\n    {\n        DB::statement('DROP TRIGGER IF EXISTS gate_c_guard ON gate_c_records');\n    }");
+
+        [$code, $out] = $this->runAuditWithMany([$first, $second]);
+
+        $this->assertSame(1, $code, "a forward migration cannot create an already-active PostgreSQL trigger:\n{$out}");
+        $this->assertStringContainsString('re-creates a PostgreSQL trigger without replacing its active binding', $out);
+    }
+
+    public function test_the_audit_accepts_a_trigger_redefinition_after_an_explicit_drop(): void
+    {
+        $first = $this->migration(910, <<<'PHP'
+            public function up(): void
+            {
+                DB::statement('CREATE TRIGGER gate_c_guard BEFORE INSERT ON gate_c_records FOR EACH ROW EXECUTE FUNCTION gate_c_guard()');
+            }
+            PHP, down: "public function down(): void\n    {\n        DB::statement('DROP TRIGGER IF EXISTS gate_c_guard ON gate_c_records');\n    }");
+        $replacement = $this->migration(911, <<<'PHP'
+            public function up(): void
+            {
+                DB::statement('DROP TRIGGER IF EXISTS gate_c_guard ON gate_c_records');
+                DB::statement('CREATE TRIGGER gate_c_guard BEFORE INSERT ON gate_c_records FOR EACH ROW EXECUTE FUNCTION gate_c_guard_v2()');
+            }
+            PHP, down: "public function down(): void\n    {\n        DB::statement('DROP TRIGGER IF EXISTS gate_c_guard ON gate_c_records');\n    }");
+
+        [$code, $out] = $this->runAuditWithMany([$first, $replacement]);
+
+        $this->assertSame(0, $code, "an explicit trigger replacement should remain migratable:\n{$out}");
+        $this->assertStringContainsString('UNSAFE TRIGGER REDEFINITIONS: 0', $out);
+    }
+
     public function test_prose_that_merely_mentions_concurrency_is_not_flagged(): void
     {
         [$code, $out] = $this->runAuditWith($this->migration(907, <<<'PHP'
@@ -193,12 +237,27 @@ final class MigrationDisciplineAuditTest extends TestCase
     /** @return array{0:int,1:string} */
     private function runAuditWith(string $source): array
     {
+        return $this->runAuditWithMany([$source]);
+    }
+
+    /**
+     * @param  list<string>  $sources
+     * @return array{0:int,1:string}
+     */
+    private function runAuditWithMany(array $sources): array
+    {
         $dir = sys_get_temp_dir().'/gate-c-migrations-'.bin2hex(random_bytes(5));
-        mkdir($dir.'/database/migrations', 0o755, true);
-        file_put_contents($dir.'/database/migrations/2026_09_09_000'.sprintf('%03d', 900).'_fixture.php', $source);
+        $migrationsDir = $dir.'/database/migrations';
+        mkdir($migrationsDir, 0o755, true);
+        foreach ($sources as $offset => $source) {
+            file_put_contents(
+                $migrationsDir.'/2026_09_09_'.sprintf('%06d', 900 + $offset).'_fixture.php',
+                $source,
+            );
+        }
 
         try {
-            return $this->runAudit($dir.'/database/migrations');
+            return $this->runAudit($migrationsDir);
         } finally {
             exec('rm -rf '.escapeshellarg($dir));
         }

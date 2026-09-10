@@ -33,20 +33,34 @@ final class TeacherApiController extends Controller
         $actor = $this->actor();
         $own = TeacherProfile::query()->where('person_id', $actor->actorId)->with(['person', 'employment', 'statuses', 'qualifications', 'branchAuthorizations', 'skillAuthorities', 'availabilities', 'workloadLimits'])->first();
         $branchIds = $this->authorizedBranches(MaintainTeacherProfile::CAPABILITY);
-        $query = TeacherProfile::query()->with(['person', 'employment', 'statuses', 'qualifications', 'branchAuthorizations', 'skillAuthorities', 'availabilities', 'workloadLimits']);
-        if ($own !== null) {
-            $query->where(function ($scoped) use ($branchIds, $actor): void {
-                $scoped->where('person_id', $actor->actorId);
-                if ($branchIds !== []) {
-                    $scoped->orWhereIn('current_home_branch_id', $branchIds)->orWhereHas('branchAuthorizations', function ($authorization) use ($branchIds): void {
-                        $authorization->whereIn('branch_id', $branchIds)->where('lifecycle_state', 'active')->where('effective_from', '<=', now()->toDateString())->where(function ($valid): void {
-                            $valid->whereNull('effective_to')->orWhere('effective_to', '>', now()->toDateString());
-                        });
+        $branchProfileScope = static function ($branchScoped) use ($branchIds): void {
+            $branchScoped->whereIn('current_home_branch_id', $branchIds)
+                ->orWhereHas('branchAuthorizations', function ($authorization) use ($branchIds): void {
+                    $authorization->whereIn('branch_id', $branchIds)->where('lifecycle_state', 'active')->where('effective_from', '<=', now()->toDateString())->where(function ($valid): void {
+                        $valid->whereNull('effective_to')->orWhere('effective_to', '>', now()->toDateString());
                     });
+                });
+        };
+        $query = TeacherProfile::query()->with(['person', 'employment', 'statuses', 'qualifications', 'branchAuthorizations', 'skillAuthorities', 'availabilities', 'workloadLimits']);
+        if ($branchIds !== []) {
+            $query->where(function ($scoped) use ($actor, $own, $branchProfileScope): void {
+                // A manager can work with a profile either because it is homed
+                // in an authorized branch or because the teacher has an active
+                // authorization there. Restricting this second path to viewers
+                // who themselves had a teacher profile hid legitimate
+                // cross-branch faculty from scoped managers.
+                if ($own !== null) {
+                    $scoped->where('person_id', $actor->actorId)->orWhere($branchProfileScope);
+
+                    return;
                 }
+
+                $scoped->where($branchProfileScope);
             });
-        } elseif ($branchIds !== []) {
-            $query->whereIn('current_home_branch_id', $branchIds);
+        } elseif ($own !== null) {
+            // A teacher can always review their own professional record, even
+            // when they have no management scope for other profiles.
+            $query->where('person_id', $actor->actorId);
         } else {
             $query->whereRaw('1 = 0');
         }

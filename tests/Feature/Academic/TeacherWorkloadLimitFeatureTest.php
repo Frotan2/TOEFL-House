@@ -27,8 +27,8 @@ use Tests\TestCase;
  */
 final class TeacherWorkloadLimitFeatureTest extends TestCase
 {
-    use BuildsActors;
     use BuildsAcademicStructure;
+    use BuildsActors;
     use BuildsSessions;
     use BuildsTeachers;
 
@@ -68,6 +68,12 @@ final class TeacherWorkloadLimitFeatureTest extends TestCase
         app(MaintainClass::class)->transition(
             $assignmentOfficer,
             $classModel,
+            'published',
+            'teacher-workload-class-published',
+        );
+        app(MaintainClass::class)->transition(
+            $assignmentOfficer,
+            $classModel,
             'active',
             'teacher-workload-class-active',
         );
@@ -75,15 +81,15 @@ final class TeacherWorkloadLimitFeatureTest extends TestCase
         $skillId = $this->makeClassSchedulable($assignmentOfficer, $classModel->id, $branchId, 'teacher-workload-skill');
         $profile = TeacherProfile::query()->findOrFail($teacher['teacher_profile_id']);
         $managerId = 'teacher-workload-manager';
-        $manager = $this->grantedActor($managerId, ['academic.teacher_manage']);
-        $this->grantScopeAuthority($managerId, ['academic.teacher_manage'], 'branch', $branchId);
+        $manager = $this->grantedActor($managerId, ['academic.teacher_approve']);
+        $this->grantScopeAuthority($managerId, ['academic.teacher_approve'], 'branch', $branchId);
 
         app(MaintainTeacherProfile::class)->setWorkloadLimit(
             $manager,
             $profile,
             $branchId,
             '2.00',
-            CarbonImmutable::today()->subDay()->toDateString(),
+            CarbonImmutable::today()->startOfWeek()->toDateString(),
             null,
             'evidence/teacher-workload/limit',
             'teacher-workload-limit',
@@ -112,7 +118,7 @@ final class TeacherWorkloadLimitFeatureTest extends TestCase
             );
             $this->fail('assigned workload must block the second session once the weekly limit is reached');
         } catch (BusinessRejection $rejection) {
-            $this->assertSame('scheduling.teacher_delivery_unauthorized', $rejection->errorCode());
+            $this->assertSame('academic.teacher_delivery_unauthorized', $rejection->errorCode());
         }
 
         $this->assertDatabaseCount('class_sessions', 1);

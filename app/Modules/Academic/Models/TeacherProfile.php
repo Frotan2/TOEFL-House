@@ -35,7 +35,7 @@ final class TeacherProfile extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (self $profile): void {
+        self::creating(function (self $profile): void {
             $status = EmploymentStatus::query()
                 ->where('employment_id', $profile->employment_id)
                 ->whereDate('effective_from', '<=', CarbonImmutable::today()->toDateString())

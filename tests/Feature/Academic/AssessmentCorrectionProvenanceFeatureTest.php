@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Academic;
 
+use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Commands\ManageAssessmentResult;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\Enrollment;
+use App\Modules\Academic\Models\ResultCorrection;
 use Illuminate\Support\Facades\DB;
 use Tests\Canonical\CanonicalTestCase;
 
@@ -19,14 +21,18 @@ final class AssessmentCorrectionProvenanceFeatureTest extends CanonicalTestCase
         $class = $this->newActiveClass($officer, 'corprov', 2);
         $student = $this->newStudent();
 
-        $enrollment = Enrollment::query()->create([
-            'id' => 'corprov-enrollment',
-            'student_id' => $student['student']->id,
-            'class_id' => $class['class_id'],
-            'offering_id' => $class['offering_id'],
-            'originating_branch_id' => $class['branch_id'],
-            'lifecycle_state' => 'active',
-        ]);
+        $requested = $this->newSeatRequest(
+            $this->actorWith('corprov-enroller', ['academic.enroll']),
+            (string) $student['student']->id,
+            $class['class_id'],
+            'corprov-enrollment-request',
+        );
+        app(MaintainEnrollment::class)->activate(
+            $this->actorWith('corprov-enrollment-approver', ['academic.enroll_approve']),
+            Enrollment::query()->findOrFail($requested['enrollment_id']),
+            'corprov-enrollment-activate',
+        );
+        $enrollment = Enrollment::query()->findOrFail($requested['enrollment_id']);
 
         $scorer = $this->actorWith('corprov-scorer', ['academic.assess']);
         $moderator = $this->actorWith('corprov-moderator', ['academic.moderate']);
@@ -56,7 +62,7 @@ final class AssessmentCorrectionProvenanceFeatureTest extends CanonicalTestCase
 
         $corrected = $command->approveCorrection(
             $approver,
-            \App\Modules\Academic\Models\ResultCorrection::query()->findOrFail($proposal['correction_id']),
+            ResultCorrection::query()->findOrFail($proposal['correction_id']),
             'corprov-correction-approve',
         );
 
@@ -74,7 +80,7 @@ final class AssessmentCorrectionProvenanceFeatureTest extends CanonicalTestCase
             ->first();
 
         $this->assertNotNull($audit);
-        $payload = json_decode((string) $audit->after, true, 512, JSON_THROW_ON_ERROR);
+        $payload = json_decode((string) $audit->after_state, true, 512, JSON_THROW_ON_ERROR);
         $this->assertSame($approver->actorId, $payload['approved_by'] ?? null);
         $this->assertSame($approver->actorId, $payload['released_by'] ?? null);
     }

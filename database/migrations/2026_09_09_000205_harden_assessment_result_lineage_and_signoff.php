@@ -30,7 +30,7 @@ return new class extends Migration
               NOT VALID
             SQL);
         DB::statement('ALTER TABLE assessment_results VALIDATE CONSTRAINT assessment_results_corrects_fk');
-        DB::statement("ALTER TABLE assessment_results ADD CONSTRAINT assessment_results_not_self_corrected CHECK (corrects_id IS NULL OR corrects_id <> id)");
+        DB::statement('ALTER TABLE assessment_results ADD CONSTRAINT assessment_results_not_self_corrected CHECK (corrects_id IS NULL OR corrects_id <> id)');
 
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION academic_assessment_result_guard() RETURNS trigger AS $fn$
@@ -280,7 +280,7 @@ return new class extends Migration
     {
         DB::statement('DROP TRIGGER IF EXISTS academic_result_correction_commit_guard_trigger ON result_corrections');
         DB::statement('DROP FUNCTION IF EXISTS academic_result_correction_commit_guard()');
-        DB::statement("ALTER TABLE assessment_results DROP CONSTRAINT IF EXISTS assessment_results_not_self_corrected");
+        DB::statement('ALTER TABLE assessment_results DROP CONSTRAINT IF EXISTS assessment_results_not_self_corrected');
         DB::statement('ALTER TABLE assessment_results DROP CONSTRAINT IF EXISTS assessment_results_corrects_fk');
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION academic_assessment_result_guard() RETURNS trigger AS $fn$

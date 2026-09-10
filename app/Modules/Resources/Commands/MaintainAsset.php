@@ -88,6 +88,9 @@ final class MaintainAsset
                     if ($custodianScope->organizationId !== $scope->organizationId) {
                         throw BusinessRejection::forCode('resources.custodian_organization_mismatch', 'custody must remain inside the asset organization');
                     }
+                    if ($custodianScope->branchId !== $scope->branchId) {
+                        throw BusinessRejection::forCode('resources.custodian_branch_mismatch', 'custody custodian must belong to the asset branch');
+                    }
                     if ($locked->lifecycle_state !== 'in_service') {
                         throw BusinessRejection::forCode('resources.asset_not_in_service', 'custody attaches only to an in-service asset');
                     }

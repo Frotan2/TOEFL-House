@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Academic;
 
+use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Commands\ManageAssessmentResult;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
@@ -21,14 +22,18 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
         $officer = $this->actorWith($keyPrefix.'-officer', ['academic.structure', 'academic.schedule']);
         $class = $this->newActiveClass($officer, $keyPrefix, 2);
         $student = $this->newStudent();
-        $enrollment = Enrollment::query()->create([
-            'id' => $keyPrefix.'-enrollment',
-            'student_id' => $student['student']->id,
-            'class_id' => $class['class_id'],
-            'offering_id' => $class['offering_id'],
-            'originating_branch_id' => $class['branch_id'],
-            'lifecycle_state' => 'active',
-        ]);
+        $requested = $this->newSeatRequest(
+            $this->actorWith($keyPrefix.'-enroller', ['academic.enroll']),
+            (string) $student['student']->id,
+            $class['class_id'],
+            $keyPrefix.'-enrollment-request',
+        );
+        app(MaintainEnrollment::class)->activate(
+            $this->actorWith($keyPrefix.'-enrollment-approver', ['academic.enroll_approve']),
+            Enrollment::query()->findOrFail($requested['enrollment_id']),
+            $keyPrefix.'-enrollment-activate',
+        );
+        $enrollment = Enrollment::query()->findOrFail($requested['enrollment_id']);
 
         $command = app(ManageAssessmentResult::class);
         $scorer = $this->actorWith($keyPrefix.'-scorer', ['academic.assess']);
@@ -53,14 +58,12 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
     {
         $fixture = $this->releasedResult('dbsign');
 
-        try {
-            DB::table('assessment_results')
+        $this->assertSqlRejected(
+            fn (): int => DB::table('assessment_results')
                 ->where('id', $fixture['result']->id)
-                ->update(['approved_by' => 'forged-approver']);
-            $this->fail('release sign-off provenance must be immutable at the database boundary');
-        } catch (QueryException $exception) {
-            $this->assertSame('23514', $exception->getCode());
-        }
+                ->update(['approved_by' => 'forged-approver']),
+            'release sign-off provenance must be immutable at the database boundary',
+        );
 
         $fresh = AssessmentResult::query()->findOrFail($fixture['result']->id);
         $this->assertSame($fixture['result']->approved_by, $fresh->approved_by);
@@ -81,8 +84,8 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
         );
         $correction = ResultCorrection::query()->findOrFail($proposal['correction_id']);
 
-        try {
-            DB::table('assessment_results')->insert([
+        $this->assertSqlRejected(
+            fn (): bool => DB::table('assessment_results')->insert([
                 'id' => 'dbreplace-forged-result',
                 'attempt_id' => $fixture['attempt']->id,
                 'score' => '92.00',
@@ -95,11 +98,9 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
                 'released_by' => 'forged-approver',
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
-            $this->fail('a replacement must not be insertable while the source is still released and the correction is proposed');
-        } catch (QueryException $exception) {
-            $this->assertSame('23514', $exception->getCode());
-        }
+            ]),
+            'a replacement must not be insertable while the source is still released and the correction is proposed',
+        );
 
         $this->assertDatabaseHas('result_corrections', [
             'id' => $correction->id,
@@ -134,6 +135,11 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
                         'approved_by' => 'dbdefer-forged-approver',
                         'updated_at' => now(),
                     ]);
+                // RefreshDatabase keeps this test in an outer transaction, so
+                // PostgreSQL would otherwise wait until teardown to evaluate
+                // the deferred commit guard. Force its named constraint now;
+                // the nested transaction then rolls back the rejected write.
+                DB::statement('SET CONSTRAINTS academic_result_correction_commit_guard_trigger IMMEDIATE');
             });
             $this->fail('an approved correction cannot commit without its corrected source and released replacement');
         } catch (QueryException $exception) {
@@ -149,5 +155,23 @@ final class AssessmentResultDbAuthorityFeatureTest extends CanonicalTestCase
             'id' => $fixture['result']->id,
             'lifecycle_state' => 'released',
         ]);
+    }
+
+    /**
+     * PostgreSQL marks the current transaction aborted after a constraint
+     * violation. Run deliberately-invalid direct SQL in a savepoint so the
+     * following assertions inspect the unchanged committed fixture instead of
+     * a poisoned test transaction.
+     */
+    private function assertSqlRejected(callable $operation, string $failureMessage): void
+    {
+        try {
+            DB::transaction(function () use ($operation): void {
+                $operation();
+            });
+            $this->fail($failureMessage);
+        } catch (QueryException $exception) {
+            $this->assertSame('23514', $exception->getCode());
+        }
     }
 }

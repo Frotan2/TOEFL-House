@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 final class WorkItem extends Model
 {
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -28,6 +29,15 @@ final class WorkItem extends Model
         'escalation_level' => 'integer',
     ];
 
-    public function workflow(): BelongsTo { return $this->belongsTo(WorkflowInstance::class, 'workflow_instance_id'); }
-    public function history(): HasMany { return $this->hasMany(WorkItemHistory::class, 'work_item_id')->orderBy('occurred_at'); }
+    /** @return BelongsTo<WorkflowInstance, $this> */
+    public function workflow(): BelongsTo
+    {
+        return $this->belongsTo(WorkflowInstance::class, 'workflow_instance_id');
+    }
+
+    /** @return HasMany<WorkItemHistory, $this> */
+    public function history(): HasMany
+    {
+        return $this->hasMany(WorkItemHistory::class, 'work_item_id')->orderBy('occurred_at');
+    }
 }

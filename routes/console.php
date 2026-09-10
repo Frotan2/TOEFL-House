@@ -74,7 +74,7 @@ Artisan::command('integrations:health {--run-by=}', function (): int {
 
     $actor = new Actor($runBy, 'Integration Monitor');
     $outcome = app(AccessDecision::class)->decide($actor, 'integrations.process', null);
-    if (!$outcome->allowed) {
+    if (! $outcome->allowed) {
         $this->error('integrations.process capability is required for health inspection.');
 
         return 1;

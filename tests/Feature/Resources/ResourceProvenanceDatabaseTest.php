@@ -85,19 +85,29 @@ final class ResourceProvenanceDatabaseTest extends TestCase
         $this->ensureBootstrapAuthority();
         $assetId = $this->newAsset();
 
+        // Build an approved request through its legal database transition so
+        // this test reaches the disposal-fact provenance guard below.
+        $requestId = RandomIdentifier::new();
         DB::table('asset_disposal_requests')->insert([
-            'id' => RandomIdentifier::new(),
+            'id' => $requestId,
             'asset_id' => $assetId,
             'method' => 'scrap',
             'reason' => 'worn',
-            'lifecycle_state' => 'approved',
+            'lifecycle_state' => 'requested',
             'requested_by' => 'requester-a',
-            'approver_one_id' => 'approver-a',
-            'approver_two_id' => 'approver-b',
+            'approver_one_id' => null,
+            'approver_two_id' => null,
             'executed_by' => null,
             'disposal_id' => null,
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+        DB::table('asset_disposal_requests')->where('id', $requestId)->update([
+            'approver_one_id' => 'approver-a',
+        ]);
+        DB::table('asset_disposal_requests')->where('id', $requestId)->update([
+            'approver_two_id' => 'approver-b',
+            'lifecycle_state' => 'approved',
         ]);
 
         $this->expectException(QueryException::class);

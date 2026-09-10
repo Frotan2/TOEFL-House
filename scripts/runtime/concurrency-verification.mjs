@@ -1,238 +1,336 @@
 /**
- * Real concurrency verification against PostgreSQL 18.4.
+ * Concurrency verification against the migrated production schema.
  *
- * Opens genuinely simultaneous connections/transactions and proves that the
- * database-enforced invariants survive competing writers. Static inspection of
- * the trigger source is explicitly not accepted as evidence here.
+ * Every race below uses independent PostgreSQL connections, opens all
+ * transactions before any contender writes, and races real application tables
+ * and their migrated guards/indexes. It intentionally creates no `conc_*`
+ * mirrors or substitute trigger functions. Each short-lived fixture is removed
+ * after its assertion; cleanup bypasses an append-only trigger only after the
+ * target race has completed, never while that race is running.
  */
+import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import {
+  assertDisposableVerificationTarget,
+  assertPrivilegedFixtureAccess,
+} from './verification-safety.mjs';
 
-const CFG = { host: process.env.DB_HOST ?? '127.0.0.1', port: Number(process.env.DB_PORT ?? 5432), user: process.env.DB_USERNAME ?? 'postgres', password: process.env.DB_PASSWORD || undefined, database: process.env.DB_DATABASE ?? 'toefl_house_dev' };
-const conn = async () => { const c = new pg.Client(CFG); await c.connect(); return c; };
+const CFG = {
+  host: process.env.DB_HOST ?? '127.0.0.1',
+  port: Number(process.env.DB_PORT ?? 5432),
+  user: process.env.DB_USERNAME ?? 'postgres',
+  password: process.env.DB_PASSWORD || undefined,
+  database: process.env.DB_DATABASE ?? 'toefl_house_dev',
+};
+
 const results = [];
+
 const record = (name, pass, detail) => {
   results.push({ name, pass, detail });
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}\n      ${detail}`);
 };
 
-// ---------------------------------------------------------------------------
-// 1. Enrollment capacity under simultaneous seat activation.
-// ---------------------------------------------------------------------------
-async function capacityRace() {
-  const setup = await conn();
-  const cls = 'conc-class-' + Date.now();
-  const CAP = 2;
-  const CONTENDERS = 8;
+const conn = async () => {
+  const client = new pg.Client(CFG);
+  await client.connect();
+  // Do not let a verifier role's personal schema shadow the application's
+  // canonical public tables: every race must exercise the migrated schema.
+  await client.query('SET search_path TO public');
+  // A broken race must fail loudly instead of leaving an operator with blocked
+  // verification connections. The values are deliberately much larger than a
+  // healthy local contention window.
+  await client.query("SET lock_timeout = '5s'");
+  await client.query("SET statement_timeout = '10s'");
 
-  await setup.query(`
-    create table if not exists conc_classes(id text primary key, capacity int not null);
-    create table if not exists conc_enrollments(id text primary key, class_id text not null, state text not null);
-  `);
-  await setup.query('delete from conc_enrollments; delete from conc_classes');
-  await setup.query('insert into conc_classes values ($1,$2)', [cls, CAP]);
+  return client;
+};
 
-  // Mirror of the production guard: lock the class row, then count live seats.
-  await setup.query(`
-    create or replace function conc_capacity_guard() returns trigger as $fn$
-    declare cap int; live int;
-    begin
-      select capacity into cap from conc_classes where id = new.class_id for update;
-      select count(*) into live from conc_enrollments where class_id = new.class_id and state = 'active';
-      if live >= cap then
-        raise exception 'class % is full (%/% active seats)', new.class_id, live, cap using errcode='check_violation';
-      end if;
-      return new;
-    end; $fn$ language plpgsql;
-    drop trigger if exists conc_capacity_trigger on conc_enrollments;
-    create trigger conc_capacity_trigger before insert on conc_enrollments
-      for each row execute function conc_capacity_guard();
-  `);
-  await setup.end();
+function describeError(error) {
+  const detail = error && typeof error === 'object' ? error : {};
 
-  const clients = await Promise.all(Array.from({ length: CONTENDERS }, conn));
-  // Every contender opens its transaction before any of them commits.
-  await Promise.all(clients.map((c) => c.query('begin')));
-
-  const outcomes = await Promise.all(clients.map(async (c, i) => {
-    try {
-      await c.query('insert into conc_enrollments values ($1,$2,$3)', [`e-${i}-${Date.now()}`, cls, 'active']);
-      await c.query('commit');
-      return 'committed';
-    } catch (e) {
-      await c.query('rollback').catch(() => {});
-      return e.message.includes('is full') ? 'rejected_full' : 'rejected_other:' + e.message.slice(0, 40);
-    }
-  }));
-
-  const verify = await conn();
-  const { rows } = await verify.query("select count(*)::int n from conc_enrollments where class_id=$1 and state='active'", [cls]);
-  const seats = rows[0].n;
-  await verify.query('drop trigger if exists conc_capacity_trigger on conc_enrollments');
-  await verify.query('drop table conc_enrollments, conc_classes');
-  await verify.end();
-  await Promise.all(clients.map((c) => c.end().catch(() => {})));
-
-  const committed = outcomes.filter((o) => o === 'committed').length;
-  record(
-    'Enrollment capacity survives concurrent activation',
-    seats === CAP && committed === CAP,
-    `${CONTENDERS} concurrent writers, capacity=${CAP} -> committed=${committed}, final active seats=${seats} (must be ${CAP})`
-  );
+  return [
+    detail.code ? `code=${detail.code}` : null,
+    detail.constraint ? `constraint=${detail.constraint}` : null,
+    detail.message ? `message=${detail.message}` : String(error),
+  ].filter(Boolean).join('; ');
 }
 
-// ---------------------------------------------------------------------------
-// 2. Payment idempotency: same key applied concurrently must persist once.
-// ---------------------------------------------------------------------------
-async function idempotencyRace() {
-  const setup = await conn();
-  await setup.query(`
-    create table if not exists conc_idem(
-      key text primary key,
-      payment_id text not null,
-      amount numeric(14,2) not null check (amount > 0)
+async function oneConnection(work) {
+  const client = await conn();
+  try {
+    return await work(client);
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+/**
+ * Starts every contender before allowing any write. The preliminary sleep is a
+ * simple barrier: all sessions are already in an open transaction and execute
+ * it concurrently, then issue their competing write together. Backend PIDs
+ * are returned and reported so a sequential single-connection simulation is
+ * impossible to mistake for a race.
+ *
+ * @param {Array<(client: import('pg').Client) => Promise<void>>} writes
+ * @param {(client: import('pg').Client) => Promise<void>} [readBeforeWrite]
+ */
+async function raceTransactions(writes, readBeforeWrite = async () => {}) {
+  const clients = await Promise.all(writes.map(() => conn()));
+  try {
+    await Promise.all(clients.map((client) => client.query('BEGIN')));
+    const pids = await Promise.all(clients.map(async (client) => {
+      const { rows } = await client.query('SELECT pg_backend_pid()::text AS pid');
+
+      return rows[0].pid;
+    }));
+    if (new Set(pids).size !== clients.length) {
+      throw new Error('race did not acquire distinct PostgreSQL backends');
+    }
+
+    await Promise.all(clients.map((client) => readBeforeWrite(client)));
+    await Promise.all(clients.map((client) => client.query('SELECT pg_sleep(0.05)')));
+
+    const outcomes = await Promise.all(clients.map(async (client, index) => {
+      try {
+        await writes[index](client);
+        await client.query('COMMIT');
+
+        return { state: 'committed' };
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+
+        return { state: 'rejected', error };
+      }
+    }));
+
+    return { outcomes, pids };
+  } finally {
+    await Promise.allSettled(clients.map(async (client) => {
+      await client.query('ROLLBACK').catch(() => {});
+      await client.end();
+    }));
+  }
+}
+
+function assertOneWinner(name, race, expectedConstraint) {
+  const committed = race.outcomes.filter((outcome) => outcome.state === 'committed');
+  const rejected = race.outcomes.filter((outcome) => outcome.state === 'rejected');
+  const matchingRejects = rejected.filter((outcome) => {
+    const error = outcome.error && typeof outcome.error === 'object' ? outcome.error : {};
+
+    return error.code === '23505' && error.constraint === expectedConstraint;
+  });
+
+  if (committed.length !== 1 || rejected.length !== 1 || matchingRejects.length !== 1) {
+    throw new Error(
+      `${name}: expected exactly one commit and one 23505/${expectedConstraint} rejection; observed ${race.outcomes.map((outcome) => outcome.state === 'committed' ? 'committed' : describeError(outcome.error)).join(' | ')}`,
     );
-  `);
-  await setup.query('delete from conc_idem');
-  await setup.end();
+  }
 
-  const KEY = 'idem-' + Date.now();
-  const CONTENDERS = 10;
-  const clients = await Promise.all(Array.from({ length: CONTENDERS }, conn));
-  await Promise.all(clients.map((c) => c.query('begin')));
-
-  const outcomes = await Promise.all(clients.map(async (c, i) => {
-    try {
-      await c.query('insert into conc_idem(key,payment_id,amount) values ($1,$2,$3)', [KEY, `pay-${i}`, '250.00']);
-      await c.query('commit');
-      return 'committed';
-    } catch (e) {
-      await c.query('rollback').catch(() => {});
-      return e.code === '23505' ? 'deduplicated' : 'other:' + e.message.slice(0, 40);
-    }
-  }));
-
-  const verify = await conn();
-  const { rows } = await verify.query('select count(*)::int n, coalesce(sum(amount),0)::text total from conc_idem where key=$1', [KEY]);
-  await verify.query('drop table conc_idem');
-  await verify.end();
-  await Promise.all(clients.map((c) => c.end().catch(() => {})));
-
-  const committed = outcomes.filter((o) => o === 'committed').length;
-  record(
-    'Payment idempotency key deduplicates concurrent duplicates',
-    Number(rows[0].n) === 1 && committed === 1,
-    `${CONTENDERS} concurrent duplicate submissions -> committed=${committed}, rows=${rows[0].n}, total charged=${rows[0].total} (must be 1 row / 250.00)`
-  );
+  return `backends=${race.pids.join(', ')}; one committed, one rejected by ${expectedConstraint}`;
 }
 
-// ---------------------------------------------------------------------------
-// 3. Overdraw race: concurrent refunds must not exceed the paid amount.
-// ---------------------------------------------------------------------------
-async function refundRace() {
-  const setup = await conn();
-  await setup.query(`
-    create table if not exists conc_pay(id text primary key, amount numeric(14,2) not null);
-    create table if not exists conc_refund(id text primary key, payment_id text not null, amount numeric(14,2) not null);
-    create or replace function conc_refund_guard() returns trigger as $fn$
-    declare paid numeric; refunded numeric;
-    begin
-      select amount into paid from conc_pay where id = new.payment_id for update;
-      select coalesce(sum(amount),0) into refunded from conc_refund where payment_id = new.payment_id;
-      if refunded + new.amount > paid then
-        raise exception 'refund exceeds paid amount' using errcode='check_violation';
-      end if;
-      return new;
-    end; $fn$ language plpgsql;
-    drop trigger if exists conc_refund_trigger on conc_refund;
-    create trigger conc_refund_trigger before insert on conc_refund
-      for each row execute function conc_refund_guard();
-  `);
-  await setup.query('delete from conc_refund; delete from conc_pay');
-  const PAY = 'p-' + Date.now();
-  await setup.query('insert into conc_pay values ($1, 100.00)', [PAY]);
-  await setup.end();
+async function assertNoRows(label, sql, params) {
+  const count = await oneConnection(async (client) => {
+    const { rows } = await client.query(sql, params);
 
-  const CONTENDERS = 6; // each tries 40.00; only two may succeed against 100.00
-  const clients = await Promise.all(Array.from({ length: CONTENDERS }, conn));
-  await Promise.all(clients.map((c) => c.query('begin')));
-
-  await Promise.all(clients.map(async (c, i) => {
-    try {
-      await c.query('insert into conc_refund values ($1,$2,40.00)', [`r-${i}-${Date.now()}`, PAY]);
-      await c.query('commit');
-    } catch {
-      await c.query('rollback').catch(() => {});
-    }
-  }));
-
-  const verify = await conn();
-  const { rows } = await verify.query('select coalesce(sum(amount),0)::text total from conc_refund where payment_id=$1', [PAY]);
-  await verify.query('drop trigger if exists conc_refund_trigger on conc_refund');
-  await verify.query('drop table conc_refund, conc_pay');
-  await verify.end();
-  await Promise.all(clients.map((c) => c.end().catch(() => {})));
-
-  record(
-    'Concurrent refunds cannot overdraw the payment',
-    Number(rows[0].total) <= 100,
-    `${CONTENDERS} concurrent 40.00 refunds against a 100.00 payment -> total refunded=${rows[0].total} (must be <= 100.00)`
-  );
+    return Number(rows[0].count);
+  });
+  if (count !== 0) {
+    throw new Error(`${label}: fixture cleanup left ${count} row(s)`);
+  }
 }
 
-// ---------------------------------------------------------------------------
-// 4. Assignment overlap: competing writers must not both claim a room slot.
-// ---------------------------------------------------------------------------
-async function overlapRace() {
-  const setup = await conn();
-  await setup.query(`
-    create extension if not exists btree_gist;
-    create table if not exists conc_slot(
-      id text primary key,
-      room_id text not null,
-      during tstzrange not null,
-      exclude using gist (room_id with =, during with &&)
-    );
-  `);
-  await setup.query('delete from conc_slot');
-  await setup.end();
-
-  const CONTENDERS = 6;
-  const clients = await Promise.all(Array.from({ length: CONTENDERS }, conn));
-  await Promise.all(clients.map((c) => c.query('begin')));
-
-  const outcomes = await Promise.all(clients.map(async (c, i) => {
+async function deleteAppendOnlyRows(sql, params) {
+  await oneConnection(async (client) => {
+    await client.query('BEGIN');
     try {
-      await c.query(
-        `insert into conc_slot values ($1,'room-1', tstzrange('2026-09-01 09:00+00','2026-09-01 10:30+00'))`,
-        [`s-${i}-${Date.now()}`]
+      // PostgreSQL's replica role bypasses append-only USER triggers for this
+      // cleanup statement only. It is entered only after the target production
+      // constraint/trigger race has been observed and named.
+      await client.query("SET LOCAL session_replication_role = 'replica'");
+      await client.query(sql, params);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    }
+  });
+}
+
+async function idempotencyKeyRace() {
+  const token = randomUUID();
+  const operation = `runtime.concurrency.${token}`;
+  const key = `runtime-key-${token}`;
+
+  try {
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        `
+          INSERT INTO idempotency_keys (id, operation, idempotency_key, payload_hash, outcome)
+          VALUES ($1, $2, $3, $4, $5)
+        `,
+        [randomUUID(), operation, key, `payload-${contender}`, `outcome-${contender}`],
       );
-      await c.query('commit');
-      return 'committed';
-    } catch (e) {
-      await c.query('rollback').catch(() => {});
-      return e.code === '23P01' ? 'excluded' : 'other';
-    }
-  }));
+    }));
 
-  const verify = await conn();
-  const { rows } = await verify.query('select count(*)::int n from conc_slot');
-  await verify.query('drop table conc_slot');
-  await verify.end();
-  await Promise.all(clients.map((c) => c.end().catch(() => {})));
-
-  const committed = outcomes.filter((o) => o === 'committed').length;
-  record(
-    'Overlapping room assignment rejected under concurrency',
-    Number(rows[0].n) === 1 && committed === 1,
-    `${CONTENDERS} concurrent identical slot claims -> committed=${committed}, rows=${rows[0].n} (must be 1)`
-  );
+    return assertOneWinner('idempotency replay identity', race, 'idempotency_keys_operation_idempotency_key_unique');
+  } finally {
+    await oneConnection((client) => client.query(
+      'DELETE FROM idempotency_keys WHERE operation = $1 AND idempotency_key = $2',
+      [operation, key],
+    ));
+    await assertNoRows('idempotency replay identity', 'SELECT count(*)::int AS count FROM idempotency_keys WHERE operation = $1 AND idempotency_key = $2', [operation, key]);
+  }
 }
 
-await capacityRace();
-await idempotencyRace();
-await refundRace();
-await overlapRace();
+async function scopeGrantRace() {
+  const personId = randomUUID();
+  const scopeId = randomUUID();
+  const permission = `runtime.scope.${randomUUID()}`;
 
-const failed = results.filter((r) => !r.pass).length;
-console.log(`\nCONCURRENCY RESULT: ${results.length - failed}/${results.length} passed`);
-process.exit(failed === 0 ? 0 : 1);
+  await oneConnection((client) => client.query(
+    "INSERT INTO people (id, legal_name, date_of_birth, verification_state) VALUES ($1, 'Runtime scope race person', '1980-01-01', 'unverified')",
+    [personId],
+  ));
+
+  try {
+    const race = await raceTransactions([0, 1].map(() => async (client) => {
+      await client.query(
+        `
+          INSERT INTO scope_grants (
+            id, person_id, permission, scope_type, scope_id, lifecycle_state,
+            effective_from, effective_to, is_emergency, review_required, granted_by
+          ) VALUES ($1, $2, $3, 'organization', $4, 'active', CURRENT_DATE, NULL, false, false, $5)
+        `,
+        [randomUUID(), personId, permission, scopeId, randomUUID()],
+      );
+    }));
+
+    return assertOneWinner('single live scoped authority', race, 'scope_grants_one_open_grant');
+  } finally {
+    await oneConnection((client) => client.query('DELETE FROM scope_grants WHERE person_id = $1 AND permission = $2', [personId, permission]));
+    await oneConnection((client) => client.query('DELETE FROM people WHERE id = $1', [personId]));
+    await assertNoRows('scoped-authority grants', 'SELECT count(*)::int AS count FROM scope_grants WHERE person_id = $1 AND permission = $2', [personId, permission]);
+    await assertNoRows('scoped-authority person', 'SELECT count(*)::int AS count FROM people WHERE id = $1', [personId]);
+  }
+}
+
+async function stagedOrganizationGrantRace() {
+  const personId = randomUUID();
+  const requestId = randomUUID();
+
+  await oneConnection(async (client) => {
+    await client.query(
+      "INSERT INTO people (id, legal_name, date_of_birth, verification_state) VALUES ($1, 'Runtime grant race person', '1980-01-01', 'unverified')",
+      [personId],
+    );
+    await client.query(
+      `
+        INSERT INTO org_wide_grant_requests (
+          id, person_id, permission, organization_id, is_emergency,
+          effective_from, lifecycle_state, requested_by, created_at, updated_at
+        ) VALUES ($1, $2, 'runtime.org.grant', $3, false, CURRENT_DATE, 'requested', $2, NOW(), NOW())
+      `,
+      [requestId, personId, randomUUID()],
+    );
+  });
+
+  try {
+    const approvers = [
+      [randomUUID(), randomUUID()],
+      [randomUUID(), randomUUID()],
+    ];
+    const race = await raceTransactions(
+      approvers.map(([first, second]) => async (client) => {
+        await client.query(
+          `
+            UPDATE org_wide_grant_requests
+            SET lifecycle_state = 'approved', approver_one_id = $1, approver_two_id = $2, updated_at = NOW()
+            WHERE id = $3
+          `,
+          [first, second, requestId],
+        );
+      }),
+      async (client) => {
+        const { rows } = await client.query('SELECT lifecycle_state FROM org_wide_grant_requests WHERE id = $1', [requestId]);
+        if (rows.length !== 1 || rows[0].lifecycle_state !== 'requested') {
+          throw new Error('a contender did not observe the requested state before the contested approval');
+        }
+      },
+    );
+    const committed = race.outcomes.filter((outcome) => outcome.state === 'committed');
+    const rejected = race.outcomes.filter((outcome) => outcome.state === 'rejected');
+    const staleWriter = rejected.find((outcome) => {
+      const error = outcome.error && typeof outcome.error === 'object' ? outcome.error : {};
+
+      return error.code === '23514'
+        && String(error.message ?? '').includes('moves only requested -> approved -> granted');
+    });
+    if (committed.length !== 1 || rejected.length !== 1 || staleWriter === undefined) {
+      throw new Error(
+        `staged organization-wide grant approval: expected one approval and one rejected stale writer; observed ${race.outcomes.map((outcome) => outcome.state === 'committed' ? 'committed' : describeError(outcome.error)).join(' | ')}`,
+      );
+    }
+
+    return `backends=${race.pids.join(', ')}; one requested→approved transition committed, stale writer rejected by org_wide_grant_requests_guard_trigger`;
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM org_wide_grant_requests WHERE id = $1', [requestId]);
+    await oneConnection((client) => client.query('DELETE FROM people WHERE id = $1', [personId]));
+    await assertNoRows('organization-wide grant request', 'SELECT count(*)::int AS count FROM org_wide_grant_requests WHERE id = $1', [requestId]);
+    await assertNoRows('organization-wide grant person', 'SELECT count(*)::int AS count FROM people WHERE id = $1', [personId]);
+  }
+}
+
+async function chartAccountCodeRace() {
+  const code = `RUNTIME-${randomUUID()}`;
+
+  try {
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        "INSERT INTO accounts (id, code, name, type) VALUES ($1, $2, $3, 'asset')",
+        [randomUUID(), code, `Runtime concurrent account ${contender}`],
+      );
+    }));
+
+    return assertOneWinner('chart-account code uniqueness', race, 'accounts_code_unique');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM accounts WHERE code = $1', [code]);
+    await assertNoRows('chart-account race', 'SELECT count(*)::int AS count FROM accounts WHERE code = $1', [code]);
+  }
+}
+
+async function verify(name, operation) {
+  try {
+    record(name, true, await operation());
+  } catch (error) {
+    record(name, false, error instanceof Error ? error.message : String(error));
+  }
+}
+
+try {
+  assertDisposableVerificationTarget(CFG.database);
+  await assertPrivilegedFixtureAccess(conn, 'Concurrency verification', {
+    requiredTablePrivileges: [
+      { table: 'idempotency_keys', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'people', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'scope_grants', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'org_wide_grant_requests', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'accounts', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+    ],
+  });
+
+  await verify('idempotency replay identity race', idempotencyKeyRace);
+  await verify('single active scope-grant race', scopeGrantRace);
+  await verify('staged organization-wide approval race', stagedOrganizationGrantRace);
+  await verify('chart-of-accounts code race', chartAccountCodeRace);
+
+  const passed = results.filter((result) => result.pass).length;
+  console.log(`Concurrency verification: ${passed}/${results.length} production-table races passed.`);
+  if (passed !== results.length) {
+    process.exitCode = 1;
+  }
+} catch (error) {
+  console.error(`Concurrency verification failed: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+}

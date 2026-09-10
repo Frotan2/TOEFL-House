@@ -23,28 +23,46 @@ final class WorkItemQuery
     public function forActor(Actor $actor): array
     {
         $employment = Employment::query()->where('person_id', $actor->actorId)->orderByDesc('created_at')->orderByDesc('id')->first();
-        if ($employment === null || $employment->lifecycle_state !== EmploymentLifecycle::STATE_ACTIVE) return [];
+        if ($employment === null || $employment->lifecycle_state !== EmploymentLifecycle::STATE_ACTIVE) {
+            return [];
+        }
         $candidateBranches = array_values(app(ActorBranches::class)->visibleBranchIds($actor));
         $branches = $this->authorizedBranches($actor, $candidateBranches);
         $branchOrganizations = $this->branchOrganizations($branches);
         $organizationIds = $this->authorizedOrganizations($actor);
         $queueMemberships = app(QueueMembershipQuery::class);
         $organizationQueues = [];
-        foreach ($organizationIds as $organizationId) foreach ($queueMemberships->activeQueueKeys($actor, null, $organizationId) as $queueKey) $organizationQueues[] = ['organization_id' => $organizationId, 'queue_key' => $queueKey];
+        foreach ($organizationIds as $organizationId) {
+            foreach ($queueMemberships->activeQueueKeys($actor, null, $organizationId) as $queueKey) {
+                $organizationQueues[] = ['organization_id' => $organizationId, 'queue_key' => $queueKey];
+            }
+        }
         $branchQueues = [];
         foreach ($branches as $branchId) {
             $branch = Branch::query()->whereKey($branchId)->first();
             $organizationId = $branch === null ? '' : trim((string) $branch->structureScope()->organizationId);
-            if ($organizationId === '') continue;
-            foreach ($queueMemberships->activeQueueKeys($actor, $branchId, $organizationId) as $queueKey) $branchQueues[] = ['branch_id' => $branchId, 'queue_key' => $queueKey];
+            if ($organizationId === '') {
+                continue;
+            }
+            foreach ($queueMemberships->activeQueueKeys($actor, $branchId, $organizationId) as $queueKey) {
+                $branchQueues[] = ['branch_id' => $branchId, 'queue_key' => $queueKey];
+            }
         }
         $query = WorkItem::query()
             ->where(function ($assignment) use ($actor, $organizationQueues, $branchQueues): void {
                 $assignment->where('assigned_to', $actor->actorId)->orWhere(function ($queue) use ($organizationQueues, $branchQueues): void {
                     $queue->whereNull('assigned_to')->where(function ($membership) use ($organizationQueues, $branchQueues): void {
-                        if ($organizationQueues === [] && $branchQueues === []) { $membership->whereRaw('1 = 0'); return; }
-                        foreach ($organizationQueues as $scope) $membership->orWhere(fn ($organization) => $organization->where('organization_id', $scope['organization_id'])->where('queue_key', $scope['queue_key'])->whereNull('branch_id'));
-                        foreach ($branchQueues as $scope) $membership->orWhere(fn ($branch) => $branch->where('branch_id', $scope['branch_id'])->where('queue_key', $scope['queue_key']));
+                        if ($organizationQueues === [] && $branchQueues === []) {
+                            $membership->whereRaw('1 = 0');
+
+                            return;
+                        }
+                        foreach ($organizationQueues as $scope) {
+                            $membership->orWhere(fn ($organization) => $organization->where('organization_id', $scope['organization_id'])->where('queue_key', $scope['queue_key'])->whereNull('branch_id'));
+                        }
+                        foreach ($branchQueues as $scope) {
+                            $membership->orWhere(fn ($branch) => $branch->where('branch_id', $scope['branch_id'])->where('queue_key', $scope['queue_key']));
+                        }
                     });
                 });
             })
@@ -61,18 +79,22 @@ final class WorkItemQuery
                 $scope->{$method}(fn ($branch) => $branch->where('branch_id', $branchId)->where('organization_id', $organizationId));
                 $hasCondition = true;
             }
-            if (! $hasCondition) $scope->whereRaw('1 = 0');
+            if (! $hasCondition) {
+                $scope->whereRaw('1 = 0');
+            }
         });
 
         $now = CarbonImmutable::now();
+
         return array_values($query->limit(100)->get([
-            'id','kind','title','source_type','source_id','action_key','organization_id','branch_id','priority','due_at','lifecycle_state','sla_policy_key','sla_state','escalation_level','last_escalated_at',
+            'id', 'kind', 'title', 'source_type', 'source_id', 'action_key', 'organization_id', 'branch_id', 'priority', 'due_at', 'lifecycle_state', 'sla_policy_key', 'sla_state', 'escalation_level', 'last_escalated_at',
         ])->map(static function (WorkItem $item) use ($now): array {
             $slaState = (string) $item->sla_state;
-            if ($item->due_at !== null && ! in_array($item->lifecycle_state, ['completed','cancelled','expired'], true)) {
+            if ($item->due_at !== null && ! in_array($item->lifecycle_state, ['completed', 'cancelled', 'expired'], true)) {
                 $seconds = $now->diffInSeconds($item->due_at, false);
                 $slaState = $seconds < 0 ? 'breached' : ($seconds <= 86_400 ? 'at_risk' : 'on_track');
             }
+
             return [
                 'organization_id' => $item->organization_id, 'branch_id' => $item->branch_id,
                 'id' => (string) $item->id, 'kind' => (string) $item->kind,
@@ -86,23 +108,61 @@ final class WorkItemQuery
         })->values()->all());
     }
 
-    private function branchOrganizations(array $branchIds): array {
-        if ($branchIds === []) return [];
+    /**
+     * @param  list<string>  $branchIds
+     * @return array<string, string>
+     */
+    private function branchOrganizations(array $branchIds): array
+    {
+        if ($branchIds === []) {
+            return [];
+        }
         $organizations = [];
         foreach (Branch::query()->whereIn('id', $branchIds)->get() as $branch) {
-            try { $scope = $branch->structureScope(); } catch (ModelNotFoundException) { continue; }
-            $organizationId = trim((string) $scope->organizationId); if ($organizationId !== '') $organizations[(string) $branch->id] = $organizationId;
+            try {
+                $scope = $branch->structureScope();
+            } catch (ModelNotFoundException) {
+                continue;
+            }
+            $organizationId = trim((string) $scope->organizationId);
+            if ($organizationId !== '') {
+                $organizations[(string) $branch->id] = $organizationId;
+            }
         }
+
         return $organizations;
     }
-    private function authorizedOrganizations(Actor $actor): array {
-        $decision = app(AccessDecision::class); $authorized = [];
-        foreach (Organization::query()->where('lifecycle_state', 'active')->get(['id']) as $organization) if ($decision->decide($actor, 'workflow.work', StructureScope::organization((string) $organization->id))->allowed) $authorized[] = (string) $organization->id;
-        sort($authorized); return $authorized;
+
+    /** @return list<string> */
+    private function authorizedOrganizations(Actor $actor): array
+    {
+        $decision = app(AccessDecision::class);
+        $authorized = [];
+        foreach (Organization::query()->where('lifecycle_state', 'active')->get(['id']) as $organization) {
+            if ($decision->decide($actor, 'workflow.work', StructureScope::organization((string) $organization->id))->allowed) {
+                $authorized[] = (string) $organization->id;
+            }
+        }
+        sort($authorized);
+
+        return $authorized;
     }
-    private function authorizedBranches(Actor $actor, array $candidateBranchIds): array {
-        $decision = app(AccessDecision::class); $authorized = [];
-        foreach (Branch::query()->whereIn('id', $candidateBranchIds)->get() as $branch) if ($decision->decide($actor, 'workflow.work', $branch->structureScope())->allowed) $authorized[] = (string) $branch->id;
-        sort($authorized); return $authorized;
+
+    /**
+     * @param  list<string>  $candidateBranchIds
+     * @return list<string>
+     */
+    private function authorizedBranches(Actor $actor, array $candidateBranchIds): array
+    {
+        $decision = app(AccessDecision::class);
+        $authorized = [];
+        foreach (Branch::query()->whereIn('id', $candidateBranchIds)->get() as $branch) {
+            if ($decision->decide($actor, 'workflow.work', $branch->structureScope())->allowed) {
+                $authorized[] = (string) $branch->id;
+            }
+        }
+        sort($authorized);
+
+        return $authorized;
     }
 }

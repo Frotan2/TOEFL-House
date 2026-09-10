@@ -44,7 +44,7 @@ final class IssueTranscript
 
     public function __construct(
         private readonly AcademicAccess $access,
-        private readonly IdempotencyExecution $idempotency,
+        private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly TranscriptComposer $composer,

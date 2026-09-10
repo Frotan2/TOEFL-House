@@ -335,10 +335,15 @@ final class PlacementDecisionFeatureTest extends TestCase
         $this->setUpPlacementCatalog();
         $reception = $this->actorWithStructureCapabilities('plc-crm-1', ['crm.visitor']);
         $person = $this->personWithAuthority('plc-person-4', []);
-        $visitor = app(CaptureVisitor::class)->capture($reception, null, 'Placement Lead', null, 'plc@example.com', 'email', 'online', null, null, null, null, null, 'plc-capture');
+        // The lead and placement attempt are one branch-scoped lineage. Pass
+        // the explicit operational branch at capture rather than silently
+        // deriving the reception actor's bootstrap home branch.
+        $visitor = app(CaptureVisitor::class)->capture($reception, null, 'Placement Lead', null, 'plc@example.com', 'email', 'online', null, null, $this->placementBranchId, null, null, 'plc-capture');
         app(LinkVisitorPerson::class)->link($reception, Visitor::query()->findOrFail($visitor['visitor_id']), $person->id, 'plc-link');
 
-        $profile = PlacementProfile::query()->findOrFail(app(ManagePlacementProfile::class)->openProfile($this->placementOfficer('plc-open-4'), $person->id, $this->programVersionId, 'plc-open-4', null, $this->placementBranchId)['profile_id']);
+        // Bind the profile to its originating lead too, so the command checks
+        // the person and branch lineage before the downstream trace is made.
+        $profile = PlacementProfile::query()->findOrFail(app(ManagePlacementProfile::class)->openProfile($this->placementOfficer('plc-open-4'), $person->id, $this->programVersionId, 'plc-open-4', $visitor['visitor_id'], $this->placementBranchId)['profile_id']);
         $attempt = PlacementAttempt::query()->findOrFail(app(ManagePlacementProfile::class)->startAttempt($this->placementOfficer('plc-attempt-4'), $profile, $this->testVersionId, 'digital', 'plc-start-4')['attempt_id']);
         $answers = [];
         foreach ($this->questions as $questionId => $component) {

@@ -66,6 +66,7 @@ final class NotificationQuery
 
         $items = array_values($states->map(static function (NotificationRecipientState $state): array {
             $notification = $state->notification;
+
             return [
                 'id' => (string) $notification->id,
                 'source_type' => (string) $notification->source_type,
@@ -96,16 +97,28 @@ final class NotificationQuery
         ];
     }
 
-    /** @param list<string> $branchIds @return array<string, string> */
+    /**
+     * @param  list<string>  $branchIds
+     * @return array<string, string>
+     */
     private function branchOrganizations(array $branchIds): array
     {
-        if ($branchIds === []) return [];
+        if ($branchIds === []) {
+            return [];
+        }
         $organizations = [];
         foreach (Branch::query()->whereIn('id', $branchIds)->get() as $branch) {
-            try { $scope = $branch->structureScope(); } catch (ModelNotFoundException) { continue; }
+            try {
+                $scope = $branch->structureScope();
+            } catch (ModelNotFoundException) {
+                continue;
+            }
             $organizationId = trim((string) $scope->organizationId);
-            if ($organizationId !== '') $organizations[(string) $branch->id] = $organizationId;
+            if ($organizationId !== '') {
+                $organizations[(string) $branch->id] = $organizationId;
+            }
         }
+
         return $organizations;
     }
 
@@ -120,10 +133,14 @@ final class NotificationQuery
             }
         }
         sort($authorized);
+
         return $authorized;
     }
 
-    /** @param list<string> $candidateBranchIds @return list<string> */
+    /**
+     * @param  list<string>  $candidateBranchIds
+     * @return list<string>
+     */
     private function authorizedBranches(Actor $actor, array $candidateBranchIds): array
     {
         $decision = app(AccessDecision::class);
@@ -134,6 +151,7 @@ final class NotificationQuery
             }
         }
         sort($authorized);
+
         return $authorized;
     }
 }

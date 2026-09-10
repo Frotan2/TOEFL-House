@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Academic;
 
 use App\Modules\Academic\Commands\DecideProgression;
+use App\Modules\Academic\Commands\MaintainEnrollment;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Models\AssessmentResult;
 use App\Modules\Academic\Models\Enrollment;
@@ -19,14 +20,18 @@ final class ProgressionAssessmentEvidenceFeatureTest extends CanonicalTestCase
         $class = $this->newActiveClass($officer, 'progev-class', 2);
         $student = $this->newStudent();
 
-        $enrollment = Enrollment::query()->create([
-            'id' => 'progev-enrollment',
-            'student_id' => $student['student']->id,
-            'class_id' => $class['class_id'],
-            'offering_id' => $class['offering_id'],
-            'originating_branch_id' => $class['branch_id'],
-            'lifecycle_state' => 'active',
-        ]);
+        $requested = $this->newSeatRequest(
+            $this->actorWith('progev-enroller', ['academic.enroll']),
+            (string) $student['student']->id,
+            $class['class_id'],
+            'progev-enrollment-request',
+        );
+        app(MaintainEnrollment::class)->activate(
+            $this->actorWith('progev-enrollment-approver', ['academic.enroll_approve']),
+            Enrollment::query()->findOrFail($requested['enrollment_id']),
+            'progev-enrollment-activate',
+        );
+        $enrollment = Enrollment::query()->findOrFail($requested['enrollment_id']);
 
         $attempt = AssessmentAttempt::query()->create([
             'id' => 'progev-attempt',

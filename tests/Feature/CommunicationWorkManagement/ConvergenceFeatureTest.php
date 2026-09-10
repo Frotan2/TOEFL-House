@@ -17,9 +17,16 @@ final class ConvergenceFeatureTest extends TestCase
         $this->assertTrue(Schema::hasTable('notification_recipient_states'));
         $this->assertTrue(Schema::hasColumn('messages', 'thread_id'));
 
-        $indexes = DB::select("SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'notification_recipient_states'");
-        $names = array_map(static fn ($row): string => (string) $row->indexname, $indexes);
-        $this->assertContains('notification_recipient_states_notification_id_recipient_actor_id_unique', $names);
+        // PostgreSQL limits identifiers to 63 bytes, so Laravel's generated
+        // 71-byte name is correctly truncated by the database. Assert the
+        // invariant the index exists to protect, rather than a non-portable
+        // implementation spelling of its generated identifier.
+        $indexes = DB::select("SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'notification_recipient_states'");
+        $this->assertTrue(
+            collect($indexes)->contains(static fn (object $index): bool => str_contains((string) $index->indexdef, 'UNIQUE INDEX')
+                && str_contains((string) $index->indexdef, '(notification_id, recipient_actor_id)')),
+            'notification recipient state must be unique per notification and recipient',
+        );
     }
 
     public function test_work_items_expose_sla_foundation_without_replacing_source_lifecycle(): void

@@ -28,7 +28,9 @@ use Illuminate\Support\Facades\DB;
 final class DisposeAsset
 {
     public const CAPABILITY_REQUEST = 'resources.dispose_request';
+
     public const CAPABILITY_APPROVE = 'resources.dispose_approve';
+
     public const METHODS = ['sale', 'scrap', 'donation'];
 
     public function __construct(

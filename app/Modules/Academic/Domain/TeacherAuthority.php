@@ -322,14 +322,19 @@ final class TeacherAuthority
         if ($limit === null) {
             return;
         }
-        $proposed = CarbonImmutable::parse($on->toDateString().' '.$endsAt)->diffInMinutes(CarbonImmutable::parse($on->toDateString().' '.$startsAt)) / 60;
+        // Carbon 3 preserves the sign of a difference. Calculate from start
+        // to end so workload is a positive duration, matching the PostgreSQL
+        // race boundary that derives it as `ends_at - starts_at`.
+        $proposed = CarbonImmutable::parse($on->toDateString().' '.$startsAt)
+            ->diffInMinutes(CarbonImmutable::parse($on->toDateString().' '.$endsAt)) / 60;
         $used = 0.0;
         $sessions = ClassSession::query()->whereBetween('scheduled_on', [$on->startOfWeek()->toDateString(), $on->endOfWeek()->toDateString()])->get();
         foreach ($sessions as $session) {
             if (TeacherAssignment::query()->where('class_id', $session->class_id)->where('teacher_profile_id', $profile->id)->where('branch_id', $branchId)->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))->where('effective_from', '<=', $session->scheduled_on)->where(function ($query) use ($session): void {
                 $query->whereNull('effective_to')->orWhere('effective_to', '>', $session->scheduled_on);
             })->exists()) {
-                $used += CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->ends_at)->diffInMinutes(CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->starts_at)) / 60;
+                $used += CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->starts_at)
+                    ->diffInMinutes(CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->ends_at)) / 60;
             }
         }
         if ($used + $proposed > (float) $limit->max_hours_per_week) {

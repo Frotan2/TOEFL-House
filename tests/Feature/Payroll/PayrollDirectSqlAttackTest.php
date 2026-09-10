@@ -129,7 +129,7 @@ final class PayrollDirectSqlAttackTest extends TestCase
         ]);
     }
 
-    public function test_direct_sql_cannot_adjust_after_the_period_is_closed(): void
+    public function test_direct_sql_cannot_write_to_the_retired_adjustment_table_after_period_closure(): void
     {
         $calculation = $this->preparedCalculation('atk-calc-f4');
         $result = $this->approvedResult($calculation, 'atk-res-f4');
@@ -137,41 +137,34 @@ final class PayrollDirectSqlAttackTest extends TestCase
         $closer = $this->grantedActor('atk-period-1', ['payroll.period']);
         app(MaintainPayrollPeriod::class)->close($closer, PayrollPeriod::query()->findOrFail($this->periodId), 'atk-per-2');
 
-        // A closed period rejects corrections — even from raw SQL.
+        // Retirement is absolute: even a raw write after Payroll closure cannot
+        // revive the old monetary authority. Finance owns corrective journals.
         $this->expectException(QueryException::class);
         DB::table('payroll_adjustments')->insert([
             'id' => 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee04',
             'result_id' => $result['result_id'],
             'kind' => 'adjustment',
             'amount' => '500.00',
-            'reason' => 'late correction slipped in from raw sql',
+            'reason' => 'retired-path write after Payroll closure',
             'approved_by' => 'atk-direct-sql-forger',
             'created_at' => now(), 'updated_at' => now(),
         ]);
     }
 
-    public function test_direct_sql_cannot_reverse_a_result_twice(): void
+    public function test_direct_sql_cannot_create_a_retired_payroll_adjustment(): void
     {
         $calculation = $this->preparedCalculation('atk-calc-f5');
         $result = $this->approvedResult($calculation, 'atk-res-f5');
 
+        // The historical table remains readable for retained evidence, but its
+        // Finance-authority guard rejects every new Payroll monetary write.
+        $this->expectException(QueryException::class);
         DB::table('payroll_adjustments')->insert([
             'id' => 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee05',
             'result_id' => $result['result_id'],
             'kind' => 'reversal',
             'amount' => '-42000.00',
-            'reason' => 'first raw-sql reversal',
-            'approved_by' => 'atk-direct-sql-forger',
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
-
-        $this->expectException(QueryException::class);
-        DB::table('payroll_adjustments')->insert([
-            'id' => 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee06',
-            'result_id' => $result['result_id'],
-            'kind' => 'reversal',
-            'amount' => '-42000.00',
-            'reason' => 'second raw-sql reversal must be impossible',
+            'reason' => 'forged retired-path reversal',
             'approved_by' => 'atk-direct-sql-forger',
             'created_at' => now(), 'updated_at' => now(),
         ]);

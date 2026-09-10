@@ -29,7 +29,7 @@ final class AssessmentResult extends Model
 
     protected static function booted(): void
     {
-        static::updating(function (self $result): void {
+        self::updating(function (self $result): void {
             if ($result->getOriginal('lifecycle_state') !== 'approved' || $result->lifecycle_state !== 'released') {
                 return;
             }

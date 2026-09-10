@@ -10,6 +10,21 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Reproducible report execution pinned to a metric version; immutable
  * history. This row is evidence/projection, not a source-domain authority.
+ *
+ * @property string $id
+ * @property string $metric_version_id
+ * @property string $period_key
+ * @property string $scope_type
+ * @property string|null $scope_id
+ * @property string|null $organization_id
+ * @property array<string, mixed> $filters
+ * @property string $result
+ * @property 'complete'|'incomplete'|'historic_unclassified' $completeness
+ * @property array<string, mixed> $meta
+ * @property string $reproducibility_hash
+ * @property string $executed_by
+ * @property-read string|null $metric_key Joined only by reporting read projections.
+ * @property-read string|null $metric_name Joined only by reporting read projections.
  */
 final class ReportRun extends Model
 {

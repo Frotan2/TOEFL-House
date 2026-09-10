@@ -46,8 +46,8 @@ final class ResourcesWorkflowFeatureTest extends TestCase
 
         $this->custodianOne = 'resw-cust-1';
         $this->custodianTwo = 'resw-cust-2';
-        $this->personWithAuthority($this->custodianOne, []);
-        $this->personWithAuthority($this->custodianTwo, []);
+        $this->personWithAuthority($this->custodianOne, [], $this->resourceBranchId);
+        $this->personWithAuthority($this->custodianTwo, [], $this->resourceBranchId);
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Integrations\Queries;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,7 +36,7 @@ final class IntegrationHealth
     }
 
     /** @return array<string, int> */
-    private function deliveryCounts($now): array
+    private function deliveryCounts(CarbonInterface $now): array
     {
         return [
             'queued' => $this->count('integration_deliveries', 'status', 'queued'),
@@ -48,7 +49,7 @@ final class IntegrationHealth
     }
 
     /** @return array<string, int> */
-    private function consumerCounts($now): array
+    private function consumerCounts(CarbonInterface $now): array
     {
         return [
             'pending' => $this->count('event_consumer_receipts', 'status', 'pending'),
@@ -62,7 +63,7 @@ final class IntegrationHealth
     }
 
     /** @return array<string, int> */
-    private function jobCounts($now): array
+    private function jobCounts(CarbonInterface $now): array
     {
         return [
             'queued' => $this->count('job_runs', 'status', 'queued'),

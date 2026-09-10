@@ -91,7 +91,7 @@ return new class extends Migration
         DB::statement('DROP FUNCTION IF EXISTS work_orders_terminal_immutable()');
         DB::statement('CREATE TRIGGER work_orders_history_guard_trigger BEFORE UPDATE OR DELETE ON work_orders FOR EACH ROW EXECUTE FUNCTION work_orders_history_guard()');
 
-        DB::statement("ALTER TABLE asset_disposal_requests ADD CONSTRAINT asset_disposal_request_independent_approvers_check CHECK ((approver_one_id IS NULL OR trim(approver_one_id) <> trim(requested_by)) AND (approver_two_id IS NULL OR trim(approver_two_id) <> trim(requested_by)))");
+        DB::statement('ALTER TABLE asset_disposal_requests ADD CONSTRAINT asset_disposal_request_independent_approvers_check CHECK ((approver_one_id IS NULL OR trim(approver_one_id) <> trim(requested_by)) AND (approver_two_id IS NULL OR trim(approver_two_id) <> trim(requested_by)))');
         DB::statement("ALTER TABLE asset_disposal_requests ADD CONSTRAINT asset_disposal_request_executor_check CHECK (lifecycle_state <> 'completed' OR trim(executed_by) = trim(requested_by))");
         DB::statement("CREATE UNIQUE INDEX asset_disposal_requests_one_active_per_asset ON asset_disposal_requests (asset_id) WHERE lifecycle_state IN ('requested','approved')");
     }

@@ -948,10 +948,10 @@ final class SchemaInvariantFeatureTest extends TestCase
         $this->assertContains('asset_disposals_immutable_trigger', $disposalTriggers, 'asset disposals must be immutable at the schema level');
 
         $workOrderTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'work_orders')->pluck('tgname')->all();
-        $this->assertContains('work_orders_terminal_immutable_trigger', $workOrderTriggers, 'terminal work orders must be immutable at the schema level');
+        $this->assertContains('work_orders_history_guard_trigger', $workOrderTriggers, 'work-order history and terminal records must be immutable at the schema level');
 
         $issuanceTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'book_issuances')->pluck('tgname')->all();
-        $this->assertContains('book_issuances_terminal_immutable_trigger', $issuanceTriggers, 'terminal book issuances must be immutable at the schema level');
+        $this->assertContains('issuance_history_guard', $issuanceTriggers, 'book issuance history and terminal records must be immutable at the schema level');
 
         $messageTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'messages')->pluck('tgname')->all();
         $this->assertContains('messages_terminal_immutable_trigger', $messageTriggers, 'delivered messages must be immutable at the schema level');
@@ -1027,14 +1027,14 @@ final class SchemaInvariantFeatureTest extends TestCase
     public function test_payroll_derivation_guards_exist_at_schema_level(): void
     {
         // A raw INSERT must never forge a payable: results derive exactly
-        // from their calculation, adjustments respect period closure and the
-        // single-reversal rule, and settlements respect clearance, SoD and
-        // the one-settlement-per-employment invariant.
+        // from their calculation; the retired Payroll adjustment table rejects
+        // every monetary write; and settlements respect clearance, SoD and the
+        // one-settlement-per-employment invariant.
         $resultTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'payroll_results')->pluck('tgname')->all();
         $this->assertContains('payroll_results_derivation_guard_trigger', $resultTriggers, 'payroll results must derive from their calculation at the schema level');
 
         $adjustmentTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'payroll_adjustments')->pluck('tgname')->all();
-        $this->assertContains('payroll_adjustments_guard_trigger', $adjustmentTriggers, 'payroll adjustments must respect period closure and reversal rules at the schema level');
+        $this->assertContains('payroll_adjustment_finance_authority_guard', $adjustmentTriggers, 'the retired Payroll adjustment table must reject all monetary writes at the schema level');
 
         $settlementTriggers = DB::table('pg_trigger')->join('pg_class', 'pg_class.oid', '=', 'pg_trigger.tgrelid')->where('pg_class.relname', 'employment_settlements')->pluck('tgname')->all();
         $this->assertContains('employment_settlements_guard_trigger', $settlementTriggers, 'final settlements must respect clearance, SoD and uniqueness at the schema level');

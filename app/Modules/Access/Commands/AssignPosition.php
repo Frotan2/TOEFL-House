@@ -9,7 +9,6 @@ use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
-use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\PersonBranchScope;
 use App\Support\Authorization\PositionConferability;
@@ -31,7 +30,6 @@ final class AssignPosition
     public const CAPABILITY = 'access.assign_position';
 
     public function __construct(
-        private readonly AccessDecision $access,
         private readonly PositionConferability $positionConferability,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,

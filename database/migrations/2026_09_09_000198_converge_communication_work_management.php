@@ -77,7 +77,7 @@ return new class extends Migration
             $table->index(['actor_id', 'left_at']);
         });
         DB::statement("ALTER TABLE communication_thread_participants ADD CONSTRAINT communication_thread_participants_role_check CHECK (participant_role IN ('participant','sender','recipient'))");
-        DB::statement("ALTER TABLE communication_thread_participants ADD CONSTRAINT communication_thread_participants_window_check CHECK (left_at IS NULL OR left_at >= joined_at)");
+        DB::statement('ALTER TABLE communication_thread_participants ADD CONSTRAINT communication_thread_participants_window_check CHECK (left_at IS NULL OR left_at >= joined_at)');
 
         Schema::table('messages', function (Blueprint $table): void {
             $table->char('thread_id', 36)->nullable();
@@ -127,7 +127,7 @@ return new class extends Migration
             $table->index(['queue_key', 'sla_state', 'due_at']);
         });
         DB::statement("ALTER TABLE work_items ADD CONSTRAINT work_items_sla_state_check CHECK (sla_state IN ('not_applicable','on_track','at_risk','breached'))");
-        DB::statement("ALTER TABLE work_items ADD CONSTRAINT work_items_escalation_check CHECK (escalation_level >= 0)");
+        DB::statement('ALTER TABLE work_items ADD CONSTRAINT work_items_escalation_check CHECK (escalation_level >= 0)');
 
         DB::statement('CREATE UNIQUE INDEX work_queue_memberships_scoped_unique ON work_queue_memberships (actor_id, queue_key, organization_id, branch_id) WHERE branch_id IS NOT NULL');
         DB::statement('DROP INDEX IF EXISTS work_queue_memberships_global_unique');

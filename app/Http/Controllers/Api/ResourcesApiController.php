@@ -93,6 +93,7 @@ final class ResourcesApiController extends Controller
             'branch_id' => ['required', 'string'],
         ]);
         app(CirculateBooks::class)->addCopy($this->actor(), $input['code'], $input['title'], $input['acquired_on'], $input['branch_id'], $this->idempotencyKey('resources.books.add'));
+
         return response()->json(['status' => 'recorded'], 201);
     }
 
@@ -104,6 +105,7 @@ final class ResourcesApiController extends Controller
             'due_on' => ['required', 'date', 'after_or_equal:issued_on'],
         ]);
         app(CirculateBooks::class)->issue($this->actor(), BookCopy::query()->findOrFail($copyId), $input['borrower_id'], $input['issued_on'], $input['due_on'], $this->idempotencyKey('resources.issue'));
+
         return response()->json(['status' => 'issued'], 201);
     }
 
@@ -111,6 +113,7 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['returned_on' => ['required', 'date']]);
         app(CirculateBooks::class)->returned($this->actor(), BookIssuance::query()->findOrFail($issuanceId), $input['returned_on'], $this->idempotencyKey('resources.return'));
+
         return response()->json(['status' => 'returned']);
     }
 
@@ -118,6 +121,7 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['loss_evidence' => ['required', 'string', 'max:255']]);
         app(CirculateBooks::class)->reportLoss($this->actor(), BookIssuance::query()->findOrFail($issuanceId), $input['loss_evidence'], $this->idempotencyKey('resources.loss'));
+
         return response()->json(['status' => 'loss_recorded']);
     }
 
@@ -129,6 +133,7 @@ final class ResourcesApiController extends Controller
             'acquired_on' => ['required', 'date'], 'branch_id' => ['required', 'string'],
         ]);
         app(MaintainAsset::class)->register($this->actor(), $input['code'], $input['name'], $input['category'], $input['location'], $input['acquired_on'], $input['branch_id'], $this->idempotencyKey('resources.asset.register'));
+
         return response()->json(['status' => 'recorded'], 201);
     }
 
@@ -136,6 +141,7 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['custodian_id' => ['required', 'string'], 'assigned_on' => ['required', 'date']]);
         app(MaintainAsset::class)->assignCustody($this->actor(), Asset::query()->findOrFail($assetId), $input['custodian_id'], $input['assigned_on'], $this->idempotencyKey('resources.custody.assign'));
+
         return response()->json(['status' => 'assigned']);
     }
 
@@ -143,6 +149,7 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['released_on' => ['required', 'date']]);
         app(MaintainAsset::class)->releaseCustody($this->actor(), Asset::query()->findOrFail($assetId), $input['released_on'], $this->idempotencyKey('resources.custody.release'));
+
         return response()->json(['status' => 'released']);
     }
 
@@ -150,12 +157,14 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['method' => ['required', 'string', 'in:sale,scrap,donation'], 'reason' => ['required', 'string', 'max:255']]);
         app(DisposeAsset::class)->request($this->actor(), Asset::query()->findOrFail($assetId), $input['method'], $input['reason'], $this->idempotencyKey('resources.disposal.request'));
+
         return response()->json(['status' => 'requested'], 201);
     }
 
     public function approveDisposal(string $requestId): JsonResponse
     {
         app(DisposeAsset::class)->approve($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $this->idempotencyKey('resources.disposal.approve'));
+
         return response()->json(['status' => 'approved']);
     }
 
@@ -163,6 +172,7 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['disposed_on' => ['required', 'date']]);
         app(DisposeAsset::class)->execute($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $input['disposed_on'], $this->idempotencyKey('resources.asset.dispose'));
+
         return response()->json(['status' => 'executed']);
     }
 
@@ -172,18 +182,21 @@ final class ResourcesApiController extends Controller
             'facility_note' => ['required', 'string', 'max:255'], 'description' => ['required', 'string', 'max:1000'], 'branch_id' => ['required', 'string'],
         ]);
         app(MaintainWorkOrder::class)->request($this->actor(), $input['facility_note'], $input['description'], $input['branch_id'], $this->idempotencyKey('resources.work.request'));
+
         return response()->json(['status' => 'requested'], 201);
     }
 
     public function approveWork(string $orderId): JsonResponse
     {
         app(MaintainWorkOrder::class)->approve($this->actor(), WorkOrder::query()->findOrFail($orderId), $this->idempotencyKey('resources.work.approve'));
+
         return response()->json(['status' => 'approved']);
     }
 
     public function startWork(string $orderId): JsonResponse
     {
         app(MaintainWorkOrder::class)->start($this->actor(), WorkOrder::query()->findOrFail($orderId), $this->idempotencyKey('resources.work.start'));
+
         return response()->json(['status' => 'started']);
     }
 
@@ -191,16 +204,21 @@ final class ResourcesApiController extends Controller
     {
         $input = $request->validate(['evidence_ref' => ['required', 'string', 'max:255']]);
         app(MaintainWorkOrder::class)->complete($this->actor(), WorkOrder::query()->findOrFail($orderId), $input['evidence_ref'], $this->idempotencyKey('resources.work.complete'));
+
         return response()->json(['status' => 'completed']);
     }
 
     public function cancelWork(string $orderId): JsonResponse
     {
         app(MaintainWorkOrder::class)->cancel($this->actor(), WorkOrder::query()->findOrFail($orderId), $this->idempotencyKey('resources.work.cancel'));
+
         return response()->json(['status' => 'cancelled']);
     }
 
-    /** @param Builder<*> $query */
+    /**
+     * @param Builder<*> $query
+     * @param  list<string>  $branchIds
+     */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
         $today = CarbonImmutable::today()->toDateString();

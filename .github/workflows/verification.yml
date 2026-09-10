@@ -42,6 +42,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:frontend
+      - run: npm run test:runtime-safety
 
   static-analysis:
     name: Static analysis (Pint, PHPStan, audits)

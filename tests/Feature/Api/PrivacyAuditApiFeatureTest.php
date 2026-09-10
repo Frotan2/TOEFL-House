@@ -18,7 +18,10 @@ final class PrivacyAuditApiFeatureTest extends TestCase
     {
         parent::setUp();
         $actor = $this->privacyOfficer('governance-api-actor');
-        $this->grantScopeAuthority($actor->actorId, ['privacy.disclose', 'governance.config'], 'branch', $this->bootstrapBranchId());
+        $this->grantScopeAuthority($actor->actorId, ['privacy.disclose'], 'branch', $this->bootstrapBranchId());
+        // Audit evidence is an organization-wide read surface. A branch grant
+        // deliberately cannot satisfy AuditApiController::requireOrganizationRead().
+        $this->grantScopeAuthority($actor->actorId, ['governance.config'], 'organization', $this->organizationIdFromScopeKey('governance-api'));
         $this->createAccount($actor->actorId, 'governance-api');
     }
 

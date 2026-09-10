@@ -6,9 +6,9 @@ declare(strict_types=1);
  * Dependency-free migration-discipline audit.
  *
  * This is intentionally static: it does not pretend to validate PostgreSQL.
- * It protects the repository from duplicate migration numbers and flags
- * data-writing migrations that must be explicitly justified as transitional
- * reference-data behavior.
+ * It protects the repository from duplicate migration numbers, unsafe
+ * redefinitions of PostgreSQL triggers, and data-writing migrations that must
+ * be explicitly justified as transitional reference-data behavior.
  */
 $root = dirname(__DIR__);
 // Overridable so a test can exercise the rules themselves against fixtures;
@@ -39,6 +39,9 @@ $downVague = [];
 $concurrently = [];
 $downReversible = 0;
 $allowedDataMigrations = ['2026_09_07_000186_seed_standard_finance_chart.php'];
+/** @var array<string, string> $activeTriggerDefinitions table:name => migration filename */
+$activeTriggerDefinitions = [];
+$unsafeTriggerRedefinitions = [];
 
 foreach ($files as $file) {
     // Laravel migration filenames are `YYYY_MM_DD_NNNNNN_name.php`. The audited
@@ -57,16 +60,55 @@ foreach ($files as $file) {
     }
 
     $content = file_get_contents($migrationsDir.'/'.$file) ?: '';
+
+    /*
+     * PostgreSQL trigger names are scoped to their table and CREATE TRIGGER
+     * does not replace an existing trigger. Looking only at each migration's
+     * up() body catches a forward-replay failure that a DROP in down() cannot
+     * fix: a redefinition must first drop the active binding in the same up().
+     * This is intentionally a narrow static sentinel; migrate:fresh remains
+     * the authoritative schema execution gate.
+     */
+    $upContent = (string) preg_split('/\b(?:public\s+)?function\s+down\s*\(/i', $content, 2)[0];
+    preg_match_all(
+        '/\bCREATE\s+TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?("?[A-Za-z_][A-Za-z0-9_$]*"?)\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\b.*?\bON\s+(?:ONLY\s+)?("?[A-Za-z_][A-Za-z0-9_$]*"?)/is',
+        $upContent,
+        $triggerMatches,
+        PREG_OFFSET_CAPTURE,
+    );
+    foreach ($triggerMatches[0] ?? [] as $index => $wholeMatch) {
+        $triggerName = strtolower(trim((string) $triggerMatches[1][$index][0], '"'));
+        $tableName = strtolower(trim((string) $triggerMatches[2][$index][0], '"'));
+        $definitionKey = $tableName.':'.$triggerName;
+        $definitionOffset = $wholeMatch[1];
+
+        if (isset($activeTriggerDefinitions[$definitionKey])) {
+            $earlierUp = substr($upContent, 0, $definitionOffset);
+            $dropPattern = '/\bDROP\s+TRIGGER\s+(?:IF\s+EXISTS\s+)?"?'.preg_quote($triggerName, '/').'"?\s+ON\s+(?:ONLY\s+)?"?'.preg_quote($tableName, '/').'"?/i';
+            if (preg_match($dropPattern, $earlierUp) !== 1) {
+                $unsafeTriggerRedefinitions[] = sprintf(
+                    '%s re-creates trigger %s on %s without dropping the active trigger from %s first',
+                    $file,
+                    $triggerName,
+                    $tableName,
+                    $activeTriggerDefinitions[$definitionKey],
+                );
+            }
+        }
+
+        $activeTriggerDefinitions[$definitionKey] = $file;
+    }
+
     $hasDataWrite = preg_match('/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DB::table\s*\(|->insert\s*\(|->update\s*\(|Model::query\(\)->create|::create\s*\()\b/i', $content) === 1;
     if ($hasDataWrite && ! in_array($file, $allowedDataMigrations, true)) {
         $warnings[] = "data-writing migration requires explicit review: {$file}";
     }
 
     /*
-     * Rollback discipline. Measured on 2026-09-08 while executing the deployment
-     * audit's migration gate: 185 migrations, 168 with a working down(), 17 that
-     * refuse by design because the change is one-way in the domain (accounting and
-     * provenance history must not be rewound), 0 missing and 0 empty.
+     * Rollback discipline. The audit reports the current counts dynamically:
+     * some migrations refuse by design because accounting and provenance history
+     * must not be rewound, while a missing or unexplained empty down() is a
+     * release-blocking ambiguity.
      *
      * An empty down() is the case worth banning: `migrate:rollback` then reports the
      * migration as reverted while leaving the schema advanced, which is how an
@@ -152,6 +194,7 @@ printf(
     count($downMissing)
 );
 printf("DATA-WRITE WARNINGS: %d\n", count($warnings));
+printf("UNSAFE TRIGGER REDEFINITIONS: %d\n", count($unsafeTriggerRedefinitions));
 foreach ($warnings as $warning) {
     echo "WARNING: {$warning}\n";
 }
@@ -167,6 +210,9 @@ foreach ($downVague as $file) {
 }
 foreach ($concurrently as $file) {
     $errors[] = "migration uses CREATE INDEX CONCURRENTLY, which cannot run inside the per-migration transaction: {$file}";
+}
+foreach ($unsafeTriggerRedefinitions as $redefinition) {
+    $errors[] = "migration re-creates a PostgreSQL trigger without replacing its active binding: {$redefinition}";
 }
 
 if ($errors !== []) {

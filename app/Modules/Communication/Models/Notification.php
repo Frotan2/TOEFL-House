@@ -5,10 +5,28 @@ declare(strict_types=1);
 namespace App\Modules\Communication\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Actor-specific notification projection. It informs a recipient but never
  * owns the source task, approval, exception, permission, or domain state.
+ *
+ * @property string $id
+ * @property string $event_id
+ * @property string $recipient_actor_id
+ * @property string $source_type
+ * @property string $source_id
+ * @property string $dedupe_key
+ * @property string $title
+ * @property string|null $body_ref
+ * @property string $severity
+ * @property string $scope_type
+ * @property string|null $organization_id
+ * @property string|null $branch_id
+ * @property string $lifecycle_state
+ * @property Carbon|null $read_at
+ * @property Carbon|null $dismissed_at
+ * @property Carbon|null $expires_at
  */
 final class Notification extends Model
 {
