@@ -17,6 +17,7 @@ const api = await readFile(resolve(jsRoot, 'core/api.ts'), 'utf8');
 const app = await readFile(resolve(jsRoot, 'app.tsx'), 'utf8');
 const workspaceBlade = await readFile(resolve(repoRoot, 'resources/views/workspace.blade.php'), 'utf8');
 const appCss = await readFile(resolve(jsRoot, 'app.css'), 'utf8');
+const documents = await readFile(resolve(jsRoot, 'documents.tsx'), 'utf8');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -45,7 +46,7 @@ assert(!ui.includes('aria-hidden={!mobileOpen}'), 'Desktop sidebar must not be h
 // must identify themselves rather than incorrectly highlighting a neighboring
 // domain merely because it shares an operational group.
 for (const [file, navigationKey] of Object.entries({
-  'access.tsx': 'access', 'audit.tsx': 'audit', 'hr.tsx': 'hr', 'identity.tsx': 'identity',
+  'access.tsx': 'access', 'audit.tsx': 'audit', 'documents.tsx': 'documents', 'hr.tsx': 'hr', 'identity.tsx': 'identity',
   'organization.tsx': 'organization', 'payroll.tsx': 'payroll', 'placement.tsx': 'placement', 'privacy.tsx': 'privacy',
 })) {
   const source = await readFile(resolve(jsRoot, file), 'utf8');
@@ -59,6 +60,12 @@ assert(!navigation.includes("href: '/reporting'"), 'Primary navigation must not 
 
 assert(app.includes("import { ReportingApp } from './reporting';"), 'Canonical app must own Reporting composition.');
 assert(app.includes("case 'reporting':"), 'Canonical app must resolve the Reporting workspace.');
+assert(app.includes("import { DocumentsApp } from './documents';"), 'Canonical app must own Documents composition.');
+assert(app.includes("case 'documents':"), 'Canonical app must resolve the Documents workspace.');
+assert(documents.includes('role="tablist"') && documents.includes('role="tabpanel"'), 'Documents work areas must expose accessible tab semantics.');
+assert(documents.includes('aria-live="polite"'), 'Documents lifecycle feedback and history must announce state changes.');
+assert(documents.includes('available_actions'), 'Documents must consume server-projected affordances instead of client-side authority rules.');
+assert(documents.includes('Storage references are intentionally never sent'), 'Documents must make the storage-reference read boundary explicit.');
 assert(workspaceBlade.includes("@vite('resources/js/app.tsx')"), 'Workspace Blade must load only the canonical React entrypoint.');
 assert(!workspaceBlade.includes('reporting-console'), 'Workspace Blade must not expose a secondary Reporting mount.');
 assert(!workspaceBlade.includes("@vite('resources/js/reporting.tsx')"), 'Workspace Blade must not mount Reporting through a second entrypoint.');

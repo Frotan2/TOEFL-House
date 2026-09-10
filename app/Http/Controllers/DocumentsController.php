@@ -9,46 +9,17 @@ use App\Modules\Documents\Commands\DefineDocumentClassification;
 use App\Modules\Documents\Commands\RegisterDocument;
 use App\Modules\Documents\Commands\TransitionDocument;
 use App\Modules\Documents\Models\Document;
-use App\Modules\Documents\Models\DocumentClassification;
-use App\Modules\Documents\Models\DocumentVersion;
-use App\Modules\Documents\Models\RetentionDecision;
-use App\Modules\Documents\Models\RetentionRule;
-use App\Modules\Identity\Models\Person;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 
 /**
- * Documents console: the evidence-document registry. Classifications and
- * retention rules are defined by the classifier; documents are registered
- * against a known subject and a defined classification; versions are
- * append-only and immutable; a distinct employee verifies the submitted
- * version; and the retention decision applies the category's rule. Every
- * transition delegates to the documents module commands.
+ * Legacy form compatibility adapter for Documents & Evidence. The canonical
+ * interactive read surface is the React workspace and /api/v1/documents;
+ * these POST handlers stay intentionally thin and delegate to the same
+ * authoritative commands for integrations that still submit web forms.
  */
 final class DocumentsController extends Controller
 {
-    public function index(): View
-    {
-        $this->requireOrganizationRead('documents.register', 'documents.console.index');
-        $visibleBranchIds = $this->authorizedBranches('documents.register');
-        $people = Person::query()
-            ->where('verification_state', 'verified')
-            ->whereIn('home_branch_id', $visibleBranchIds)
-            ->orderBy('legal_name')->limit(300)->get();
-        $personIds = $people->pluck('id')->all();
-        $documentIds = Document::query()->whereIn('subject_person_id', $personIds)->pluck('id')->all();
-
-        return view('documents.index', [
-            'classifications' => DocumentClassification::query()->orderBy('category')->get(),
-            'retentionRules' => RetentionRule::query()->orderBy('category')->get(),
-            'documents' => Document::query()->whereIn('id', $documentIds)->orderByDesc('id')->limit(200)->get(),
-            'versions' => DocumentVersion::query()->whereIn('document_id', $documentIds)->orderByDesc('created_at')->limit(300)->get(),
-            'retentionDecisions' => RetentionDecision::query()->whereIn('document_id', $documentIds)->orderByDesc('created_at')->limit(200)->get(),
-            'people' => $people,
-        ]);
-    }
-
     public function defineClassification(Request $request): RedirectResponse
     {
         $input = $request->validate([

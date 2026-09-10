@@ -65,11 +65,15 @@ Page templates consistently use:
 
 ## Navigation model
 
-Primary navigation is organized around operator work:
+Primary navigation is organized into explicit work-oriented groups:
 
-`Workspace → Students → Academic → People → CRM → Finance → Reports → Management`
+`Work → People → Operations → Governance → Control`
 
-Secondary or specialist surfaces remain reachable through their canonical routes and source workflows without becoming top-level navigation clutter.
+The catalog includes the specialist workspaces (Placement, HR, Payroll, Library
+& Resources, Documents & Evidence, Organization, Identity, Access, Privacy,
+and Audit) as well as the core employee flows. Every React surface must pass
+its own navigation key to the shared shell so the active-location signal never
+points at a neighboring domain.
 
 ## Workspace
 

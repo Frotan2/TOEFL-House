@@ -20,15 +20,15 @@ The interactive frontend follows the canonical boundary: React renders and orche
 | Identity | React | Identity has a versioned API for person, verification, account link, credential, and account deactivation operations. |
 | Access | React | Access has a dedicated v1 boundary for assignments, policy publication, named-scope grants, staged organization-wide approvals, and dated delegations. |
 | Organization | React | Organization has a scoped v1 projection for topology and position catalog. It is intentionally read-only; structural mutations remain organization-domain commands. |
+| Library & Resources | React | A scoped Resources API projects books, assets, custody, disposals and facilities work; lifecycle commands remain canonical server authority. |
+| Documents & Evidence | React | `/api/v1/documents` computes the union of authorized document branches, projects per-record action affordances, keeps storage references out of read models, and delegates every command to the existing lifecycle authority. |
+| Privacy | React | The server projects branch-scoped privacy evidence and the UI is read-only; authority and correction stay server-owned. |
+| Audit | React | The server projects immutable audit evidence and the UI is read-only; audit evidence is never modelled as mutable CRUD. |
 
 ## Transitional or API-blocked surfaces
 
 | Surface | Classification | Reason |
 |---|---|---|
-| Documents | API BLOCKED / specialized | Document lifecycle commands exist in the web boundary, but there is no complete v1 document/evidence projection suitable for a safe SPA migration. |
-| Library | API BLOCKED / specialized | Library is not currently exposed through a complete versioned interactive API boundary. |
-| Privacy | API BLOCKED / governance-specialized | Consent, disclosure, export, approval and execution flows need a versioned read/write governance contract before React migration. |
-| Audit | KEEP SPECIALIZED SERVER SURFACE | Audit is immutable evidence, not ordinary mutable CRUD. Current read-only server surface remains intentionally specialized until a suitable evidence-query API is defined. |
 | Communication | API BLOCKED / transitional | Message queue and delivery-state commands exist, but a complete versioned notification/message projection is not exposed for safe SPA ownership. |
 
 ## Legitimate server-rendered exceptions

@@ -9,7 +9,7 @@ const viewsRoot = path.join(root, 'resources', 'views');
 const domainComponents = {
   students: 'students.tsx', academic: 'academic.tsx', placement: 'placement.tsx',
   teachers: 'teacher.tsx', hr: 'hr.tsx', finance: 'finance.tsx', payroll: 'payroll.tsx',
-  reporting: 'reporting.tsx', management: 'management.tsx', workspace: 'workspace.tsx',
+  reporting: 'reporting.tsx', management: 'management.tsx', workspace: 'workspace.tsx', documents: 'documents.tsx',
 };
 const transportEntrypoints = [
   'app.tsx', 'finance.tsx', 'reporting.tsx', 'hr.tsx', 'payroll.tsx',
@@ -34,8 +34,10 @@ const app = fs.readFileSync(path.join(jsRoot, 'app.tsx'), 'utf8');
 assert.match(app, /react-console/);
 assert.match(app, /AppErrorBoundary/);
 assert.match(app, /ReportingApp/);
+assert.match(app, /DocumentsApp/);
 assert.match(app, /function resolveContent/);
 assert.match(app, /case 'reporting':/);
+assert.match(app, /case 'documents':/);
 assert.match(app, /switch \(view as ConsoleView \| null\)/);
 
 const navigation = fs.readFileSync(path.join(jsRoot, 'core', 'navigation.ts'), 'utf8');
@@ -118,6 +120,7 @@ for (const contract of [
   'toefl-house-legacy-operations.css',
   '<base href="{{ url(\'/\') }}/">',
 ]) assert.ok(legacyLayout.includes(contract), `legacy layout contract missing: ${contract}`);
-for (const folder of ['library', 'communication', 'documents', 'audit', 'privacy']) assert.ok(fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: legacy boundary missing`);
+for (const folder of ['library', 'communication', 'audit', 'privacy']) assert.ok(fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: legacy boundary missing`);
+assert.ok(!fs.existsSync(path.join(viewsRoot, 'documents', 'index.blade.php')), 'documents: retired Blade read model must not survive beside the canonical React workspace');
 
 console.log('PASS  frontend domain, transport, shell, CI and legacy-boundary contracts');

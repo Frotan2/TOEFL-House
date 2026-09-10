@@ -23,6 +23,7 @@ import { LibraryApp } from './library';
 import { ReportingApp } from './reporting';
 import { PrivacyApp } from './privacy';
 import { AuditApp } from './audit';
+import { DocumentsApp } from './documents';
 import { createApiClient, type ApiClient } from './core/api';
 import { AppErrorBoundary } from './core/error-boundary';
 
@@ -39,7 +40,8 @@ type ConsoleView =
   | 'library'
   | 'reporting'
   | 'privacy'
-  | 'audit';
+  | 'audit'
+  | 'documents';
 
 function resolveContent(view: string | null, query: URLSearchParams, props: ConsoleProps) {
   switch (view as ConsoleView | null) {
@@ -66,6 +68,8 @@ function resolveContent(view: string | null, query: URLSearchParams, props: Cons
       return <PrivacyApp {...props} />;
     case 'audit':
       return <AuditApp {...props} />;
+    case 'documents':
+      return <DocumentsApp {...props} />;
     case 'workspace':
     default:
       return <WorkspaceApp {...props} />;

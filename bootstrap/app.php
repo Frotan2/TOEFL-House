@@ -44,6 +44,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->group(base_path('routes/resources-api.php'));
             Route::prefix('api/v1')
                 ->middleware(['api', 'employee', 'throttle:employee-api'])
+                ->group(base_path('routes/documents-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/privacy-api.php'));
             Route::prefix('api/v1')
                 ->middleware(['api', 'employee', 'throttle:employee-api'])

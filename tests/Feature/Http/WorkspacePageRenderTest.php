@@ -78,6 +78,7 @@ final class WorkspacePageRenderTest extends TestCase
             ['/access'],
             ['/organization'],
             ['/identity'],
+            ['/documents'],
         ];
     }
 
@@ -99,6 +100,14 @@ final class WorkspacePageRenderTest extends TestCase
             ->assertOk()
             ->assertSee('Employee Workspace', false)
             ->assertSee('csrf-token', false);
+    }
+
+    public function test_documents_renders_the_canonical_workspace_mount_and_title(): void
+    {
+        $this->get('/documents')
+            ->assertOk()
+            ->assertSee('Documents &amp; Evidence — The TOEFL House', false)
+            ->assertSee('data-view="documents"', false);
     }
 
     public function test_health_endpoint_reports_database_reachable(): void
