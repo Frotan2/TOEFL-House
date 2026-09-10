@@ -70,6 +70,7 @@ BASH);
         $service = (string) file_get_contents(base_path('deploy/systemd/toefl-house-scheduler.service'));
         $timer = (string) file_get_contents(base_path('deploy/systemd/toefl-house-scheduler.timer'));
         $runbook = (string) file_get_contents(base_path('docs/operations/production-deployment.md'));
+        $traceability = (string) file_get_contents(base_path('docs/15-REQUIREMENT-TRACEABILITY.md'));
 
         $this->assertTrue(is_executable(base_path('deploy/schedule.sh')));
         $this->assertStringContainsString('ExecStart=/var/www/toefl-house/current/deploy/schedule.sh', $service);
@@ -79,6 +80,8 @@ BASH);
         $this->assertStringContainsString('INTEGRATIONS_SCHEDULER_RUN_BY=<durable-person-uuid>', $runbook);
         $this->assertStringContainsString('toefl-house-scheduler.timer', $runbook);
         $this->assertStringContainsString('current/deploy/schedule.sh', $runbook);
+        $this->assertStringContainsString('supervised relay entrypoint fails closed', $traceability);
+        $this->assertStringNotContainsString('live relay intentionally not enabled', $traceability);
     }
 
     /**
