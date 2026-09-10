@@ -81,11 +81,13 @@ reachable over HTTP.
 ### First installation (greenfield)
 
 `deploy/deploy.sh` is the release-switch procedure; it migrates but
-deliberately never seeds. On a **brand-new** installation, after the first
-successful deployment (migrations applied, health green) run the guarded
-first-run bootstrap exactly once to create the bootstrap organization, the
-genesis campus + branch that every branch-mandated intake requires, and the
-owner account:
+deliberately never seeds. By default it checks out the canonical
+`https://github.com/Frotan2/TOEFL-House.git` repository; set `REPO_URL` only
+when the host is intentionally deployed from a reviewed mirror or private fork.
+On a **brand-new** installation, after the first successful deployment
+(migrations applied, health green) run the guarded first-run bootstrap exactly
+once to create the bootstrap organization, the genesis campus + branch that
+every branch-mandated intake requires, and the owner account:
 
 ```bash
 BOOTSTRAP_OWNER_NAME="<full legal name>" \

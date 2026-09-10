@@ -29,7 +29,9 @@ set -euo pipefail
 
 # --- Configuration (override via environment when needed) -------------------
 DEPLOY_ROOT="${DEPLOY_ROOT:-/var/www/toefl-house}"
-REPO_URL="${REPO_URL:-https://github.com/alfrotan-glitch/TOEFL-House.git}"
+# This is the canonical repository, not a historical fork. Mirrors and private
+# deployment sources remain supported through the explicit REPO_URL override.
+REPO_URL="${REPO_URL:-https://github.com/Frotan2/TOEFL-House.git}"
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 CURRENT_LINK="$DEPLOY_ROOT/current"
 ENV_FILE="$DEPLOY_ROOT/.env"
