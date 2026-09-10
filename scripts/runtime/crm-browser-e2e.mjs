@@ -205,7 +205,7 @@ try {
   await page.waitForSelector('#crm-title');
   await page.waitForSelector('form.crm-capture');
 
-  const branchState = await page.$eval('.crm-capture select:nth-of-type(3)', (select) => ({
+  const branchState = await page.$eval('#crm-origin-branch', (select) => ({
     value: select.value,
     options: [...select.options].map((option) => option.value),
   }));
@@ -217,7 +217,8 @@ try {
   await captureInputs[0].type(`Browser CRM ${uniqueSuffix}`);
   await captureInputs[2].type(`crm-browser-${uniqueSuffix}@example.test`);
   const branchValue = branchState.options.find(Boolean);
-  await page.select('.crm-capture select:nth-of-type(3)', branchValue);
+  if (!branchValue) throw new Error('CRM capture has no selectable authorized origin branch');
+  await page.select('#crm-origin-branch', branchValue);
   await page.click('.crm-capture button[type="submit"]');
   await waitForNotice(page, 'Visitor captured in the CRM source of truth.');
   record('Visitor capture succeeds through the canonical API', true, 'capture acknowledgement received');

@@ -61,6 +61,17 @@ assert.match(browserE2e, /required\('E2E_PASSWORD'\)/);
 assert.match(browserE2e, /required\('CHROMIUM_PATH'\)/);
 assert.doesNotMatch(browserE2e, /Runtime-Pass-12345|runtime\.owner|definitely-the-wrong-password/i);
 
+const crm = fs.readFileSync(path.join(jsRoot, 'crm.tsx'), 'utf8');
+const crmBrowserE2e = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'crm-browser-e2e.mjs'), 'utf8');
+assert.match(crm, /id="crm-origin-branch"/, 'CRM capture: origin branch needs a stable, accessible control id');
+assert.match(crm, /htmlFor="crm-origin-branch"/, 'CRM capture: origin branch label must identify its control');
+assert.match(crmBrowserE2e, /#crm-origin-branch/, 'CRM browser E2E must use the stable branch control selector');
+assert.doesNotMatch(crmBrowserE2e, /\.crm-capture select:nth-of-type\(3\)/, 'CRM browser E2E must not depend on sibling-position selectors');
+assert.ok(fs.existsSync(path.join(root, 'public', 'favicon.svg')), 'public favicon asset missing');
+for (const view of ['workspace.blade.php', 'layouts/app.blade.php', 'finance/index.blade.php', 'library/index.blade.php']) {
+  assert.match(fs.readFileSync(path.join(viewsRoot, view), 'utf8'), /favicon\.svg/, `${view}: favicon link missing`);
+}
+
 const environment = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'verify-environment.mjs'), 'utf8');
 for (const range of ["php: { range: '>=8.2 <8.5'", "composer: { range: '>=2.5 <3'", "node: { range: '>=22.0 <23.0'", "npm: { range: '>=10.0 <11.0'", "postgres: { range: '>=18.0 <19.0'"]) assert.match(environment, new RegExp(range.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 

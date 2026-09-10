@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <base href="{{ url('/') }}/">
     <title>{{ ($view ?? 'workspace') === 'crm' ? 'CRM — The TOEFL House' : (($view ?? 'workspace') === 'management' ? 'Management Workspace — The TOEFL House' : (($view ?? 'workspace') === 'students' ? 'Students & Admissions — The TOEFL House' : (($view ?? 'workspace') === 'academic' ? 'Academic Classes — The TOEFL House' : (($view ?? 'workspace') === 'teachers' ? 'Teacher & Faculty — The TOEFL House' : (($view ?? 'workspace') === 'reporting' ? 'Reporting & Dashboards — The TOEFL House' : 'Employee Workspace — The TOEFL House'))))) }}</title>
