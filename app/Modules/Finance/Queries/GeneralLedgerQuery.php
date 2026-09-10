@@ -15,6 +15,7 @@ use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PayrollLiabilityFact;
 use App\Modules\Finance\Models\Refund;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
@@ -275,29 +276,61 @@ final class GeneralLedgerQuery
             throw new \InvalidArgumentException('ledger completeness requires an organization scope');
         }
 
+        return $this->completenessInScope($periodId, $organizationId);
+    }
+
+    /**
+     * Closing a period is an internal control, rather than an operator-facing
+     * statement. It must inspect every source fact, including a legacy fact
+     * with missing organization provenance, so that a malformed record cannot
+     * silently let the books close. The API exposes only completeness(), whose
+     * organization scope is required and authorization checked at the boundary.
+     *
+     * @return array{total: int, resolved: int, check_total: string, unresolved: array<int, array{source_type: string, source_id: string, amount: string, period_id: string}>}
+     */
+    public function completenessForPeriodClose(string $periodId): array
+    {
+        return $this->completenessInScope($periodId, null);
+    }
+
+    /**
+     * @return array{total: int, resolved: int, check_total: string, unresolved: array<int, array{source_type: string, source_id: string, amount: string, period_id: string}>}
+     */
+    private function completenessInScope(?string $periodId, ?string $organizationId): array
+    {
         $hasPeriod = $periodId !== null && $periodId !== '';
+        $hasOrganizationScope = $organizationId !== null;
         $scoped = static fn (Builder $query, string $column = 'period_id'): Builder => $hasPeriod ? $query->where($column, $periodId) : $query;
-        $organizationBranchIds = $this->organizationBranchIds($organizationId);
-        $organizationObligationIds = fn (): Builder => $this->whereFirstPresentBranchIn(
+        $organizationBranchIds = $hasOrganizationScope ? $this->organizationBranchIds($organizationId) : [];
+        $branchScoped = fn (Builder $query, array $branchColumns): Builder => $hasOrganizationScope
+            ? $this->whereFirstPresentBranchIn($query, $branchColumns, $organizationBranchIds)
+            : $query;
+        $organizationObligationIds = fn (): Builder => $branchScoped(
             Obligation::query(),
             ['obligations.current_home_branch_id', 'obligations.originating_branch_id'],
-            $organizationBranchIds,
         );
-        $organizationFundAllocationIds = fn (): Builder => FundAllocation::query()
-            ->join('obligation_lines as completeness_correction_lines', 'completeness_correction_lines.id', '=', 'fund_allocations.obligation_line_id')
-            ->whereIn('completeness_correction_lines.obligation_id', $organizationObligationIds()->select('obligations.id'))
-            ->select('fund_allocations.id');
+        $fundAllocations = static fn (): Builder => FundAllocation::query()
+            ->join('obligation_lines as completeness_allocation_lines', 'completeness_allocation_lines.id', '=', 'fund_allocations.obligation_line_id')
+            ->join('obligations as completeness_allocation_obligations', 'completeness_allocation_obligations.id', '=', 'completeness_allocation_lines.obligation_id')
+            ->select('fund_allocations.*');
+        $organizationFundAllocationIds = fn (): Builder => $branchScoped(
+            $fundAllocations(),
+            [
+                'fund_allocations.current_home_branch_id',
+                'fund_allocations.originating_branch_id',
+                'completeness_allocation_obligations.current_home_branch_id',
+                'completeness_allocation_obligations.originating_branch_id',
+            ],
+        )->select('fund_allocations.id');
 
         $providers = [
-            'obligation' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+            'obligation' => fn (): Collection => $scoped($branchScoped(
                 Obligation::query(),
                 ['obligations.current_home_branch_id', 'obligations.originating_branch_id'],
-                $organizationBranchIds,
             ))->pluck('obligations.id'),
-            'payment' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+            'payment' => fn (): Collection => $scoped($branchScoped(
                 Payment::query(),
                 ['payments.current_home_branch_id', 'payments.originating_branch_id'],
-                $organizationBranchIds,
             ))->pluck('payments.id'),
             // Discounts resolve through their obligation rather than through
             // their own approval actor or any request-time branch hint.
@@ -307,37 +340,28 @@ final class GeneralLedgerQuery
                     ->whereIn('discounts.obligation_id', $organizationObligationIds()->select('obligations.id')),
                 'discounts.period_id',
             )->pluck('discounts.id'),
-            'refund' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+            'refund' => fn (): Collection => $scoped($branchScoped(
                 Refund::query()->where('refunds.lifecycle_state', 'recorded'),
                 ['refunds.current_home_branch_id', 'refunds.originating_branch_id'],
-                $organizationBranchIds,
             ))->pluck('refunds.id'),
             // A fund allocation prefers its own provenance; only legacy rows
             // without it inherit the linked obligation's organization.
-            'fund_allocation' => fn (): Collection => $scoped(
-                $this->whereFirstPresentBranchIn(
-                    FundAllocation::query()
-                        ->join('obligation_lines as completeness_allocation_lines', 'completeness_allocation_lines.id', '=', 'fund_allocations.obligation_line_id')
-                        ->join('obligations as completeness_allocation_obligations', 'completeness_allocation_obligations.id', '=', 'completeness_allocation_lines.obligation_id'),
-                    [
-                        'fund_allocations.current_home_branch_id',
-                        'fund_allocations.originating_branch_id',
-                        'completeness_allocation_obligations.current_home_branch_id',
-                        'completeness_allocation_obligations.originating_branch_id',
-                    ],
-                    $organizationBranchIds,
-                ),
-                'completeness_allocation_obligations.period_id',
-            )->pluck('fund_allocations.id'),
-            'payroll_liability' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+            'fund_allocation' => fn (): Collection => $scoped($branchScoped(
+                $fundAllocations(),
+                [
+                    'fund_allocations.current_home_branch_id',
+                    'fund_allocations.originating_branch_id',
+                    'completeness_allocation_obligations.current_home_branch_id',
+                    'completeness_allocation_obligations.originating_branch_id',
+                ],
+            ), 'completeness_allocation_obligations.period_id')->pluck('fund_allocations.id'),
+            'payroll_liability' => fn (): Collection => $scoped($branchScoped(
                 PayrollLiabilityFact::query(),
                 ['payroll_liability_facts.originating_branch_id'],
-                $organizationBranchIds,
             ), 'payroll_liability_facts.period_id')->pluck('payroll_liability_facts.id'),
-            'expense' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+            'expense' => fn (): Collection => $scoped($branchScoped(
                 Expense::query()->where('expenses.lifecycle_state', 'approved'),
                 ['expenses.current_home_branch_id', 'expenses.originating_branch_id'],
-                $organizationBranchIds,
             ))->pluck('expenses.id'),
             'correction' => fn (): Collection => $scoped(
                 FinancialCorrection::query()
@@ -358,18 +382,23 @@ final class GeneralLedgerQuery
             // Employment settlements carry direct Finance organization
             // provenance and are intentionally not re-derived through HR.
             'employment_settlement' => fn (): Collection => $scoped(
-                EmploymentSettlement::query()->where('employment_settlements.organization_id', $organizationId),
+                $hasOrganizationScope
+                    ? EmploymentSettlement::query()->where('employment_settlements.organization_id', $organizationId)
+                    : EmploymentSettlement::query(),
                 'employment_settlements.period_id',
             )->pluck('employment_settlements.id'),
         ];
 
         // Key journalized facts by (source_type, source_id) so a ledger entry is
         // attributed to exactly the fact that produced it even across a shared
-        // id space. The journal scope is required as well: a source fact cannot
-        // make an entry in another organization's statement appear resolved.
-        $journalized = Journal::query()
-            ->where('organization_id', $organizationId)
-            ->whereNotNull('source_id')
+        // id space. For an organization statement, a source fact cannot make an
+        // entry in another organization's statement appear resolved. Period
+        // closing intentionally checks all organizations together.
+        $journalizedQuery = Journal::query()->whereNotNull('source_id');
+        if ($hasOrganizationScope) {
+            $journalizedQuery->where('organization_id', $organizationId);
+        }
+        $journalized = $journalizedQuery
             ->when($hasPeriod, fn (Builder $query) => $query->where('period_id', $periodId))
             ->get(['source_type', 'source_id'])
             ->mapWithKeys(static fn (Journal $journal): array => [$journal->source_type.'|'.$journal->source_id => true]);
@@ -408,11 +437,12 @@ final class GeneralLedgerQuery
 
     /**
      * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
      * @param  Builder<TModel>  $query
      * @param  list<string>  $branchColumns  Ordered from the source's most
-     *                                        preferred provenance to its
-     *                                        fallback, exactly like PHP ?? in
-     *                                        LedgerAccountResolver.
+     *                                       preferred provenance to its
+     *                                       fallback, exactly like PHP ?? in
+     *                                       LedgerAccountResolver.
      * @param  list<string>  $branchIds
      * @return Builder<TModel>
      */
@@ -446,7 +476,7 @@ final class GeneralLedgerQuery
      */
     private function organizationBranchIds(string $organizationId): array
     {
-        $today = \Carbon\CarbonImmutable::now()->startOfDay()->toDateString();
+        $today = CarbonImmutable::now()->startOfDay()->toDateString();
 
         return DB::table('branches as completeness_branch')
             ->join('campus_assignments as completeness_assignment', function ($join) use ($today): void {

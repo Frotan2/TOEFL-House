@@ -47,7 +47,7 @@ final class PostObligation
 
     /**
      * @param  list<array{category: string, amount: string, source_ref: string}>  $lines
-     * @return array{obligation_id: string, correlation_id: string}
+     * @return array{obligation_id: string, correlation_id: string, journal_id: string, debit_account_id: string, credit_account_id: string}
      */
     public function post(Actor $actor, FinancialPeriod $period, string $studentId, string $source, string $reason, array $lines, string $idempotencyKey, ?string $offeringId = null): array
     {

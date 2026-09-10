@@ -294,11 +294,21 @@ final class PostJournal
             return $this->scopeFromBranchId($branchId, 'a discount journal requires known branch provenance');
         }
         if ($sourceType === 'fund_allocation') {
-            $branchId = (string) (Obligation::query()
+            /** @var FundAllocation|null $allocation */
+            $allocation = $sourceId === null ? null : FundAllocation::query()->whereKey($sourceId)->first();
+            if ($allocation === null) {
+                return $this->scopeFromBranchId('', 'a fund allocation journal requires known branch provenance');
+            }
+            $obligation = Obligation::query()
                 ->join('obligation_lines', 'obligation_lines.obligation_id', '=', 'obligations.id')
-                ->where('obligation_lines.id', FundAllocation::query()->whereKey($sourceId)->value('obligation_line_id'))
-                ->selectRaw('COALESCE(obligations.current_home_branch_id, obligations.originating_branch_id) AS branch_id')
-                ->value('branch_id') ?? '');
+                ->where('obligation_lines.id', $allocation->obligation_line_id)
+                ->select('obligations.*')
+                ->first();
+            $branchId = (string) ($allocation->current_home_branch_id
+                ?? $allocation->originating_branch_id
+                ?? $obligation->current_home_branch_id
+                ?? $obligation->originating_branch_id
+                ?? '');
 
             return $this->scopeFromBranchId($branchId, 'a fund allocation journal requires known branch provenance');
         }

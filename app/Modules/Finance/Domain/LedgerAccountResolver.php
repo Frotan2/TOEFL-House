@@ -291,10 +291,14 @@ final class LedgerAccountResolver
         }
 
         if ($correction->correction_type === FinancialCorrection::TYPE_FUND_ALLOCATION_REVERSAL) {
-            $lineId = (string) (FundAllocation::query()->whereKey($correction->fund_allocation_id)->value('obligation_line_id') ?? '');
-            $obligation = $lineId === '' ? null : Obligation::query()
+            /** @var FundAllocation|null $allocation */
+            $allocation = FundAllocation::query()->whereKey($correction->fund_allocation_id)->first();
+            if ($allocation === null) {
+                throw BusinessRejection::forCode('finance.ledger_source_unknown', 'the correction fund allocation source is unknown');
+            }
+            $obligation = Obligation::query()
                 ->join('obligation_lines', 'obligation_lines.obligation_id', '=', 'obligations.id')
-                ->where('obligation_lines.id', $lineId)
+                ->where('obligation_lines.id', $allocation->obligation_line_id)
                 ->select('obligations.*')
                 ->first();
 
@@ -303,7 +307,10 @@ final class LedgerAccountResolver
                 'credit_account_id' => $this->accountId(self::ACCOUNT_FINANCIAL_AID_EXPENSE),
                 'amount' => (string) $correction->amount,
                 'period_id' => (string) $correction->period_id,
-                'organization_id' => $this->organizationForBranch($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id)),
+                // A correction follows the source allocation first. This preserves
+                // an allocation's immutable provenance even for legacy rows whose
+                // linked obligation now resolves to a different branch.
+                'organization_id' => $this->organizationForBranch($allocation->current_home_branch_id ?? $allocation->originating_branch_id ?? ($obligation === null ? null : ($obligation->current_home_branch_id ?? $obligation->originating_branch_id))),
             ];
         }
 

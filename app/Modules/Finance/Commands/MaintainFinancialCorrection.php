@@ -376,18 +376,28 @@ final class MaintainFinancialCorrection
         if ($obligationId === null && $allocationId !== null) {
             $obligationId = (string) PaymentAllocation::query()->whereKey($allocationId)->value('obligation_id');
         }
-        if ($obligationId === null && $fundAllocationId !== null) {
-            $lineId = (string) FundAllocation::query()->whereKey($fundAllocationId)->value('obligation_line_id');
-            $obligationId = (string) ObligationLine::query()->whereKey($lineId)->value('obligation_id');
+        if ($fundAllocationId !== null) {
+            /** @var FundAllocation|null $fundAllocation */
+            $fundAllocation = FundAllocation::query()->whereKey($fundAllocationId)->first();
+            if ($fundAllocation !== null) {
+                $allocationBranchId = $fundAllocation->current_home_branch_id ?? $fundAllocation->originating_branch_id;
+                // Match LedgerAccountResolver: a non-null allocation value is
+                // authoritative, even when malformed legacy data makes it blank.
+                if ($allocationBranchId !== null) {
+                    $branchId = trim((string) $allocationBranchId);
+
+                    return $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
+                }
+                if ($obligationId === null) {
+                    $obligationId = (string) ObligationLine::query()->whereKey($fundAllocation->obligation_line_id)->value('obligation_id');
+                }
+            }
         }
         $obligation = $obligationId === null ? null : Obligation::query()->whereKey($obligationId)->first();
         if ($obligation === null) {
             return null;
         }
-        $branchId = trim((string) $obligation->current_home_branch_id);
-        if ($branchId === '') {
-            $branchId = trim((string) $obligation->originating_branch_id);
-        }
+        $branchId = trim((string) ($obligation->current_home_branch_id ?? $obligation->originating_branch_id ?? ''));
 
         return $branchId === '' ? null : Branch::query()->whereKey($branchId)->first();
     }
