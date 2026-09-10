@@ -87,6 +87,116 @@ restore_nginx_edge_config() {
     return 0
 }
 
+# Render a site template without asking nginx to interpret shell environment
+# variables. `envsubst` is deliberately not used: it would also consume nginx's
+# own $host/$uri/$document_root variables. These narrow placeholders make the
+# host facts explicit and reject characters that could inject an nginx directive.
+#
+# render_nginx_edge_config <template-path> <output-path>
+render_nginx_edge_config() {
+    local src="${1:?usage: render_nginx_edge_config <template path> <output path>}"
+    local output="${2:?usage: render_nginx_edge_config <template path> <output path>}"
+
+    [ -r "$src" ] || die "cannot render an unreadable nginx template: $src"
+
+    # Existing externally supplied configs and the behavioural test fixtures do
+    # not use TOEFL placeholders. Copy them untouched rather than requiring
+    # deployment-specific settings they do not need.
+    if ! grep -q '__TOEFL_' "$src"; then
+        cp -f "$src" "$output" || die "cannot write rendered nginx config: $output"
+        return 0
+    fi
+
+    local deploy_root="${DEPLOY_ROOT:-/var/www/toefl-house}"
+    local server_name="${NGINX_SERVER_NAME:-}"
+    local certificate="${NGINX_TLS_CERTIFICATE:-}"
+    local certificate_key="${NGINX_TLS_CERTIFICATE_KEY:-}"
+    local rendered_output="$output"
+    local streamed_output=0
+
+    if grep -q '__TOEFL_DEPLOY_ROOT__' "$src"; then
+        if [[ ! "$deploy_root" =~ ^/[A-Za-z0-9._/@+-]+$ ]]; then
+            die "DEPLOY_ROOT must be an absolute nginx-safe path when managing NGINX_CONF_DEST"
+        fi
+    fi
+
+    if grep -q '__TOEFL_SERVER_NAME__' "$src" || grep -q '__TOEFL_TLS_CERTIFICATE' "$src"; then
+        if [[ ! "$server_name" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || [[ "$server_name" == *..* ]] || [[ "$server_name" == *. ]]; then
+            die "NGINX_SERVER_NAME must be one hostname without whitespace, wildcards, or nginx syntax"
+        fi
+    fi
+
+    certificate="${certificate:-/etc/letsencrypt/live/$server_name/fullchain.pem}"
+    certificate_key="${certificate_key:-/etc/letsencrypt/live/$server_name/privkey.pem}"
+
+    if grep -q '__TOEFL_TLS_CERTIFICATE__' "$src" && [[ ! "$certificate" =~ ^/[A-Za-z0-9._/@+-]+$ ]]; then
+        die "NGINX_TLS_CERTIFICATE must be an absolute nginx-safe path"
+    fi
+    if grep -q '__TOEFL_TLS_CERTIFICATE_KEY__' "$src" && [[ ! "$certificate_key" =~ ^/[A-Za-z0-9._/@+-]+$ ]]; then
+        die "NGINX_TLS_CERTIFICATE_KEY must be an absolute nginx-safe path"
+    fi
+
+    # A standalone caller can request stdout. Render into a real temporary file
+    # after input validation so the unresolved-token check reads rendered bytes
+    # rather than trying to read a write-only pipe (/dev/stdout).
+    case "$output" in
+        /dev/stdout|/dev/stderr|/dev/fd/*)
+            rendered_output="$(mktemp "${TMPDIR:-/tmp}/toefl-nginx-render.XXXXXX")" \
+                || die "cannot create a temporary nginx render file"
+            streamed_output=1
+            ;;
+    esac
+
+    if ! sed \
+        -e "s|__TOEFL_DEPLOY_ROOT__|$deploy_root|g" \
+        -e "s|__TOEFL_SERVER_NAME__|$server_name|g" \
+        -e "s|__TOEFL_TLS_CERTIFICATE__|$certificate|g" \
+        -e "s|__TOEFL_TLS_CERTIFICATE_KEY__|$certificate_key|g" \
+        "$src" > "$rendered_output"; then
+        rm -f "$rendered_output"
+        die "cannot write rendered nginx config: $output"
+    fi
+
+    if grep -q '__TOEFL_' "$rendered_output"; then
+        rm -f "$rendered_output"
+        die "nginx template contains an unrendered TOEFL placeholder: $src"
+    fi
+
+    if [ "$streamed_output" -eq 1 ]; then
+        if ! cat "$rendered_output" > "$output"; then
+            rm -f "$rendered_output"
+            die "cannot write rendered nginx config: $output"
+        fi
+        rm -f "$rendered_output"
+    fi
+}
+
+# Validate the target release's template before a deployment can take a backup,
+# migrate the database, or move `current`. The full guarded installation still
+# happens after PHP-FPM has accepted the release, but a missing hostname or an
+# unsafe path is an operator-input failure that must be reported much earlier.
+#
+# preflight_nginx_edge_config <path-to-release-conf>
+preflight_nginx_edge_config() {
+    local src="${1:?usage: preflight_nginx_edge_config <release conf path>}"
+
+    [ -z "${NGINX_CONF_DEST:-}" ] && return 0
+
+    local tmp
+    tmp="$(mktemp "${TMPDIR:-/tmp}/toefl-nginx-edge-preflight.XXXXXX")" \
+        || die "cannot create a temporary nginx edge preflight file"
+
+    # render_nginx_edge_config uses die() for a precise input error. Isolating it
+    # preserves that diagnostic while letting this caller remove its temporary
+    # file before it stops the deployment.
+    if ! ( render_nginx_edge_config "$src" "$tmp" ); then
+        rm -f "$tmp"
+        die "managed nginx template preflight failed before the deployment changed application state"
+    fi
+    rm -f "$tmp"
+    log "managed nginx template inputs validated before deployment"
+}
+
 # install_nginx_edge_config <path-to-release-conf>
 #
 # NGINX_CONF_DEST unset  → the edge is managed outside this script. Reported as a
@@ -109,10 +219,15 @@ install_nginx_edge_config() {
         die "this release has no readable edge config at $src; refusing to install an edge config from nowhere"
     fi
 
-    local tmp="$NGINX_CONF_DEST.new.$$"
-    if ! cp -f "$src" "$tmp" || ! chmod 0644 "$tmp"; then
+    # Do not use a predictable .new.$$ filename here: the deploy commonly runs
+    # with elevated privileges, so the candidate config must not be redirectable
+    # through a pre-created symlink in a misconfigured writable include directory.
+    local tmp
+    tmp="$(mktemp "${NGINX_CONF_DEST}.new.XXXXXX")" \
+        || die "cannot create a protected temporary edge config beside $NGINX_CONF_DEST"
+    if ! render_nginx_edge_config "$src" "$tmp" || ! chmod 0644 "$tmp"; then
         rm -f "$tmp"
-        die "cannot write $tmp — check permissions on $(dirname "$NGINX_CONF_DEST") (this script usually needs sudo to manage the edge config)"
+        die "cannot render $tmp — check NGINX_SERVER_NAME/TLS paths and permissions on $(dirname "$NGINX_CONF_DEST") (this script usually needs sudo to manage the edge config)"
     fi
 
     # Nothing to reload when the installed file already matches the release: nginx

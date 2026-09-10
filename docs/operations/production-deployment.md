@@ -286,8 +286,9 @@ or writing `job_runs` directly.
 TLS is terminated at nginx (`deploy/nginx/toefl-house.conf`):
 
 - HTTP → HTTPS 301 redirect.
-- `ssl_protocols TLSv1.2 TLSv1.3`; replace the certificate paths with your
-  CA-issued (e.g. Let's Encrypt) files — a `TODO` in the file.
+- `ssl_protocols TLSv1.2 TLSv1.3`; the managed-edge renderer supplies the
+  reviewed hostname and CA-issued certificate paths before enabling the site
+  (the Let’s Encrypt bootstrap/renewal procedure is below).
 - `root …/current/public` — **only** `public/` is served.
 - Security headers (HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY`,
   `Referrer-Policy`, `Permissions-Policy`) set at the edge; the app sets the
@@ -303,6 +304,94 @@ TLS is terminated at nginx (`deploy/nginx/toefl-house.conf`):
   JSON `429`, `Retry-After`, and rate-limit headers when exhausted. Adjust the
   reviewed `EMPLOYEE_API_RATE_LIMIT_PER_MINUTE` setting only within 1–600.
 
+### ACME certificate issuance and renewal
+
+The full site deliberately serves **only** `/.well-known/acme-challenge/` on
+port 80; every other HTTP URI redirects to HTTPS. The exception is static-only
+(`try_files … =404`), takes precedence over the dotfile deny with `^~`, and uses
+the persistent `$DEPLOY_ROOT/acme-challenge` directory rather than `current/`.
+Certificate state and renewal tokens therefore do not modify an immutable
+release or vanish when `current` changes.
+
+The committed nginx files are **templates**, not a generic hostname that may
+silently reach production. When this deployment manages `NGINX_CONF_DEST`, pass
+these host facts to the deployment process (never in the application `.env`):
+
+```bash
+sudo env \
+  DEPLOY_ROOT=/var/www/toefl-house \
+  NGINX_CONF_DEST=/etc/nginx/conf.d/toefl-house.conf \
+  NGINX_SERVER_NAME=school.example \
+  ./deploy/deploy.sh <git-ref>
+```
+
+For a CA/layout other than Certbot's standard `/etc/letsencrypt/live/<name>/`
+lineage, add **both** explicit certificate paths to that same `sudo env`
+command:
+
+```bash
+sudo env \
+  DEPLOY_ROOT=/var/www/toefl-house \
+  NGINX_CONF_DEST=/etc/nginx/conf.d/toefl-house.conf \
+  NGINX_SERVER_NAME=school.example \
+  NGINX_TLS_CERTIFICATE=/etc/ssl/certs/school.example.fullchain.pem \
+  NGINX_TLS_CERTIFICATE_KEY=/etc/ssl/private/school.example.key \
+  ./deploy/deploy.sh <git-ref>
+```
+
+`deploy/deploy.sh` first preflights the target release's template after checkout
+and before it builds, backs up, migrates, or moves `current`; its guarded edge
+install later renders again into a protected temporary file before `nginx -t`.
+It never writes unresolved tokens to the edge. `NGINX_SERVER_NAME` is one
+hostname (no whitespace, wildcard, or nginx syntax), and all rendered paths are
+constrained to safe absolute paths. This also preserves nginx's own `$host`,
+`$uri`, and FastCGI variables, which a broad `envsubst` pass would corrupt. The
+default certificate paths are Certbot's
+standard lineage for `NGINX_SERVER_NAME`; provide both optional path variables
+only when the host uses another CA/layout.
+
+For a new Let's Encrypt host, create its persistent webroot and install the
+one-time HTTP-only bootstrap template from the checkout you intend to deploy.
+The bootstrap serves no application routes and returns `404` outside the narrow
+challenge path, so it solves the first-certificate chicken-and-egg problem
+without opening the application over plain HTTP:
+
+```bash
+sudo install -d -m 0755 /var/www/toefl-house/acme-challenge
+DEPLOY_ROOT=/var/www/toefl-house NGINX_SERVER_NAME=school.example \
+  ./deploy/render-nginx-config.sh deploy/nginx/toefl-house-acme-bootstrap.conf \
+  >/tmp/toefl-house-acme-bootstrap.conf
+sudo install -m 0644 /tmp/toefl-house-acme-bootstrap.conf /etc/nginx/conf.d/toefl-house.conf
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot certonly --webroot -w /var/www/toefl-house/acme-challenge -d school.example
+```
+
+Then run the ordinary deployment with the same `DEPLOY_ROOT`,
+`NGINX_CONF_DEST`, and `NGINX_SERVER_NAME`; its guarded edge install replaces
+the bootstrap with the full TLS site only after the certificate exists and
+`nginx -t` accepts it. Adapt every displayed path together when `DEPLOY_ROOT`
+is not `/var/www/toefl-house`.
+
+Install the shipped deploy hook once so nginx reloads **only** after Certbot
+actually renews a certificate. It runs `nginx -t` first, prefers a `systemctl`
+reload, and uses nginx's checked reload signal if the host has no working
+systemd service manager. Test both renewal and reload. The installed Certbot
+timer/cron remains a host responsibility; verify it is enabled after package
+upgrades:
+
+```bash
+sudo install -D -m 0755 deploy/certbot/reload-nginx.sh \
+  /etc/letsencrypt/renewal-hooks/deploy/10-toefl-house-nginx-reload
+sudo certbot renew --dry-run --run-deploy-hooks
+systemctl list-timers 'certbot*'
+```
+
+A temporary token under the exact challenge URI must return `200`; a missing
+token must return `404`. Neither arbitrary `/.well-known` nor other dotfile
+paths may become public. If TLS is terminated by a managed load balancer,
+leave this local certificate procedure disabled and manage issuance, renewal,
+and reload at that authoritative edge.
+
 PHP-FPM pool: `deploy/php-fpm.conf` (dynamic `pm`, slowlog, security
 `limit_extensions`). Opcache policy is a separate conf.d fragment,
 `deploy/opcache.ini`: opcache entries are `PHP_INI_SYSTEM` and cannot be set in
@@ -317,10 +406,10 @@ asserts the two strings are identical, because two sources of truth drift and th
 weaker one silently wins on whichever path serves the response.
 
 **The web server's copy has to be installed, not just written.** `deploy.sh`
-copies `deploy/nginx/toefl-house.conf` from the activated release to
-`$NGINX_CONF_DEST` and reloads, refusing the change if `nginx -t` rejects it and
-putting the previous file back if the reload does not take. Before that step
-existed the script only reloaded whatever the host already had, so a header added
+renders `deploy/nginx/toefl-house.conf` from the activated release and atomically
+installs that result at `$NGINX_CONF_DEST`, refusing the change if `nginx -t`
+rejects it and putting the previous file back if the reload does not take. Before
+that step existed the script only reloaded whatever the host already had, so a header added
 in a release reached PHP responses and never reached static files, 404s or 5xx
 pages — the paths nginx serves without touching PHP. If the edge is managed
 outside this repository, leave `NGINX_CONF_DEST` unset; the deploy then says so

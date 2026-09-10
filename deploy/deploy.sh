@@ -63,6 +63,12 @@ PHP_FPM_PID_FILE="${PHP_FPM_PID_FILE:-}"
 # of assuming.
 NGINX_CONF_DEST="${NGINX_CONF_DEST:-}"
 NGINX_RELOAD_CMD="${NGINX_RELOAD_CMD:-}"
+# The edge template is rendered only when this deploy owns NGINX_CONF_DEST. One
+# canonical hostname avoids an unbounded server-name list; certificate paths
+# default to Certbot's standard lineage and can be overridden for another CA.
+NGINX_SERVER_NAME="${NGINX_SERVER_NAME:-}"
+NGINX_TLS_CERTIFICATE="${NGINX_TLS_CERTIFICATE:-}"
+NGINX_TLS_CERTIFICATE_KEY="${NGINX_TLS_CERTIFICATE_KEY:-}"
 
 log()  { printf '[deploy] %s\n' "$*"; }
 die()  { printf '[deploy][ERROR] %s\n' "$*" >&2; exit 1; }
@@ -138,7 +144,7 @@ REF="${1:?usage: deploy.sh <git-ref> | --rollback}"
 # exactly, and that second copy of the contract had drifted away from the runtime
 # the release was actually certified on, refusing valid deployments. Do not put
 # version numbers back here.
-for tool in "$PHP_BIN" "$COMPOSER_BIN" node "$NPM_BIN"; do
+for tool in "$PHP_BIN" "$COMPOSER_BIN" node "$NPM_BIN" mktemp; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool not found on PATH"
 done
 
@@ -179,6 +185,11 @@ git clone --quiet --depth 1 --branch "$REF" "$REPO_URL" "$RELEASE_DIR" \
 ( cd "$RELEASE_DIR" && git checkout --quiet "$REF" )
 COMMIT="$( cd "$RELEASE_DIR" && git rev-parse HEAD )"
 log "source: commit $COMMIT"
+
+# 1b. Validate managed nginx input/template facts before the deploy spends time
+# building or advances the forward-only database schema. This renders only into
+# a temporary file; the atomic host install remains part of the go-live gate.
+preflight_nginx_edge_config "$RELEASE_DIR/deploy/nginx/toefl-house.conf"
 
 # 2. Dependencies (production only; lock file is authoritative).
 ( cd "$RELEASE_DIR" && "$COMPOSER_BIN" install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader )

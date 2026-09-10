@@ -33,6 +33,8 @@ final class ShippedScriptPermissionsTest extends TestCase
         'deploy/restore.sh',
         'deploy/schema-compatibility.sh',
         'deploy/schedule.sh',
+        'deploy/render-nginx-config.sh',
+        'deploy/certbot/reload-nginx.sh',
     ];
 
     public function test_scripts_that_are_executed_by_path_are_committed_executable(): void
