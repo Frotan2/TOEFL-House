@@ -41,6 +41,17 @@ assert(ui.includes('returnFocusRef.current?.focus()'), 'Command palette must ret
 assert(ui.includes('aria-haspopup="dialog"'), 'Command palette trigger must expose its dialog relationship.');
 assert(!ui.includes('aria-hidden={!mobileOpen}'), 'Desktop sidebar must not be hidden from assistive technology when mobile navigation is closed.');
 
+// The highlighted navigation item is an orientation aid. Specialist workspaces
+// must identify themselves rather than incorrectly highlighting a neighboring
+// domain merely because it shares an operational group.
+for (const [file, navigationKey] of Object.entries({
+  'access.tsx': 'access', 'audit.tsx': 'audit', 'hr.tsx': 'hr', 'identity.tsx': 'identity',
+  'organization.tsx': 'organization', 'payroll.tsx': 'payroll', 'placement.tsx': 'placement', 'privacy.tsx': 'privacy',
+})) {
+  const source = await readFile(resolve(jsRoot, file), 'utf8');
+  assert(source.includes(`AppShell current="${navigationKey}"`), `${file}: AppShell must expose its own active navigation key.`);
+}
+
 const keys = [...navigation.matchAll(/key: '([^']+)'/g)].map((match) => match[1]);
 assert(keys.length === new Set(keys).size, 'Navigation keys must be unique.');
 assert(navigation.includes("href: '/workspace?view=reporting'"), 'Reporting must be reachable through the canonical workspace boundary.');

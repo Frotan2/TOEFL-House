@@ -28,9 +28,9 @@ export function OrganizationApp({ getJson, csrfToken }: ApiClient & { csrfToken:
   const [data, setData] = useState<Workspace | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const load = () => { setLoading(true); setError(null); void getJson<Workspace>('/organization/workspace').then(setData).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Organization structure could not be loaded.')).finally(() => setLoading(false)); };
   useEffect(load, []);
-  if (loading) return <><AppShell current="management" csrfToken={csrfToken} /><PageStatus>Loading authorized organization structure…</PageStatus></>;
-  if (!data) return <><AppShell current="management" csrfToken={csrfToken} /><main id="workspace-main" className="workspace"><div className="alert" role="alert">{error ?? 'Organization structure is unavailable.'}</div></main></>;
-  return <><AppShell current="management" csrfToken={csrfToken} /><main id="workspace-main" className="workspace" aria-labelledby="organization-title">
+  if (loading) return <><AppShell current="organization" csrfToken={csrfToken} /><PageStatus>Loading authorized organization structure…</PageStatus></>;
+  if (!data) return <><AppShell current="organization" csrfToken={csrfToken} /><main id="workspace-main" className="workspace"><div className="alert" role="alert">{error ?? 'Organization structure is unavailable.'}</div></main></>;
+  return <><AppShell current="organization" csrfToken={csrfToken} /><main id="workspace-main" className="workspace" aria-labelledby="organization-title">
     <header className="workspace-header"><div><p className="eyebrow">Organization topology</p><h1 id="organization-title">See structure without confusing it with access.</h1><p className="lede">This is a scoped read projection of organizations, campuses, departments, branches and positions. It does not grant permissions or alter topology.</p></div><button className="button secondary" type="button" onClick={load}>Refresh structure</button></header>
     {error && <div className="alert" role="alert">{error}</div>}
     <div className="reporting-boundary"><strong>Effective structure scope</strong><span>{data.scope.organization_ids.length} organization(s) · {data.scope.branch_ids.length} branch(es). Access capabilities are evaluated separately by the Access authority.</span></div>

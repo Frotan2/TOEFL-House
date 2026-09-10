@@ -28,8 +28,8 @@ export function PrivacyApp({ getJson, csrfToken }: Props) {
     void getJson<{ data: Record<string, unknown> }>(`/privacy/subjects/${encodeURIComponent(selected)}`).then((r) => setSubject(r.data)).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Subject privacy evidence could not be loaded.'));
   }, [selected, getJson]);
   const peopleById = useMemo(() => new Map((data?.people ?? []).map((p) => [p.id, p.legal_name])), [data]);
-  if (!data && !error) return <><AppShell current="management" csrfToken={csrfToken} /><PageStatus>Loading server-authorized privacy evidence…</PageStatus></>;
-  return <><AppShell current="management" csrfToken={csrfToken} /><main className="workspace" aria-labelledby="privacy-title">
+  if (!data && !error) return <><AppShell current="privacy" csrfToken={csrfToken} /><PageStatus>Loading server-authorized privacy evidence…</PageStatus></>;
+  return <><AppShell current="privacy" csrfToken={csrfToken} /><main className="workspace" aria-labelledby="privacy-title">
     <header className="workspace-header"><div><p className="eyebrow">Governance · Privacy</p><h1 id="privacy-title">Privacy evidence & subject history</h1><p className="lede">Read-only evidence projected by the server. The browser does not decide roles, branches, or correction authority.</p></div><span className="scope-badge">{data?.scope.branch_ids.length ?? 0} authorized branch scope</span></header>
     {error && <div className="alert" role="alert">{error}</div>}
     {data && <>

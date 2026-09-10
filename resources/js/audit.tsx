@@ -13,8 +13,8 @@ export function AuditApp({ getJson, csrfToken }: Props) {
   const load = (query = '') => void getJson<{ data: AuditData }>(`/audit/workspace${query}`).then((r) => setData(r.data)).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Audit evidence could not be loaded.'));
   useEffect(() => { load(); }, []);
   const submit = (event: FormEvent) => { event.preventDefault(); const q = new URLSearchParams(); Object.entries(filters).forEach(([k, v]) => { if (v.trim()) q.set(k, v.trim()); }); load(q.toString() ? `?${q.toString()}` : ''); };
-  if (!data && !error) return <><AppShell current="management" csrfToken={csrfToken} /><PageStatus>Loading immutable audit evidence…</PageStatus></>;
-  return <><AppShell current="management" csrfToken={csrfToken} /><main className="workspace" aria-labelledby="audit-title">
+  if (!data && !error) return <><AppShell current="audit" csrfToken={csrfToken} /><PageStatus>Loading immutable audit evidence…</PageStatus></>;
+  return <><AppShell current="audit" csrfToken={csrfToken} /><main className="workspace" aria-labelledby="audit-title">
     <header className="workspace-header"><div><p className="eyebrow">Governance · Audit</p><h1 id="audit-title">Immutable audit evidence</h1><p className="lede">The server determines visible evidence. This surface never treats browser state, role labels, or caller timestamps as authority.</p></div><span className="scope-badge">{data?.scope.branch_ids.length ?? 0} branches · {data?.scope.organization_ids.length ?? 0} organizations</span></header>
     {error && <div className="alert" role="alert">{error}</div>}
     {data && <>

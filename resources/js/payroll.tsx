@@ -65,9 +65,9 @@ function PayrollApp() {
     window.setTimeout(() => document.getElementById(`payroll-tab-${next.id}`)?.focus(), 0);
   };
 
-  if (loading && !data) return <><AppShell current="finance" csrfToken={csrfToken} /><PageStatus>Loading authoritative Payroll workspace…</PageStatus></>;
-  if (!data) return <><AppShell current="finance" csrfToken={csrfToken} /><main id="workspace-main" className="workspace"><div className="alert" role="alert">{error ?? 'Payroll data is unavailable.'}</div></main></>;
-  return <><AppShell current="finance" csrfToken={csrfToken} /><main id="payroll-main" className="workspace" aria-labelledby="payroll-title">
+  if (loading && !data) return <><AppShell current="payroll" csrfToken={csrfToken} /><PageStatus>Loading authoritative Payroll workspace…</PageStatus></>;
+  if (!data) return <><AppShell current="payroll" csrfToken={csrfToken} /><main id="workspace-main" className="workspace"><div className="alert" role="alert">{error ?? 'Payroll data is unavailable.'}</div></main></>;
+  return <><AppShell current="payroll" csrfToken={csrfToken} /><main id="payroll-main" className="workspace" aria-labelledby="payroll-title">
     <header className="workspace-header"><div><p className="eyebrow">Payroll · calculation, result, approval</p><h1 id="payroll-title">Calculate first. Recognize later.</h1><p className="lede">Payroll produces governed calculation results. Finance separately recognizes liabilities and records settlement.</p></div><button className="button secondary" type="button" onClick={load} disabled={loading}>Refresh payroll</button></header>
     {error && <div className="alert" role="alert">{error}</div>}{message && <div className="notice" role="status">{message}</div>}
     <section className="summary-grid" aria-label="Payroll summary"><div className="panel"><span className="metric">{data.periods.length}</span><span className="metric-label">Payroll periods</span></div><div className="panel"><span className="metric">{data.calculations.length}</span><span className="metric-label">Calculations</span></div><div className="panel"><span className="metric">{data.calculations.filter((item) => item.lifecycle_state === 'held').length}</span><span className="metric-label">Held calculations</span></div><div className="panel"><span className="metric">{data.results.length}</span><span className="metric-label">Approved results</span></div></section>
