@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\DB;
 final class TransitionDocument
 {
     public const CAPABILITY = 'documents.verify';
+
     public const SUBMIT_CAPABILITY = 'documents.submit';
 
     public function __construct(
