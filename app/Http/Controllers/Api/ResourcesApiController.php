@@ -223,7 +223,6 @@ final class ResourcesApiController extends Controller
     }
 
     /**
-     * @param Builder<*> $query
      * @param list<string> $branchIds
      */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
