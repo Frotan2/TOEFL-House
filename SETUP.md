@@ -251,9 +251,23 @@ the release protocol's critical-journey gate requires:
 | `e2e-payment-journey.php` | Payment lifecycle: obligations, payments, allocations, refunds — 29 checks |
 | `e2e-payroll-journey.php` | Payroll → Finance liability recognition → exactly-once journal → reconciliation — 27 checks |
 
-Run each against its own freshly migrated database and a served instance
-(`php -S 127.0.0.1:<port> -t public public/index.php` with `PHP_CLI_SERVER_WORKERS` > 1);
-see the header of each script for the exact reset recipe.
+Run each against its own freshly migrated database and a served instance. From
+the repository root, use Laravel's static-aware built-in-server router (not
+`public/index.php` directly, which would route Vite JS/CSS through Laravel):
+
+```bash
+(
+  cd public
+  PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:<port> -t . \
+    ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+)
+```
+
+The router must run with `public/` as its working directory: it returns static
+assets to the PHP server and sends only application routes to `index.php`.
+Choose an appropriate worker count for the host; the journey concurrency checks
+require more than one worker. See the header of each script for the exact reset
+recipe.
 
 ### Browser E2E
 

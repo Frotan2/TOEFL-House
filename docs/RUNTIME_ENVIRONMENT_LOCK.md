@@ -104,3 +104,38 @@ A runtime change is material. Before accepting one:
 Do not weaken a range, extension requirement, or database requirement merely to
 make a local command pass. Resolve the incompatibility or revise this control
 through the normal release process with new evidence.
+
+## 6. Direct PHP-server exception for local verification
+
+Production is served by nginx and PHP-FPM; PHP's built-in development server is
+not a production web-server topology. It is permitted only for loopback-bound
+local verification, disposable-database journey rehearsals, and the Windows
+one-click convenience launcher.
+
+Use the provisioned PHP binary directly rather than `php artisan serve` when a
+self-contained runtime is active. Laravel's `ServeCommand` filters the child
+process environment when `.env` exists, which can omit the runtime's library
+and configuration variables. The direct process preserves that environment.
+
+The direct server must use Laravel's static-aware router from `public/`. Passing
+`public/index.php` as the router handles every request through Laravel, so
+existing Vite assets are redirected or rendered as HTML instead of JS/CSS. From
+the repository root, the supported command is:
+
+```bash
+(
+  cd public
+  php -S 127.0.0.1:8999 -t . \
+    ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+)
+```
+
+The `cd public` is required because Laravel's router resolves `index.php` from
+its working directory. For concurrency-only local rehearsals, set
+`PHP_CLI_SERVER_WORKERS` to a supported value greater than one before `php -S`;
+do not use that worker mode on Windows. Keep this server bound to loopback and
+use nginx/PHP-FPM for every network-facing deployment.
+
+`RUNTIME_ENVIRONMENT.md` remains a superseded reconstruction narrative only. It
+may help diagnose an unavailable historical artifact, but it cannot expand or
+replace this active compatibility contract.
