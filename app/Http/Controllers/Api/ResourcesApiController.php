@@ -20,6 +20,7 @@ use App\Modules\Resources\Models\Custody;
 use App\Modules\Resources\Models\WorkOrder;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -222,10 +223,7 @@ final class ResourcesApiController extends Controller
         return response()->json(['status' => 'cancelled']);
     }
 
-    /**
-     * @param Builder<*>   $query
-     * @param list<string> $branchIds
-     */
+    /** @phpstan-param Builder<Model> $query */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
         $today = CarbonImmutable::today()->toDateString();
