@@ -260,41 +260,117 @@ final class GeneralLedgerQuery
     }
 
     /**
+     * Completeness is a statement inside one selected organization, not a
+     * capability-wide aggregate. Source facts without an organization anchor
+     * are deliberately absent rather than being attributed to a tenant by
+     * guesswork. Branch-derived facts use the same current effective campus
+     * assignment that LedgerAccountResolver uses when it resolves a posting.
+     *
      * @return array{total: int, resolved: int, check_total: string, unresolved: array<int, array{source_type: string, source_id: string, amount: string, period_id: string}>}
      */
-    public function completeness(?string $periodId = null): array
+    public function completeness(?string $periodId, string $organizationId): array
     {
+        $organizationId = trim($organizationId);
+        if ($organizationId === '') {
+            throw new \InvalidArgumentException('ledger completeness requires an organization scope');
+        }
+
         $hasPeriod = $periodId !== null && $periodId !== '';
         $scoped = static fn (Builder $query, string $column = 'period_id'): Builder => $hasPeriod ? $query->where($column, $periodId) : $query;
+        $organizationBranchIds = $this->organizationBranchIds($organizationId);
+        $organizationObligationIds = fn (): Builder => $this->whereFirstPresentBranchIn(
+            Obligation::query(),
+            ['obligations.current_home_branch_id', 'obligations.originating_branch_id'],
+            $organizationBranchIds,
+        );
+        $organizationFundAllocationIds = fn (): Builder => FundAllocation::query()
+            ->join('obligation_lines as completeness_correction_lines', 'completeness_correction_lines.id', '=', 'fund_allocations.obligation_line_id')
+            ->whereIn('completeness_correction_lines.obligation_id', $organizationObligationIds()->select('obligations.id'))
+            ->select('fund_allocations.id');
 
         $providers = [
-            'obligation' => fn (): Collection => $scoped(Obligation::query())->pluck('id'),
-            'payment' => fn (): Collection => $scoped(Payment::query())->pluck('id'),
-            'discount' => fn (): Collection => $scoped(Discount::query()->where('lifecycle_state', 'approved'))->pluck('id'),
-            'refund' => fn (): Collection => $scoped(Refund::query()->where('lifecycle_state', 'recorded'))->pluck('id'),
+            'obligation' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+                Obligation::query(),
+                ['obligations.current_home_branch_id', 'obligations.originating_branch_id'],
+                $organizationBranchIds,
+            ))->pluck('obligations.id'),
+            'payment' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+                Payment::query(),
+                ['payments.current_home_branch_id', 'payments.originating_branch_id'],
+                $organizationBranchIds,
+            ))->pluck('payments.id'),
+            // Discounts resolve through their obligation rather than through
+            // their own approval actor or any request-time branch hint.
+            'discount' => fn (): Collection => $scoped(
+                Discount::query()
+                    ->where('discounts.lifecycle_state', 'approved')
+                    ->whereIn('discounts.obligation_id', $organizationObligationIds()->select('obligations.id')),
+                'discounts.period_id',
+            )->pluck('discounts.id'),
+            'refund' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+                Refund::query()->where('refunds.lifecycle_state', 'recorded'),
+                ['refunds.current_home_branch_id', 'refunds.originating_branch_id'],
+                $organizationBranchIds,
+            ))->pluck('refunds.id'),
+            // A fund allocation prefers its own provenance; only legacy rows
+            // without it inherit the linked obligation's organization.
             'fund_allocation' => fn (): Collection => $scoped(
-                FundAllocation::query()
-                    ->join('obligation_lines', 'obligation_lines.id', '=', 'fund_allocations.obligation_line_id')
-                    ->join('obligations', 'obligations.id', '=', 'obligation_lines.obligation_id'),
-                'obligations.period_id',
+                $this->whereFirstPresentBranchIn(
+                    FundAllocation::query()
+                        ->join('obligation_lines as completeness_allocation_lines', 'completeness_allocation_lines.id', '=', 'fund_allocations.obligation_line_id')
+                        ->join('obligations as completeness_allocation_obligations', 'completeness_allocation_obligations.id', '=', 'completeness_allocation_lines.obligation_id'),
+                    [
+                        'fund_allocations.current_home_branch_id',
+                        'fund_allocations.originating_branch_id',
+                        'completeness_allocation_obligations.current_home_branch_id',
+                        'completeness_allocation_obligations.originating_branch_id',
+                    ],
+                    $organizationBranchIds,
+                ),
+                'completeness_allocation_obligations.period_id',
             )->pluck('fund_allocations.id'),
-            'payroll_liability' => fn (): Collection => $scoped(PayrollLiabilityFact::query())->pluck('id'),
-            'expense' => fn (): Collection => $scoped(Expense::query()->where('lifecycle_state', 'approved'))->pluck('id'),
+            'payroll_liability' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+                PayrollLiabilityFact::query(),
+                ['payroll_liability_facts.originating_branch_id'],
+                $organizationBranchIds,
+            ), 'payroll_liability_facts.period_id')->pluck('payroll_liability_facts.id'),
+            'expense' => fn (): Collection => $scoped($this->whereFirstPresentBranchIn(
+                Expense::query()->where('expenses.lifecycle_state', 'approved'),
+                ['expenses.current_home_branch_id', 'expenses.originating_branch_id'],
+                $organizationBranchIds,
+            ))->pluck('expenses.id'),
             'correction' => fn (): Collection => $scoped(
-                FinancialCorrection::query()->where('lifecycle_state', 'recorded')->whereIn('correction_type', [
-                    FinancialCorrection::TYPE_OBLIGATION_ADJUSTMENT,
-                    FinancialCorrection::TYPE_FUND_ALLOCATION_REVERSAL,
-                ]),
-            )->pluck('id'),
-            'employment_settlement' => fn (): Collection => $scoped(EmploymentSettlement::query())->pluck('id'),
+                FinancialCorrection::query()
+                    ->where('financial_corrections.lifecycle_state', 'recorded')
+                    ->where(function (Builder $scope) use ($organizationObligationIds, $organizationFundAllocationIds): void {
+                        $scope->where(function (Builder $adjustment) use ($organizationObligationIds): void {
+                            $adjustment
+                                ->where('financial_corrections.correction_type', FinancialCorrection::TYPE_OBLIGATION_ADJUSTMENT)
+                                ->whereIn('financial_corrections.obligation_id', $organizationObligationIds()->select('obligations.id'));
+                        })->orWhere(function (Builder $reversal) use ($organizationFundAllocationIds): void {
+                            $reversal
+                                ->where('financial_corrections.correction_type', FinancialCorrection::TYPE_FUND_ALLOCATION_REVERSAL)
+                                ->whereIn('financial_corrections.fund_allocation_id', $organizationFundAllocationIds());
+                        });
+                    }),
+                'financial_corrections.period_id',
+            )->pluck('financial_corrections.id'),
+            // Employment settlements carry direct Finance organization
+            // provenance and are intentionally not re-derived through HR.
+            'employment_settlement' => fn (): Collection => $scoped(
+                EmploymentSettlement::query()->where('employment_settlements.organization_id', $organizationId),
+                'employment_settlements.period_id',
+            )->pluck('employment_settlements.id'),
         ];
 
         // Key journalized facts by (source_type, source_id) so a ledger entry is
         // attributed to exactly the fact that produced it even across a shared
-        // id space.
+        // id space. The journal scope is required as well: a source fact cannot
+        // make an entry in another organization's statement appear resolved.
         $journalized = Journal::query()
+            ->where('organization_id', $organizationId)
             ->whereNotNull('source_id')
-            ->when($periodId !== null && $periodId !== '', fn ($query) => $query->where('period_id', $periodId))
+            ->when($hasPeriod, fn (Builder $query) => $query->where('period_id', $periodId))
             ->get(['source_type', 'source_id'])
             ->mapWithKeys(static fn (Journal $journal): array => [$journal->source_type.'|'.$journal->source_id => true]);
 
@@ -328,6 +404,78 @@ final class GeneralLedgerQuery
             'check_total' => $checkTotal,
             'unresolved' => $unresolved,
         ];
+    }
+
+    /**
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     * @param  Builder<TModel>  $query
+     * @param  list<string>  $branchColumns  Ordered from the source's most
+     *                                        preferred provenance to its
+     *                                        fallback, exactly like PHP ?? in
+     *                                        LedgerAccountResolver.
+     * @param  list<string>  $branchIds
+     * @return Builder<TModel>
+     */
+    private function whereFirstPresentBranchIn(Builder $query, array $branchColumns, array $branchIds): Builder
+    {
+        if ($branchIds === [] || $branchColumns === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function (Builder $scope) use ($branchColumns, $branchIds): void {
+            foreach ($branchColumns as $index => $column) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+                $scope->{$method}(function (Builder $candidate) use ($branchColumns, $branchIds, $column, $index): void {
+                    foreach (array_slice($branchColumns, 0, $index) as $higherPrecedenceColumn) {
+                        $candidate->whereNull($higherPrecedenceColumn);
+                    }
+                    $candidate->whereIn($column, $branchIds);
+                });
+            }
+        });
+    }
+
+    /**
+     * Matches Branch::activeCampusAssignment(): one and only one assignment
+     * effective today, with no branch/campus lifecycle filter added. The
+     * ledger resolver deliberately uses that current authority relation, so
+     * adding a convenient "active branch" predicate here would make the
+     * completeness proof disagree with its posting authority.
+     *
+     * @return list<string>
+     */
+    private function organizationBranchIds(string $organizationId): array
+    {
+        $today = \Carbon\CarbonImmutable::now()->startOfDay()->toDateString();
+
+        return DB::table('branches as completeness_branch')
+            ->join('campus_assignments as completeness_assignment', function ($join) use ($today): void {
+                $join->on('completeness_assignment.branch_id', '=', 'completeness_branch.id')
+                    ->where('completeness_assignment.effective_from', '<=', $today)
+                    ->where(function ($assignment) use ($today): void {
+                        $assignment->whereNull('completeness_assignment.effective_to')
+                            ->orWhere('completeness_assignment.effective_to', '>', $today);
+                    });
+            })
+            ->join('campuses as completeness_campus', 'completeness_campus.id', '=', 'completeness_assignment.campus_id')
+            ->where('completeness_campus.organization_id', $organizationId)
+            ->whereNotExists(function (QueryBuilder $competing) use ($today): void {
+                $competing->selectRaw('1')
+                    ->from('campus_assignments as competing_assignment')
+                    ->whereColumn('competing_assignment.branch_id', 'completeness_branch.id')
+                    ->whereColumn('competing_assignment.id', '<>', 'completeness_assignment.id')
+                    ->where('competing_assignment.effective_from', '<=', $today)
+                    ->where(function (QueryBuilder $assignment) use ($today): void {
+                        $assignment->whereNull('competing_assignment.effective_to')
+                            ->orWhere('competing_assignment.effective_to', '>', $today);
+                    });
+            })
+            ->orderBy('completeness_branch.id')
+            ->pluck('completeness_branch.id')
+            ->map(static fn (mixed $id): string => trim((string) $id))
+            ->filter(static fn (string $id): bool => $id !== '')
+            ->values()
+            ->all();
     }
 
     private function sourceAmount(string $sourceType, string $sourceId): string
