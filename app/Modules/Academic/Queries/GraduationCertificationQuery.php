@@ -25,7 +25,11 @@ final class GraduationCertificationQuery
             ->where('student_id', $studentId)
             ->where('lifecycle_state', 'approved')
             ->where('outcome', 'eligible')
+            // Timestamps are second-precision in the schema; the id is a
+            // deterministic tie-breaker so simultaneous approvals cannot
+            // produce an arbitrary certification result.
             ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
 
         if ($decision === null) {

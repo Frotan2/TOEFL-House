@@ -23,19 +23,12 @@ use Illuminate\Support\Facades\DB;
 /**
  * Asset disposal (authority registry), staged (000115): the custodian/
  * manager session requests, two DISTINCT approver sessions each sign in
- * their own session (material-action rule, applied fail-closed until a
- * materiality threshold exists as configuration), and the requesting
- * session executes. The two signatures are never typed into one request.
- *
- * Execution closes the open custody, flips the asset to disposed, and
- * leaves an immutable asset_disposal record.
+ * their own session, and the requesting session executes.
  */
 final class DisposeAsset
 {
     public const CAPABILITY_REQUEST = 'resources.dispose_request';
-
     public const CAPABILITY_APPROVE = 'resources.dispose_approve';
-
     public const METHODS = ['sale', 'scrap', 'donation'];
 
     public function __construct(
@@ -169,6 +162,9 @@ final class DisposeAsset
                     if ($asset->lifecycle_state !== 'in_service') {
                         throw BusinessRejection::forCode('resources.asset_not_in_service', 'only an in-service asset can be disposed');
                     }
+                    if ($disposedOn < $asset->acquired_on) {
+                        throw BusinessRejection::forCode('resources.disposal_date', 'disposal cannot precede asset acquisition');
+                    }
                     if (AssetDisposal::query()->where('asset_id', $asset->id)->exists()) {
                         throw BusinessRejection::forCode('resources.disposal_exists', 'this asset is already disposed');
                     }
@@ -176,6 +172,9 @@ final class DisposeAsset
                     /** @var Custody|null $open */
                     $open = Custody::query()->where('asset_id', $asset->id)->whereNull('released_on')->lockForUpdate()->first();
                     if ($open !== null) {
+                        if ($disposedOn < $open->assigned_on) {
+                            throw BusinessRejection::forCode('resources.disposal_date', 'disposal cannot precede the current custody assignment');
+                        }
                         $open->forceFill(['released_on' => $disposedOn]);
                         $open->save();
                     }

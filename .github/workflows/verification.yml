@@ -150,8 +150,6 @@ jobs:
       DB_PASSWORD: postgres
       APP_ENV: production
       APP_DEBUG: 'false'
-      APP_URL: http://127.0.0.1:8999
-      ASSET_URL: http://127.0.0.1:8999
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2

@@ -21,7 +21,7 @@ final class ConsumerReceipt extends Model
 
     protected $fillable = [
         'id', 'event_id', 'consumer_key', 'status', 'attempts', 'max_attempts',
-        'next_attempt_at', 'last_error', 'processed_at',
+        'next_attempt_at', 'last_error', 'processed_at', 'replay_count',
     ];
 
     protected $casts = [
@@ -29,5 +29,6 @@ final class ConsumerReceipt extends Model
         'claimed_at' => 'datetime',
         'lease_until' => 'datetime',
         'processed_at' => 'datetime',
+        'replay_count' => 'integer',
     ];
 }

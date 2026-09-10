@@ -15,8 +15,11 @@ use App\Support\Errors\BusinessRejection;
  * CRM authorization: every operation checks the capability through the single
  * AccessDecision authority, and — when the record carries branch provenance —
  * against that branch's structure scope (a branch grant covers it via the
- * organization root). An operation on a known branch uses the branch scope; a
- * global/unknown-provenance operation uses the unscoped decision.
+ * organization root).
+ *
+ * Catalog/automation operations are intentionally organization-governed and
+ * may use a null scope. Record operations (`crm.visitor` and `crm.followup`)
+ * are different: a null branch is unknown provenance and must fail closed.
  */
 final class CrmAccess
 {
@@ -24,6 +27,11 @@ final class CrmAccess
 
     public function require(Actor $actor, string $capability, ?string $branchId = null, string $errorCode = 'crm.denied'): void
     {
+        if (($capability === 'crm.visitor' || $capability === 'crm.followup')
+            && ($branchId === null || $branchId === '')) {
+            throw AuthorizationDenied::forCode($errorCode, 'CRM record provenance is unknown; a branch-scoped target is required');
+        }
+
         $scope = $this->scopeFor($branchId);
         $outcome = $this->access->decide($actor, $capability, $scope);
         if (! $outcome->allowed) {

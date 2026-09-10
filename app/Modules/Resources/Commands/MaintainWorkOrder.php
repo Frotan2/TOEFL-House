@@ -101,7 +101,13 @@ final class MaintainWorkOrder
     /** @return array{work_order_id: string, lifecycle_state: string, correlation_id: string} */
     private function transition(Actor $actor, WorkOrder $order, string $toState, string $verb, string $capability, ?string $evidenceRef, string $idempotencyKey): array
     {
-        $payload = hash('sha256', implode('|', ['resources.work.'.$verb, $order->id, $toState, $actor->actorId]));
+        $payload = hash('sha256', implode('|', [
+            'resources.work.'.$verb,
+            $order->id,
+            $toState,
+            $evidenceRef ?? '',
+            $actor->actorId,
+        ]));
 
         try {
             return $this->idempotency->execute('resources.work.'.$verb, $idempotencyKey, $payload,

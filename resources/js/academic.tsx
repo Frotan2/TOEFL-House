@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell, PageStatus } from './ui';
 
 export type AcademicClass = {
@@ -82,6 +82,7 @@ export function AcademicApp({ getJson, postJson, csrfToken }: AcademicProps) {
   const [progression, setProgression] = useState({ student_id: '', outcome: 'advance', reason: '', assessment_result_id: '', basis: '', repeat_count: '' });
   const [supersede, setSupersede] = useState({ outcome: 'advance', reason: '' });
   const [graduation, setGraduation] = useState({ student_id: '', program_version_id: '', outcome: 'eligible', basis: '' });
+  const inFlightMutations = useRef(new Map<string, Promise<void>>());
 
   const load = () => {
     setLoading(true);
@@ -98,11 +99,18 @@ export function AcademicApp({ getJson, postJson, csrfToken }: AcademicProps) {
   useEffect(() => { load(); }, []);
 
   const mutate = (path: string, body?: Record<string, unknown>, success = 'Academic state changed.') => {
+    const key = `${path}:${JSON.stringify(body ?? {})}`;
+    const existing = inFlightMutations.current.get(key);
+    if (existing) return;
+
     setError(null);
     setMessage(null);
-    void postJson(path, body)
+    const request = postJson(path, body)
       .then(() => { setMessage(success); load(); })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The academic command was rejected.'));
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The academic command was rejected.'))
+      .finally(() => { inFlightMutations.current.delete(key); });
+
+    inFlightMutations.current.set(key, request);
   };
 
   const filteredClasses = useMemo(() => (data?.classes ?? []).filter((item) => {

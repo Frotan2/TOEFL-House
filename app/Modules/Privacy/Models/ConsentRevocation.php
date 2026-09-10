@@ -4,18 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Privacy\Models;
 
+use App\Support\Errors\BusinessRejection;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Recorded withdrawal of consent: who withdrew it, when, in what scope,
- * and with what effect. Append-only like the evidence it protects.
- *
- * @property string $id
- * @property string $consent_id
- * @property string $revoked_by
- * @property string $scope
- * @property string $effect
- */
+/** Immutable evidence of consent withdrawal. */
 final class ConsentRevocation extends Model
 {
     public $incrementing = false;
@@ -23,4 +15,23 @@ final class ConsentRevocation extends Model
     protected $keyType = 'string';
 
     protected $fillable = ['id', 'consent_id', 'revoked_by', 'scope', 'effect'];
+
+    public function save(array $options = []): bool
+    {
+        if ($this->exists) {
+            throw BusinessRejection::forCode('privacy.revocation_immutable', 'consent revocation evidence is append-only');
+        }
+
+        return parent::save($options);
+    }
+
+    public function delete(): bool
+    {
+        throw BusinessRejection::forCode('privacy.revocation_immutable', 'consent revocation evidence is append-only');
+    }
+
+    public function forceDelete(): bool
+    {
+        throw BusinessRejection::forCode('privacy.revocation_immutable', 'consent revocation evidence is append-only');
+    }
 }

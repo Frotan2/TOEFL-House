@@ -66,7 +66,7 @@ final class FirstRunBootstrapSeeder extends Seeder
         'admissions.approve', 'admissions.initiate', 'admissions.register', 'admissions.review',
         'communication.notification.read', 'communication.send',
         'crm.automation', 'crm.catalog', 'crm.followup', 'crm.visitor',
-        'documents.classify', 'documents.register', 'documents.retention', 'documents.verify', 'documents.lifecycle',
+        'documents.classify', 'documents.register', 'documents.retention', 'documents.verify',
         'facilities.work', 'facilities.work_approve',
         'finance.chart', 'finance.correct', 'finance.correct_approve', 'finance.credit', 'finance.credit_approve', 'finance.coverage_revoke', 'finance.coverage_revoke_approve', 'finance.discount', 'finance.discount_approve', 'finance.employment_settlement', 'finance.fund', 'finance.fund_allocate', 'finance.gate_exception', 'finance.gate_exception_approve', 'finance.installment', 'finance.installment_approve', 'finance.journal', 'finance.obligation', 'finance.payroll_liability', 'finance.opening.approve', 'finance.opening.prepare', 'finance.payment', 'finance.period', 'finance.reconcile', 'finance.reconcile_approve', 'finance.refund', 'finance.refund_approve', 'finance.expense', 'finance.expense_approve', 'finance.cash_drawer_manage', 'finance.cash_drawer_move', 'finance.scholarship', 'finance.scholarship_approve',
         'governance.config',
@@ -114,6 +114,10 @@ final class FirstRunBootstrapSeeder extends Seeder
                 'verified_by' => null,
                 'verified_at' => null,
             ]);
+            // The bootstrap owner is self-verifying, but the self-reference
+            // cannot be inserted before the person row exists. Complete the
+            // governed verification as a second statement so the identity
+            // trigger sees an existing durable verifier.
             $ownerPerson->forceFill([
                 'verification_state' => Person::VERIFICATION_VERIFIED,
                 'identity_key' => 'owner-'.$username,
@@ -128,6 +132,16 @@ final class FirstRunBootstrapSeeder extends Seeder
                 'lifecycle_state' => 'active',
             ]);
 
+            // Genesis structure: person intake, admissions, HR and academic
+            // delivery all mandate a branch (e.g. Person.home_branch_id), and
+            // every post-bootstrap structure change is governed by the
+            // four-actor separation-of-duties chain in StructureDecision. At
+            // genesis no second actor exists yet, so the bootstrap provisions
+            // the first campus and branch directly — the same sanctioned
+            // genesis-exception class as the owner's self-verified identity
+            // above. This is the ONLY place structure facts may be written
+            // outside CreateStructureUnit/TransitionStructureUnit; renaming or
+            // relocating it breaks that guarantee.
             $campus = Campus::query()->create([
                 'id' => RandomIdentifier::new(),
                 'organization_id' => $organization->id,
@@ -201,6 +215,10 @@ final class FirstRunBootstrapSeeder extends Seeder
                 'account_state' => UserAccount::STATE_ACTIVE,
             ]);
 
+            // Core scheduled jobs are durable module configuration, not only
+            // Laravel scheduler definitions. They are created by the
+            // bootstrap owner so the explicit scheduler entrypoint has a
+            // registered occurrence to enqueue on a fresh deployment.
             foreach (JobCatalog::keys() as $jobKey) {
                 JobSchedule::query()->create([
                     'id' => RandomIdentifier::new(),
@@ -217,6 +235,15 @@ final class FirstRunBootstrapSeeder extends Seeder
         $this->command?->info('Sign in with that account to begin. From now on every further account is created through the console access workflow.');
     }
 
+    /**
+     * Read a launcher-supplied bootstrap value from the process environment.
+     *
+     * env() is deliberately not used here: this seeder legitimately runs inside
+     * an already booted process (deployment contract tests set these values via
+     * putenv), while env() outside config/ is a configuration-cache hazard and
+     * is consequently rejected by the static analysis policy. The launcher sets
+     * the same values as real process environment variables.
+     */
     private static function launcherEnv(string $key): string
     {
         $value = getenv($key);

@@ -42,6 +42,19 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::prefix('api/v1')
                 ->middleware(['api', 'employee'])
                 ->group(base_path('routes/resources-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee'])
+                ->group(base_path('routes/privacy-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee'])
+                ->group(base_path('routes/audit-api.php'));
+
+            // Canonical React governance read surfaces. Legacy controller
+            // routes redirect here so Blade cannot become a second read model.
+            Route::middleware('employee')->group(function (): void {
+                Route::view('/governance/privacy', 'workspace', ['view' => 'privacy'])->name('governance.privacy');
+                Route::view('/governance/audit', 'workspace', ['view' => 'audit'])->name('governance.audit');
+            });
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

@@ -11,17 +11,9 @@
     <link rel="stylesheet" href="{{ asset('css/toefl-house-route-state.css') }}">
     <link rel="stylesheet" href="{{ asset('css/toefl-house-placement.css') }}">
     <link rel="stylesheet" href="{{ asset('css/toefl-house-operations.css') }}">
-    @if (($view ?? 'workspace') === 'reporting')
-        @vite('resources/js/reporting.tsx')
-    @else
-        @vite('resources/js/app.tsx')
-    @endif
+    @vite('resources/js/app.tsx')
 </head>
 <body>
-    @if (($view ?? 'workspace') === 'reporting')
-        <div id="reporting-console" data-api-base="/api/v1" data-csrf-token="{{ csrf_token() }}"></div>
-    @else
-        <div id="react-console" data-view="{{ $view ?? 'workspace' }}" data-students-view="{{ $students_view ?? 'directory' }}" data-student-id="{{ $student_id ?? '' }}" data-api-base="/api/v1" data-csrf-token="{{ csrf_token() }}"></div>
-    @endif
+    <div id="react-console" data-view="{{ $view ?? 'workspace' }}" data-students-view="{{ $students_view ?? 'directory' }}" data-student-id="{{ $student_id ?? '' }}" data-api-base="/api/v1" data-csrf-token="{{ csrf_token() }}"></div>
 </body>
 </html>

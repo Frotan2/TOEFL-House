@@ -50,14 +50,17 @@ function NavigationLinks({ current, compact = false, onNavigate }: { current: st
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const resultRefs = useRef<Array<HTMLAnchorElement | null>>([]);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   useEffect(() => {
     if (!open) return;
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
     setQuery('');
     setActiveIndex(0);
     resultRefs.current = [];
     window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => returnFocusRef.current?.focus();
   }, [open]);
   const results = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -110,6 +113,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('toefl-house.sidebar.collapsed') === '1');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem('toefl-house.sidebar.collapsed', collapsed ? '1' : '0');
@@ -119,6 +123,19 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
     document.body.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
     return () => { delete document.body.dataset.sidebar; };
   }, [collapsed]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+        window.setTimeout(() => mobileTriggerRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -133,7 +150,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
 
   const focusMainContent = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
-    const main = document.querySelector('main[id]') as HTMLElement | null;
+    const main = document.querySelector('main') as HTMLElement | null;
     if (!main) return;
     if (!main.hasAttribute('tabindex')) main.tabIndex = -1;
     main.scrollIntoView({ block: 'start' });
@@ -144,14 +161,14 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
     <a className="skip-link" href="#workspace-main" onClick={focusMainContent}>Skip to main content</a>
     <header className="app-header">
       <div className="app-header-inner">
-        <button className="mobile-shell-trigger" type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
+        <button ref={mobileTriggerRef} className="mobile-shell-trigger" type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={mobileOpen}><Icon name="menu" /></button>
         <a className="app-brand" href="/workspace" aria-label="The TOEFL House home">
           <span className="brand-mark" aria-hidden="true">T</span>
           <span className="brand-copy"><strong>TOEFL House</strong><small>Academic operations platform</small></span>
         </a>
         <div className="topbar-context"><span className="context-dot" aria-hidden="true" /> <span>Authorized workspace</span></div>
         <div className="app-header-actions">
-          <button className="header-utility" type="button" onClick={() => setPaletteOpen(true)} title="Open command palette"><Icon name="search" />Navigate <span className="command-palette-key">⌘/Ctrl K</span></button>
+          <button className="header-utility" type="button" onClick={() => setPaletteOpen(true)} title="Open command palette" aria-haspopup="dialog" aria-expanded={paletteOpen}><Icon name="search" />Navigate <span className="command-palette-key">⌘/Ctrl K</span></button>
           <a className="header-utility" href="/workspace#work-queue"><Icon name="tasks" />My work</a>
           <a className="header-utility" href="/management?view=administration"><Icon name="settings" />Administration</a>
           <button className="sidebar-toggle" type="button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'} title={collapsed ? 'Expand navigation' : 'Collapse navigation'}><Icon name="menu" /></button>
@@ -164,9 +181,9 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
     </header>
 
     <div className="app-frame">
-      <aside className={`app-sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
+      <aside id="primary-navigation" className={`app-sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
         <div className="sidebar-inner">
-          <div className="sidebar-heading"><span>Navigate</span><button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><Icon name="close" /></button></div>
+          <div className="sidebar-heading"><span>Navigate</span><button type="button" onClick={() => { setMobileOpen(false); window.setTimeout(() => mobileTriggerRef.current?.focus(), 0); }} aria-label="Close navigation"><Icon name="close" /></button></div>
           <nav className="sidebar-nav"><NavigationLinks current={current} compact={collapsed} onNavigate={() => setMobileOpen(false)} /></nav>
           <div className="sidebar-footer">
             <a href="/workspace#work-queue" className="sidebar-utility"><Icon name="tasks" /><span>My work queue</span></a>
@@ -174,7 +191,7 @@ export function AppShell({ current = 'workspace', csrfToken }: AppShellProps) {
           </div>
         </div>
       </aside>
-      {mobileOpen && <button className="sidebar-backdrop" type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation" />}
+      {mobileOpen && <button className="sidebar-backdrop" type="button" onClick={() => { setMobileOpen(false); window.setTimeout(() => mobileTriggerRef.current?.focus(), 0); }} aria-label="Close navigation" />}
     </div>
     <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
   </>;
