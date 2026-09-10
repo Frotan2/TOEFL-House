@@ -113,8 +113,17 @@ try {
     const mounted = await page.evaluate(() => Array.from(document.querySelectorAll('[id$="-console"], #react-console, #app, main')).some((node) => node.childElementCount > 0));
     const text = (await page.evaluate(() => document.body.innerText || '')).replace(/\s+/g, ' ');
     const matched = text.toLowerCase().includes(expected.toLowerCase());
-    record(`Console ${path} renders without browser errors`, mounted && matched && consoleErrors.length === beforeErrors && failedRequests.length === beforeFailures,
-      `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`);
+    let detail = `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`;
+    if (!mounted || !matched) {
+      const diagnostics = await page.evaluate(() => ({
+        baseURI: document.baseURI,
+        baseHref: document.querySelector('base')?.getAttribute('href') ?? null,
+        stylesheetHrefs: Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map((link) => link.href).slice(0, 8),
+        scriptSrcs: Array.from(document.scripts).map((script) => script.src).filter(Boolean).slice(0, 8),
+      }));
+      detail += ` baseURI=${diagnostics.baseURI} baseHref=${diagnostics.baseHref} stylesheetHrefs=${JSON.stringify(diagnostics.stylesheetHrefs)} scriptSrcs=${JSON.stringify(diagnostics.scriptSrcs)}`;
+    }
+    record(`Console ${path} renders without browser errors`, mounted && matched && consoleErrors.length === beforeErrors && failedRequests.length === beforeFailures, detail);
   }
 
   const badCalls = apiCalls.filter((call) => call.status >= 400);
