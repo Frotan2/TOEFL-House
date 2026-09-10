@@ -32,6 +32,7 @@ final class ShippedScriptPermissionsTest extends TestCase
         'deploy/backup.sh',
         'deploy/restore.sh',
         'deploy/schema-compatibility.sh',
+        'deploy/schedule.sh',
     ];
 
     public function test_scripts_that_are_executed_by_path_are_committed_executable(): void

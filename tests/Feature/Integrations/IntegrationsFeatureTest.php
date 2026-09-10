@@ -17,6 +17,7 @@ use App\Modules\Integrations\Models\InboundEvent;
 use App\Modules\Integrations\Models\IntegrationDelivery;
 use App\Modules\Integrations\Models\IntegrationEndpoint;
 use App\Modules\Integrations\Models\JobRun;
+use App\Modules\Integrations\Models\JobSchedule;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
@@ -44,7 +45,7 @@ final class IntegrationsFeatureTest extends TestCase
         $admin = $this->grantedActor('int-admin', ['integrations.endpoint', 'integrations.dispatch', 'integrations.process', 'integrations.inbound', 'integrations.jobs', 'integrations.review']);
         app(RegisterEndpoint::class)->register($admin, 'sms-gateway', 'SMS Gateway', 'sms', 'v1', 'vault://sms/gateway', 'https://sms.example/api', 'int-ep-1');
         app(RegisterEndpoint::class)->register($admin, 'payment-hook', 'Payment Webhook', 'payment', 'v1', 'vault://payments/hook', 'https://pay.example/hook', 'int-ep-2');
-        app(RegisterJob::class)->register($admin, 'integrations.retry_sweep', 'Integration Retry Sweep', 'every-5-minutes', 'int-job-1');
+        app(RegisterJob::class)->register($admin, 'integrations.retry_sweep', 'Integration Retry Sweep', '*/5 * * * *', 'int-job-1');
     }
 
     private function admin(): Actor
@@ -229,10 +230,29 @@ final class IntegrationsFeatureTest extends TestCase
     {
         $admin = $this->admin();
 
+        // A schedule expression is executable configuration, not an arbitrary
+        // display label; reject it at registration instead of at the minute
+        // runner after an operator believes the job is enabled.
+        try {
+            app(RegisterJob::class)->register($admin, 'outbox.relay', 'Relay', 'every-5-minutes', 'int-job-invalid-cron');
+            $this->fail('an invalid cron expression must be rejected');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('integrations.job_schedule_invalid', $rejection->errorCode());
+        }
+
         // unknown jobs cannot be scheduled
         try {
             app(RegisterJob::class)->register($admin, 'integrations.invented_job', 'Nope', 'daily', 'int-job-2');
             $this->fail('jobs outside the catalog must be rejected');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('integrations.job_unknown', $rejection->errorCode());
+        }
+
+        // A raw row must not turn an unknown key into a retrying/dead-lettered
+        // JobRun. The enqueue boundary independently enforces the same catalog.
+        try {
+            app(EnqueueJobRun::class)->enqueue($admin, 'integrations.invented_job', '2026-08-26T08:59', 'int-enq-unknown');
+            $this->fail('an unknown job must not enqueue even if a database row were forged');
         } catch (BusinessRejection $rejection) {
             $this->assertSame('integrations.job_unknown', $rejection->errorCode());
         }
@@ -302,6 +322,60 @@ final class IntegrationsFeatureTest extends TestCase
         $this->assertSame(5, $terminalDelivery->attempts);
         $this->assertDatabaseHas('audit_events', ['operation' => 'integrations.delivery.dead_letter', 'target_id' => $unluckyDelivery['delivery_id']]);
         $this->assertSame(5, $this->transport->sendCount());
+    }
+
+    public function test_reactivating_a_legacy_invalid_schedule_is_rejected_before_the_runner_can_see_it(): void
+    {
+        $admin = $this->admin();
+        $legacy = JobSchedule::query()->create([
+            'id' => '00000000-0000-4000-8000-0000000000b1',
+            'job_key' => 'outbox.relay',
+            'name' => 'Legacy invalid relay schedule',
+            'schedule_expr' => 'every-5-minutes',
+            'enabled' => false,
+            'created_by' => $admin->actorId,
+        ]);
+
+        try {
+            app(RegisterJob::class)->toggle($admin, $legacy, true, 'int-enable-legacy-invalid');
+            $this->fail('an invalid legacy expression must not be re-enabled');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('integrations.job_schedule_invalid', $rejection->errorCode());
+        }
+
+        $this->assertDatabaseHas('job_schedules', ['id' => $legacy->id, 'enabled' => false]);
+    }
+
+    public function test_job_execution_requires_processing_authority_before_claiming_a_run(): void
+    {
+        $jobsOnly = $this->grantedActor('int-jobs-only', ['integrations.jobs']);
+        $enqueued = app(EnqueueJobRun::class)->enqueue(
+            $jobsOnly,
+            'integrations.retry_sweep',
+            '2026-08-26T10:00',
+            'int-enq-jobs-only',
+        );
+
+        try {
+            app(ProcessJobRun::class)->process(
+                $jobsOnly,
+                JobRun::query()->findOrFail($enqueued['run_id']),
+                'int-run-jobs-only',
+            );
+            $this->fail('job management authority alone must not execute outbound delivery processing');
+        } catch (AuthorizationDenied) {
+            $this->assertDatabaseHas('audit_events', [
+                'operation' => 'integrations.job.process.denied',
+                'actor_id' => 'int-jobs-only',
+                'target_id' => $enqueued['run_id'],
+            ]);
+        }
+
+        $this->assertDatabaseHas('job_runs', [
+            'id' => $enqueued['run_id'],
+            'status' => 'queued',
+            'attempts' => 0,
+        ]);
     }
 
     public function test_unprivileged_integration_operations_are_denied_and_audited(): void

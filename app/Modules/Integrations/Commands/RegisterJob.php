@@ -7,6 +7,7 @@ namespace App\Modules\Integrations\Commands;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Integrations\Domain\JobCatalog;
+use App\Modules\Integrations\Domain\ScheduleExpression;
 use App\Modules\Integrations\Models\JobSchedule;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
@@ -41,9 +42,10 @@ final class RegisterJob
                 fn (): array => DB::transaction(function () use ($actor, $jobKey, $name, $scheduleExpr): array {
                     $this->require($actor);
                     JobCatalog::handlerFor($jobKey);
-                    if ($name === '' || $scheduleExpr === '') {
+                    if (trim($name) === '' || trim($scheduleExpr) === '') {
                         throw BusinessRejection::forCode('integrations.job_terms', 'a scheduled job carries a name and schedule expression');
                     }
+                    $scheduleExpr = ScheduleExpression::normalize($scheduleExpr);
                     if (JobSchedule::query()->where('job_key', $jobKey)->exists()) {
                         throw BusinessRejection::forCode('integrations.job_exists', 'this job key is already scheduled');
                     }
@@ -78,6 +80,12 @@ final class RegisterJob
 
                     /** @var JobSchedule $locked */
                     $locked = JobSchedule::query()->whereKey($schedule->id)->lockForUpdate()->firstOrFail();
+                    // Legacy/directly repaired rows may predate expression
+                    // validation. Refuse to reactivate one that would make
+                    // the minute runner fail only after operations enables it.
+                    if ($enabled) {
+                        ScheduleExpression::normalize((string) $locked->schedule_expr);
+                    }
                     $locked->forceFill(['enabled' => $enabled]);
                     $locked->save();
                     $event = $this->audit->record($actor->actorId, 'integrations.job.toggle', 'job_schedule', $locked->id, null, ['enabled' => $enabled]);

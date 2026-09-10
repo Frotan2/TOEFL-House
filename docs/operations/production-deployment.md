@@ -22,8 +22,9 @@ The employee console is a React/TypeScript application bundled by Vite; the
 module pages remain transitional Blade screens. Production therefore requires
 Node.js/npm during release build, but no Node process remains at runtime. There
 is **no** Redis or message broker. The core request path uses PHP-FPM; the
-Integrations job/relay path is not enabled by this synchronous deployment and
-requires an explicit operator/scheduler deployment before use — see §9/§10.
+separate Integrations relay is enabled only after an operator provisions its
+durable authorized scheduler identity and one supported timer/cron supervisor
+as described in §9/§10.
 
 ## 2. Required environment variables
 
@@ -181,21 +182,103 @@ a cached config is a snapshot and must not be stale.)
 
 **Not required for the core request path.** `QUEUE_CONNECTION=sync`; the
 application dispatches no Laravel queue jobs. There is no `queue:work` process
-to start or supervise. The Integrations module has a separate durable
-`JobRun`/`ProcessJobRun` model and the outbox relay has explicit leases and
-idempotent consumers, but those paths are not enabled by this deployment.
+to start or supervise. The Integrations module instead uses durable
+`JobRun`/`ProcessJobRun` records and short-lived scheduled commands (§10), while
+the outbox relay owns explicit leases and idempotent consumer receipts.
 
 ## 10. Scheduler and integration relay
 
-The current checkout has no registered `routes/console.php` command,
-framework scheduler entry, cron unit, or process supervisor for
-`EnqueueJobRun`, `ProcessJobRun`, `ProcessDeliveries`, or `outbox.relay`.
-This is an explicit pre-production/runtime gap, not a claim that the relay is
-operational. Before enabling it, provision a durable verified employee actor
-with the required integration capabilities, add an explicit command/schedule
-entry, supervise retries, and verify the lease/consumer behavior. Do not use a
-synthetic actor or silently infer a scheduler identity. Runtime verification
-is deferred by the architecture review restriction.
+The checkout registers `integrations:tick` with Laravel's scheduler every
+minute. The tick validates the configured operator and all enabled durable
+schedules before it evaluates the two allowlisted jobs:
+
+- `outbox.relay` — consumes committed domain events into receipt-backed
+  notification/work-item projections;
+- `integrations.retry_sweep` — processes due outbound delivery retries.
+
+`integrations:run` evaluates one durable `job_schedules` row before creating a
+`JobRun`; `integrations:tick` does the same for the complete catalog. A disabled
+schedule is skipped and its validated cron expression must be due. Each due job
+records and processes one idempotent occurrence. The minute registration is
+therefore only a polling cadence; `schedule_expr`, enabled state, leases, retry
+backoff, and consumer receipts remain the durable runtime contract.
+
+### Enable the relay safely
+
+1. Provision a **durable verified employee** to operate the scheduler. Its
+   authority must include both `integrations.jobs` (schedule/run management)
+   and `integrations.process` (event relay and outbound delivery processing).
+   Record that person's immutable UUID; never use a synthetic "system" actor,
+   an unverified person, or a shared password.
+2. Put that UUID in the persistent `$DEPLOY_ROOT/.env` before the next deploy:
+
+   ```dotenv
+   INTEGRATIONS_SCHEDULER_RUN_BY=<durable-person-uuid>
+   ```
+
+   `deploy/deploy.sh` copies this file and builds the release config cache. If
+   the value is changed outside a deployment, rebuild the current release's
+   cache as the deployment user:
+
+   ```bash
+   cd /var/www/toefl-house/current
+   php artisan config:clear
+   php artisan config:cache
+   ```
+
+3. A greenfield `FirstRunBootstrapSeeder` already creates the two core
+   `job_schedules` rows. On an existing initialized installation, register any
+   absent rows once under the configured actor (the command leaves existing,
+   including deliberately disabled, rows unchanged):
+
+   ```bash
+   cd /var/www/toefl-house/current
+   php artisan integrations:install-core-schedules
+   ```
+
+4. Install **one** supervisor. The supported Linux reference is the shipped
+   systemd timer. Its reference values are `DEPLOY_ROOT=/var/www/toefl-house`,
+   `User=www-data`, `Group=www-data`, and `/usr/bin/php`; review and replace all
+   of them in both unit files when the host differs, then install and enable:
+
+   ```bash
+   sudo install -m 0644 deploy/systemd/toefl-house-scheduler.service /etc/systemd/system/
+   sudo install -m 0644 deploy/systemd/toefl-house-scheduler.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now toefl-house-scheduler.timer
+   systemctl list-timers toefl-house-scheduler.timer
+   ```
+
+   The service invokes `current/deploy/schedule.sh`, so every invocation follows
+   the atomic release symlink and uses the active release's cached configuration.
+   The wrapper runs `integrations:tick` directly rather than `schedule:run` so a
+   rejected identity, missing schedule, or invalid enabled cron expression is a
+   non-zero systemd/cron result instead of a swallowed child-command failure. It
+   is intentionally short-lived; do **not** also start `schedule:work` or a
+   Laravel queue worker.
+
+   Where systemd is unavailable, use a single `/etc/cron.d` entry instead (the
+   sixth field is the Unix user; ensure the log directory is writable by it):
+
+   ```cron
+   * * * * * www-data DEPLOY_ROOT=/var/www/toefl-house PHP_BIN=/usr/bin/php /var/www/toefl-house/current/deploy/schedule.sh >>/var/log/toefl-house/scheduler.log 2>&1
+   ```
+
+5. Verify execution immediately, before calling the deployment complete. Run
+   the wrapper as the configured service user, inspect its JSON tick results,
+   and verify the authorized health snapshot:
+
+   ```bash
+   sudo -u www-data env DEPLOY_ROOT=/var/www/toefl-house PHP_BIN=/usr/bin/php \
+     /var/www/toefl-house/current/deploy/schedule.sh
+   sudo -u www-data /usr/bin/php /var/www/toefl-house/current/artisan integrations:health
+   journalctl -u toefl-house-scheduler.service --since "10 minutes ago" --no-pager
+   ```
+
+An unset, unknown, or under-authorized `INTEGRATIONS_SCHEDULER_RUN_BY` fails
+closed before a work occurrence is enqueued. Treat a failed timer invocation as
+an operational incident; do not work around it by granting a fabricated actor
+or writing `job_runs` directly.
 
 ## 11. HTTPS / web server
 
@@ -478,6 +561,14 @@ rehearsal deployment; an error-per-request loop fills a disk in hours).
 The `emergency` channel intentionally keeps the release-local path: it is Monolog's
 last resort when the configured one fails, so it must not live on the storage that
 just failed.
+
+**Scheduler log.** The supported systemd timer writes each short-lived scheduler
+invocation to the journal; inspect `systemctl status toefl-house-scheduler.timer`,
+`systemctl status toefl-house-scheduler.service`, and
+`journalctl -u toefl-house-scheduler.service`. Alert from the host monitor when
+the timer has not fired or the service fails. The cron alternative in §10 writes
+to `/var/log/toefl-house/scheduler.log`; rotate and monitor that file outside the
+release tree.
 
 **Nothing else is emitted.** There is no metrics endpoint, no alert channel, and no
 pager path in this repository, and `config/integrations.php` carries no transports.

@@ -1,17 +1,18 @@
 <?php
 
-use App\Modules\Integrations\Commands\EnqueueJobRun;
-use App\Modules\Integrations\Commands\ProcessJobRun;
 use App\Modules\Integrations\Commands\RegisterJob;
 use App\Modules\Integrations\Commands\ReplayConsumerReceipt;
+use App\Modules\Integrations\Commands\RunScheduledJob;
 use App\Modules\Integrations\Domain\JobCatalog;
-use App\Modules\Integrations\Models\JobRun;
 use App\Modules\Integrations\Models\JobSchedule;
 use App\Modules\Integrations\Queries\IntegrationHealth;
 use App\Modules\Outbox\Models\ConsumerReceipt;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -54,15 +55,55 @@ Artisan::command('integrations:run {jobKey} {--run-by=}', function (string $jobK
         return 1;
     }
 
-    $actor = new Actor($runBy, 'Integration Scheduler');
-    $runKey = $jobKey.':'.now()->format('YmdHi');
-    $enqueued = app(EnqueueJobRun::class)->enqueue($actor, $jobKey, $runKey, 'console-'.$jobKey.'-'.$runKey);
-    $run = JobRun::query()->whereKey($enqueued['run_id'])->firstOrFail();
-    $result = app(ProcessJobRun::class)->process($actor, $run, 'console-process-'.$run->id);
+    try {
+        $result = app(RunScheduledJob::class)->run(new Actor($runBy, 'Integration Scheduler'), $jobKey, now());
+    } catch (AuthorizationDenied|BusinessRejection $rejection) {
+        $this->error($rejection->getMessage());
+
+        return 1;
+    }
     $this->line(json_encode($result, JSON_THROW_ON_ERROR));
 
     return 0;
-})->purpose('Enqueue and process one idempotent integration job occurrence under an explicit durable actor');
+})->purpose('Run a due, enabled integration schedule under an explicit durable actor');
+
+Artisan::command('integrations:tick {--run-by=}', function (): int {
+    $runBy = trim((string) ($this->option('run-by') ?: config('integrations.scheduler_run_by', '')));
+    if ($runBy === '') {
+        $this->error('INTEGRATIONS_SCHEDULER_RUN_BY or --run-by is required; no fake system actor is permitted.');
+
+        return 1;
+    }
+
+    $lock = Cache::lock('integrations:tick', 600);
+    if (! $lock->get()) {
+        $this->line(json_encode(['status' => 'skipped', 'reason' => 'overlapping_tick'], JSON_THROW_ON_ERROR));
+
+        return 0;
+    }
+
+    try {
+        $actor = new Actor($runBy, 'Integration Scheduler');
+        $runner = app(RunScheduledJob::class);
+        // Validate the entire catalog before starting either job so a broken
+        // actor or enabled schedule cannot produce a silently partial tick.
+        $runner->preflight($actor, JobCatalog::keys());
+        $at = now();
+        $results = [];
+        foreach (JobCatalog::keys() as $jobKey) {
+            $results[] = $runner->run($actor, $jobKey, $at);
+        }
+        $this->line(json_encode(['status' => 'completed', 'results' => $results], JSON_THROW_ON_ERROR));
+
+        return 0;
+    } catch (AuthorizationDenied|BusinessRejection $rejection) {
+        $this->error($rejection->getMessage());
+
+        return 1;
+    } finally {
+        $lock->release();
+    }
+})->purpose('Run every due integration schedule under one locked explicit durable actor');
 
 Artisan::command('integrations:health {--run-by=}', function (): int {
     $runBy = trim((string) ($this->option('run-by') ?: config('integrations.scheduler_run_by', '')));
@@ -108,7 +149,7 @@ Artisan::command('integrations:replay-consumer {receiptId} {--run-by=}', functio
     return 0;
 })->purpose('Replay one dead-letter consumer receipt under an explicit review actor');
 
-// These are registration points only. Runtime scheduler/process supervision
-// still belongs to deployment operations; an unset identity fails closed.
-Schedule::command('integrations:run outbox.relay')->everyMinute()->withoutOverlapping();
-Schedule::command('integrations:run integrations.retry_sweep')->everyMinute()->withoutOverlapping();
+// Preserve the framework schedule registration for discovery. The supported
+// deployment entrypoint is deploy/schedule.sh, which runs integrations:tick
+// directly so systemd/cron sees its exact non-zero status.
+Schedule::command('integrations:tick')->everyMinute()->withoutOverlapping(10);

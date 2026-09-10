@@ -6,6 +6,7 @@ namespace App\Modules\Integrations\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Integrations\Domain\JobCatalog;
 use App\Modules\Integrations\Models\JobRun;
 use App\Modules\Integrations\Models\JobSchedule;
 use App\Support\Authorization\AccessDecision;
@@ -44,6 +45,11 @@ final class EnqueueJobRun
                     if ($runKey === '') {
                         throw BusinessRejection::forCode('integrations.job_occurrence', 'an enqueue names its occurrence key');
                     }
+                    // RegisterJob protects normal writes, but this command is
+                    // also the last domain boundary before durable execution.
+                    // Never allow a hand-written schedule row to create a run
+                    // that ProcessJobRun can only retry and dead-letter.
+                    JobCatalog::handlerFor($jobKey);
 
                     /** @var JobSchedule|null $schedule */
                     $schedule = JobSchedule::query()->where('job_key', $jobKey)->lockForUpdate()->first();
