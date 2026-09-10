@@ -222,6 +222,10 @@ final class ResourcesApiController extends Controller
         return response()->json(['status' => 'cancelled']);
     }
 
+    /**
+     * @param Builder<*> $query
+     * @param list<string> $branchIds
+     */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
         $today = CarbonImmutable::today()->toDateString();
