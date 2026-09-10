@@ -85,6 +85,9 @@ for (const pattern of [
   /::add-mask::\$E2E_PASSWORD/, /image: postgres:18\.4/,
 ]) assert.match(workflow, pattern);
 for (const browserWorkflow of [workflow, crmBrowserWorkflow]) {
+  assert.match(browserWorkflow, /actions\/checkout@v7/, 'CI must use the Node 24 checkout action runtime');
+  assert.match(browserWorkflow, /actions\/setup-node@v7/, 'CI must use the Node 24 setup-node action runtime');
+  assert.doesNotMatch(browserWorkflow, /actions\/(?:checkout|setup-node)@v(?:[0-6])/, 'CI must not retain deprecated Node 20 action runtimes');
   assert.match(browserWorkflow, /Install and warm Chromium/, 'browser CI must warm the Snap-backed browser before E2E');
   assert.match(browserWorkflow, /timeout 120s \/usr\/bin\/chromium --headless --no-sandbox/, 'browser CI must bound Chromium warm-up');
 }
