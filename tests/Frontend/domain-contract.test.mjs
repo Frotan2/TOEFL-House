@@ -77,12 +77,20 @@ const environment = fs.readFileSync(path.join(root, 'scripts', 'runtime', 'verif
 for (const range of ["php: { range: '>=8.2 <8.5'", "composer: { range: '>=2.5 <3'", "node: { range: '>=22.0 <23.0'", "npm: { range: '>=10.0 <11.0'", "postgres: { range: '>=18.0 <19.0'"]) assert.match(environment, new RegExp(range.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'verification.yml'), 'utf8');
+const crmBrowserWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'crm-browser-e2e.yml'), 'utf8');
 for (const pattern of [
   /permissions:\s*\n\s*contents: read/, /concurrency:\s*\n\s*group:/, /cancel-in-progress: true/,
   /PHP_VERSION: '8\.4\.25'/, /COMPOSER_VERSION: '2\.10\.3'/, /NODE_VERSION: '22\.22\.3'/,
   /NPM_VERSION: '10\.9\.8'/, /POSTGRES_VERSION: '18\.4'/, /npm ci --engine-strict/,
   /::add-mask::\$E2E_PASSWORD/, /image: postgres:18\.4/,
 ]) assert.match(workflow, pattern);
+for (const browserWorkflow of [workflow, crmBrowserWorkflow]) {
+  assert.match(browserWorkflow, /Install and warm Chromium/, 'browser CI must warm the Snap-backed browser before E2E');
+  assert.match(browserWorkflow, /timeout 120s \/usr\/bin\/chromium --headless --no-sandbox/, 'browser CI must bound Chromium warm-up');
+}
+for (const browserSuite of [browserE2e, crmBrowserE2e]) {
+  assert.match(browserSuite, /timeout:\s*90_000/, 'browser E2E must retain a bounded cold-start launch allowance');
+}
 
 const hr = fs.readFileSync(path.join(jsRoot, 'hr.tsx'), 'utf8');
 assert.match(hr, /function confirmAction/);

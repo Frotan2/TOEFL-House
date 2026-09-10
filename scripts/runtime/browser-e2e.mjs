@@ -68,10 +68,15 @@ try {
 record('Health endpoint is reachable', health.ok, `HTTP ${health.status}`);
 if (!health.ok) process.exit(1);
 
+// Ubuntu's chromium package is a Snap wrapper. A runner can finish package
+// installation while its first confined browser start is still warming, so retain
+// a bounded launch allowance instead of treating that runner-only startup lag as
+// a product failure (Puppeteer's implicit default is only 30 seconds).
 const browser = await puppeteer.launch({
   executablePath: EXECUTABLE,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   headless: true,
+  timeout: 90_000,
 });
 
 try {

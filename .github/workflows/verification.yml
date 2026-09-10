@@ -187,10 +187,13 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Bootstrap owner account
         run: php artisan db:seed --class=FirstRunBootstrapSeeder --force
-      - name: Install Chromium
+      - name: Install and warm Chromium
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium
+          # Ubuntu's package starts Chromium through Snap. Force its one-time
+          # confinement setup now, before Puppeteer's bounded launch timeout.
+          timeout 120s /usr/bin/chromium --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --version
       - name: Start application
         run: |
           # The PHP built-in server treats its router script as the handler for

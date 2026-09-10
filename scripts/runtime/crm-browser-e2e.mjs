@@ -166,10 +166,15 @@ const waitForVisitor = async (page, expected) => {
     .some((node) => node.textContent?.trim() === name), { timeout: 15_000 }, expected);
 };
 
+// Ubuntu's chromium package is a Snap wrapper. A runner can finish package
+// installation while its first confined browser start is still warming, so retain
+// a bounded launch allowance instead of treating that runner-only startup lag as
+// a product failure (Puppeteer's implicit default is only 30 seconds).
 const browser = await puppeteer.launch({
   executablePath: EXECUTABLE,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   headless: true,
+  timeout: 90_000,
 });
 
 let page;
