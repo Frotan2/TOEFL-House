@@ -226,8 +226,8 @@ final class ResourcesApiController extends Controller
     /**
      * @template TModel of Model
      *
-     * @param Builder<TModel> $query
-     * @param list<string>    $branchIds
+     * @phpstan-param Builder<TModel> $query
+     * @phpstan-param list<string>    $branchIds
      */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
