@@ -147,7 +147,7 @@ final class ResourcesApiController extends Controller
 
     public function releaseCustody(Request $request, string $assetId): JsonResponse
     {
-        $input = $request->validate(['released_on' => ['required', 'date']]);
+        $input = $request->validate(['released_on' => ['required', 'date']);
 
         app(MaintainAsset::class)->releaseCustody($this->actor(), Asset::query()->findOrFail($assetId), $input['released_on'], $this->idempotencyKey('resources.custody.release'));
 
@@ -222,9 +222,6 @@ final class ResourcesApiController extends Controller
         return response()->json(['status' => 'cancelled']);
     }
 
-    /**
-     * @param list<string> $branchIds
-     */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
         $today = CarbonImmutable::today()->toDateString();
