@@ -13,6 +13,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
@@ -270,6 +271,74 @@ final class SecurityHardeningFeatureTest extends TestCase
         $this->getJson('/api/v1/me')
             ->assertUnauthorized()
             ->assertHeader('X-Content-Type-Options', 'nosniff');
+    }
+
+    public function test_every_employee_api_route_has_the_per_account_rate_limiter(): void
+    {
+        $routes = collect(Route::getRoutes()->getRoutes())
+            ->filter(static fn ($route): bool => str_starts_with($route->uri(), 'api/v1/'));
+
+        $this->assertNotEmpty($routes, 'the test must inspect actual employee API routes, not an empty filter');
+
+        foreach ($routes as $route) {
+            $this->assertContains(
+                'throttle:employee-api',
+                $route->middleware(),
+                sprintf('%s must not bypass the employee API rate limiter', $route->uri()),
+            );
+        }
+    }
+
+    public function test_employee_api_is_rate_limited_per_authenticated_account_with_a_machine_readable_retry(): void
+    {
+        // Keep this focused probe small while proving the production limiter's
+        // account key rather than a shared source-IP key. The provider reads
+        // config when each request is evaluated, so this mirrors an operator's
+        // reviewed environment setting without baking test-sized limits into it.
+        config()->set('app.employee_api_rate_limit_per_minute', 2);
+        $first = $this->makeEmployee('security.api.first');
+        $second = $this->makeEmployee('security.api.second');
+
+        $this->actingAs($first);
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertHeader('X-RateLimit-Limit', '2')
+            ->assertHeader('X-RateLimit-Remaining', '1');
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertHeader('X-RateLimit-Remaining', '0');
+
+        // The response stays in the API's JSON contract, is explicitly
+        // retryable, and carries the framework's precise wait hint.
+        $this->getJson('/api/v1/me')
+            ->assertStatus(429)
+            ->assertJsonPath('error', 'api_rate_limited')
+            ->assertJsonPath('category', 'rate_limited')
+            ->assertJsonPath('retryable', true)
+            ->assertHeader('Retry-After')
+            ->assertHeader('X-RateLimit-Limit', '2');
+
+        // Same test IP, separate active account: a campus NAT may not let one
+        // staff member exhaust a different employee's legitimate allowance.
+        $this->actingAs($second);
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertHeader('X-RateLimit-Limit', '2')
+            ->assertHeader('X-RateLimit-Remaining', '1');
+    }
+
+    public function test_the_production_edge_limits_request_bodies_before_they_reach_php(): void
+    {
+        $edge = (string) file_get_contents(base_path('deploy/nginx/toefl-house.conf'));
+        $runbook = (string) file_get_contents(base_path('docs/operations/production-deployment.md'));
+
+        $this->assertSame(
+            1,
+            preg_match_all('/^\\s*client_max_body_size\\s+1m;\\s*$/m', $edge),
+            'the one site-level body cap must be explicit; duplicate server/location caps drift and an omitted cap lets PHP buffer arbitrary input'
+        );
+        $this->assertStringContainsString('client_max_body_size 1m', $runbook);
+        $this->assertStringContainsString('not binary uploads', $runbook);
     }
 
     public function test_login_is_rate_limited_after_the_per_minute_allowance(): void

@@ -40,6 +40,28 @@ final class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($key);
         });
 
+        // The employee API is a same-origin, session-authenticated console
+        // transport. Its limit is keyed by account rather than IP so a shared
+        // campus NAT cannot throttle unrelated staff, while a compromised
+        // account cannot evade the allowance by rotating source IPs. The
+        // database cache store makes the window hold across FPM workers.
+        RateLimiter::for('employee-api', function (Request $request): Limit {
+            $allowance = min(600, max(1, (int) config('app.employee_api_rate_limit_per_minute', 120)));
+            $accountId = (string) ($request->user()?->getAuthIdentifier() ?? '');
+            $key = $accountId === '' ? 'ip:'.$request->ip() : 'account:'.$accountId;
+
+            return Limit::perMinute($allowance)
+                ->by($key)
+                ->response(static function (Request $request, array $headers) {
+                    return response()->json([
+                        'error' => 'api_rate_limited',
+                        'category' => 'rate_limited',
+                        'message' => 'Too many API requests. Retry after the indicated delay.',
+                        'retryable' => true,
+                    ], 429, $headers);
+                });
+        });
+
         // Money enters the system through the HTTP boundary as text; the
         // domain stores it in 2-decimal NUMERIC columns. 'numeric' alone is
         // not a money format — it admits '1e2', ' 1.5', and third-decimal

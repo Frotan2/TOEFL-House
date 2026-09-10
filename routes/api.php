@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\Route;
 
 // v1 is the only interactive application API. Legacy unversioned transport
 // is intentionally not maintained as a second contract.
-Route::prefix('v1')->middleware('employee')->group(function (): void {
+Route::prefix('v1')->middleware(['employee', 'throttle:employee-api'])->group(function (): void {
     Route::get('/me', function (Request $request) {
         /** @var Actor $actor */
         $actor = $request->attributes->get('actor');

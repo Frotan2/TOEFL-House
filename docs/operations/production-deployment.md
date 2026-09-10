@@ -41,10 +41,11 @@ APP_KEY=<non-empty>
 Required values (from `.env.example`): `APP_NAME`, `APP_KEY`
 (`php artisan key:generate`), `APP_URL`, `LOG_CHANNEL`/`LOG_LEVEL`,
 `SESSION_DRIVER=database`, `SESSION_SECURE_COOKIE=true`, `SESSION_SAME_SITE`,
-`CACHE_STORE=database` (the login rate limiter must be durable across FPM
-workers), `QUEUE_CONNECTION=sync`, and the `DB_*` PostgreSQL connection.
-Secrets (`APP_KEY`, `DB_PASSWORD`) are set only in the live `.env`, never
-committed.
+`CACHE_STORE=database` (the login and employee-API rate limiters must be
+durable across FPM workers), `EMPLOYEE_API_RATE_LIMIT_PER_MINUTE=120`
+(per-account allowance; keep it within 1–600), `QUEUE_CONNECTION=sync`, and
+the `DB_*` PostgreSQL connection. Secrets (`APP_KEY`, `DB_PASSWORD`) are set
+only in the live `.env`, never committed.
 
 ## 3. PostgreSQL configuration
 
@@ -292,6 +293,15 @@ TLS is terminated at nginx (`deploy/nginx/toefl-house.conf`):
   `Referrer-Policy`, `Permissions-Policy`) set at the edge; the app sets the
   same headers (`app/Http/Middleware/SecurityHeaders.php`).
 - `SESSION_SECURE_COOKIE=true` makes the session cookie HTTPS-only.
+- `client_max_body_size 1m` rejects oversized request bodies at nginx with
+  `413` before PHP buffers them. Current commands carry bounded form/JSON data
+  and artifact references, not binary uploads; do not raise this as a generic
+  workaround. A future upload surface must define its own validation, storage,
+  and aligned edge/PHP limits.
+- Every `/api/v1` route uses the durable `employee-api` limiter: the default is
+  120 requests per minute per authenticated account (not shared IP), with a
+  JSON `429`, `Retry-After`, and rate-limit headers when exhausted. Adjust the
+  reviewed `EMPLOYEE_API_RATE_LIMIT_PER_MINUTE` setting only within 1–600.
 
 PHP-FPM pool: `deploy/php-fpm.conf` (dynamic `pm`, slowlog, security
 `limit_extensions`). Opcache policy is a separate conf.d fragment,
