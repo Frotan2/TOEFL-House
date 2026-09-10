@@ -20,6 +20,7 @@ use App\Modules\Resources\Models\Custody;
 use App\Modules\Resources\Models\WorkOrder;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -223,8 +224,9 @@ final class ResourcesApiController extends Controller
     }
 
     /**
-     * @param Builder<Asset>|Builder<BookCopy>|Builder<WorkOrder> $query
-     * @param list<string> $branchIds
+     * @template TModel of Model
+     * @param Builder<TModel> $query
+     * @param list<string>    $branchIds
      */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
