@@ -83,6 +83,9 @@ try {
   const consoleErrors = [];
   const failedRequests = [];
   const apiCalls = [];
+  // The employee UI consumes the one composed workspace contract. Its work
+  // and notification projections are intentionally not redundant direct API reads.
+  const workspaceProjectionResponses = [];
 
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`${page.url()} :: ${message.text().slice(0, 200)}`);
@@ -91,7 +94,19 @@ try {
   page.on('requestfailed', (request) => failedRequests.push(`${request.url().slice(0, 160)} :: ${request.failure()?.errorText ?? 'request failed'}`));
   page.on('response', (response) => {
     const url = response.url();
-    if (url.includes('/api/v1/')) apiCalls.push({ url: url.replace(BASE, ''), status: response.status() });
+    if (url.includes('/api/v1/')) {
+      apiCalls.push({ url: url.replace(BASE, ''), status: response.status() });
+      if (new URL(url).pathname === '/api/v1/workspace' && response.request().method() === 'GET') {
+        workspaceProjectionResponses.push(response.json()
+          .then((responseBody) => ({
+            hasWork: Array.isArray(responseBody?.data?.work?.items) && Number.isInteger(responseBody?.data?.work?.count),
+            hasNotifications: Array.isArray(responseBody?.data?.notifications?.items)
+              && Number.isInteger(responseBody?.data?.notifications?.unread_count)
+              && typeof responseBody?.data?.notifications?.status === 'string',
+          }))
+          .catch(() => ({ hasWork: false, hasNotifications: false })));
+      }
+    }
     if (response.status() >= 400 && !url.includes('favicon')) failedRequests.push(`${response.status()} ${url.replace(BASE, '').slice(0, 140)}`);
   });
 
@@ -120,11 +135,11 @@ try {
       `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`);
   }
 
-  const projectionCalls = apiCalls.filter(({ url }) => url.includes('/notifications') || url.includes('/work-items'));
-  const hasNotificationsProjection = projectionCalls.some(({ url }) => url.includes('/notifications'));
-  const hasWorkProjection = projectionCalls.some(({ url }) => url.includes('/work-items'));
-  record('Workspace reaches canonical communication and work projections', hasNotificationsProjection && hasWorkProjection,
-    `notifications=${hasNotificationsProjection} workItems=${hasWorkProjection}`);
+  const workspaceProjections = await Promise.all(workspaceProjectionResponses);
+  const hasNotificationsProjection = workspaceProjections.some(({ hasNotifications }) => hasNotifications);
+  const hasWorkProjection = workspaceProjections.some(({ hasWork }) => hasWork);
+  record('Workspace receives canonical communication and work projections', hasNotificationsProjection && hasWorkProjection,
+    `workspaceResponses=${workspaceProjections.length} notifications=${hasNotificationsProjection} workItems=${hasWorkProjection}`);
 
   const badCalls = apiCalls.filter((call) => call.status >= 400);
   record('Frontend uses canonical API successfully', apiCalls.length > 0 && badCalls.length === 0,
