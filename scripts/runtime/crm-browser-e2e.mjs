@@ -30,6 +30,61 @@ const record = (name, pass, detail) => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}\n      ${detail}`);
 };
 
+const diagnosticLimit = 4_000;
+const shorten = (value, limit = diagnosticLimit) => value.length <= limit ? value : `${value.slice(0, limit)}…`;
+
+const consoleErrorDetail = async (message) => {
+  const values = await Promise.all(message.args().slice(0, 4).map(async (argument) => {
+    try {
+      return await argument.evaluate((value) => {
+        if (value instanceof Error) return `${value.name}: ${value.message}\n${value.stack ?? ''}`;
+        if (value && typeof value === 'object') {
+          return JSON.stringify(value, (_key, candidate) => candidate instanceof Error
+            ? { name: candidate.name, message: candidate.message, stack: candidate.stack }
+            : candidate);
+        }
+        return String(value);
+      });
+    } catch {
+      return '<unavailable console argument>';
+    }
+  }));
+
+  const location = message.location();
+  const source = location.url ? ` @ ${location.url}:${location.lineNumber}:${location.columnNumber}` : '';
+  return shorten(`${message.text()}${source}${values.length ? ` | ${values.map(String).join(' | ')}` : ''}`);
+};
+
+const emitFailureDiagnostics = async (page, error, consoleErrors, failedRequests) => {
+  console.error('\nCRM BROWSER E2E FAILURE DIAGNOSTICS');
+  console.error(error instanceof Error ? error.stack ?? `${error.name}: ${error.message}` : String(error));
+
+  if (page) {
+    try {
+      const snapshot = await page.evaluate(() => {
+        const root = document.getElementById('react-console');
+        return {
+          url: window.location.href,
+          title: document.title,
+          errorBoundaryVisible: document.querySelector('.error-boundary') !== null,
+          root: root === null ? null : {
+            view: root.getAttribute('data-view'),
+            childElementCount: root.childElementCount,
+            text: (root.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 4_000),
+          },
+          pageText: (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 4_000),
+        };
+      });
+      console.error(`Page snapshot: ${JSON.stringify(snapshot)}`);
+    } catch (snapshotError) {
+      console.error(`Could not collect page snapshot: ${snapshotError instanceof Error ? snapshotError.message : String(snapshotError)}`);
+    }
+  }
+
+  console.error(`Console errors (${consoleErrors.length}): ${consoleErrors.length ? consoleErrors.join(' | ') : 'none'}`);
+  console.error(`Failed requests (${failedRequests.length}): ${failedRequests.length ? failedRequests.join(' | ') : 'none'}`);
+};
+
 const setReactControl = async (page, selector, value) => {
   const updated = await page.$eval(selector, (element, nextValue) => {
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
@@ -112,19 +167,27 @@ const browser = await puppeteer.launch({
   headless: true,
 });
 
+let page;
+const consoleErrors = [];
+const failedRequests = [];
+
 try {
-  const page = await browser.newPage();
+  page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   page.setDefaultNavigationTimeout(30_000);
   page.setDefaultTimeout(15_000);
 
-  const consoleErrors = [];
-  const failedRequests = [];
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() === 'error') {
+      void consoleErrorDetail(message).then((detail) => consoleErrors.push(detail));
+    }
   });
-  page.on('pageerror', (error) => consoleErrors.push(error.message));
+  page.on('pageerror', (error) => consoleErrors.push(shorten(`${error.message}${error.stack ? `\n${error.stack}` : ''}`)));
   page.on('requestfailed', (request) => failedRequests.push(`${request.url()} :: ${request.failure()?.errorText || 'failed'}`));
+  page.on('response', (response) => {
+    const url = response.url();
+    if (response.status() >= 400 && !url.includes('favicon')) failedRequests.push(`${response.status()} ${url.replace(BASE, '')}`);
+  });
 
   await page.goto(`${BASE}/crm`, { waitUntil: 'networkidle2' });
   if (page.url().includes('/login')) {
@@ -192,6 +255,13 @@ try {
 
   record('CRM browser flow has no uncaught console errors', consoleErrors.length === 0, consoleErrors.length ? consoleErrors.slice(0, 3).join(' | ') : 'none');
   record('CRM browser flow has no failed network requests', failedRequests.length === 0, failedRequests.length ? failedRequests.slice(0, 3).join(' | ') : 'none');
+} catch (error) {
+  // Browser jobs are the only available Chromium evidence in this checkout.
+  // Preserve enough state in CI logs to distinguish a route, bundle, API, or
+  // React-render failure without printing form values or session credentials.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await emitFailureDiagnostics(page, error, consoleErrors, failedRequests);
+  throw error;
 } finally {
   await browser.close();
 }
