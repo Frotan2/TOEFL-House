@@ -29,14 +29,17 @@ final class WorkManagementApiController extends Controller
 
     public function transition(Request $request, string $workItemId): JsonResponse
     {
-        $toState = trim((string) $request->input('to_state', ''));
+        $input = $request->validate([
+            'to_state' => ['required', 'string', 'max:32'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
         $workItem = WorkItem::query()->whereKey($workItemId)->firstOrFail();
         $result = $this->maintain->transition(
             $this->actor(),
             $workItem,
-            $toState,
+            trim((string) $input['to_state']),
             $this->idempotencyKey('workflow.work.transition'),
-            $request->input('note') === null ? null : trim((string) $request->input('note')),
+            ($input['note'] ?? null) === null ? null : trim((string) $input['note']),
         );
 
         return response()->json(['data' => $result]);
@@ -44,13 +47,19 @@ final class WorkManagementApiController extends Controller
 
     public function grantQueueMembership(Request $request): JsonResponse
     {
+        $input = $request->validate([
+            'actor_id' => ['required', 'string', 'max:36'],
+            'queue_key' => ['required', 'string', 'max:100'],
+            'branch_id' => ['nullable', 'string', 'max:36'],
+            'organization_id' => ['nullable', 'string', 'max:36'],
+        ]);
         $result = $this->memberships->grant(
             $this->actor(),
-            trim((string) $request->input('actor_id', '')),
-            trim((string) $request->input('queue_key', '')),
-            $request->input('branch_id') === null ? null : trim((string) $request->input('branch_id')),
+            trim((string) $input['actor_id']),
+            trim((string) $input['queue_key']),
+            ($input['branch_id'] ?? null) === null ? null : trim((string) $input['branch_id']),
             $this->idempotencyKey('workflow.queue.grant'),
-            $request->input('organization_id') === null ? null : trim((string) $request->input('organization_id')),
+            ($input['organization_id'] ?? null) === null ? null : trim((string) $input['organization_id']),
         );
 
         return response()->json(['data' => $result], 201);
