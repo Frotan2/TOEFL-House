@@ -22,8 +22,8 @@ final class IntegrationHealth
         $jobs = $this->jobCounts($now);
         $inbound = $this->inboundCounts();
 
-        $critical = ($delivery['dead_letter'] + $consumer['dead_letter'] + $delivery['expired_processing'] + $consumer['expired_processing']) > 0;
-        $warning = ($delivery['due'] + $consumer['due'] + $delivery['failed'] + $consumer['failed'] + $inbound['received_unprocessed'] + $jobs['failed']) > 0;
+        $critical = ($delivery['dead_letter'] + $consumer['dead_letter'] + $jobs['dead_letter'] + $delivery['expired_processing'] + $consumer['expired_processing'] + $jobs['expired_processing']) > 0;
+        $warning = ($delivery['due'] + $consumer['due'] + $jobs['due'] + $delivery['failed'] + $consumer['failed'] + $jobs['failed'] + $inbound['received_unprocessed']) > 0;
 
         return [
             'status' => $critical ? 'critical' : ($warning ? 'degraded' : 'healthy'),
@@ -67,10 +67,12 @@ final class IntegrationHealth
     {
         return [
             'queued' => $this->count('job_runs', 'status', 'queued'),
-            'running' => $this->count('job_runs', 'status', 'running'),
+            'processing' => $this->count('job_runs', 'status', 'processing'),
             'failed' => $this->count('job_runs', 'status', 'failed'),
             'succeeded' => $this->count('job_runs', 'status', 'succeeded'),
+            'dead_letter' => $this->count('job_runs', 'status', 'dead_letter'),
             'due' => (int) DB::table('job_runs')->whereIn('status', ['queued', 'failed'])->where(fn ($q) => $q->whereNull('next_retry_at')->orWhere('next_retry_at', '<=', $now))->count(),
+            'expired_processing' => (int) DB::table('job_runs')->where('status', 'processing')->where(fn ($q) => $q->whereNull('lease_until')->orWhere('lease_until', '<=', $now))->count(),
         ];
     }
 
