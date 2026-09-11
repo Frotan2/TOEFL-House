@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Access;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Access\AccessResolution;
 use App\Modules\Access\Commands\AssignPosition;
 use App\Modules\Access\Commands\DefineAccessPolicy;
@@ -44,7 +45,7 @@ final class PositionPolicyFeatureTest extends TestCase
         $created = app(AssignPosition::class)->assign($publisher, 'pol-holder-1', $position->id, new CarbonImmutable('2026-08-25'), 'assign-key-1');
         $this->assertDatabaseHas('position_assignments', ['id' => $created['assignment_id'], 'lifecycle_state' => 'proposed']);
         $holder = new Actor('pol-holder-1', 'Holder');
-        $resolution = new AccessResolution;
+        $resolution = new AccessResolution(app(CalendarAuthority::class));
         $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($organizationId))->allowed);
 
         app(TransitionPositionAssignment::class)->activate($publisher, PositionAssignment::query()->findOrFail($created['assignment_id']), 'assign-key-2');

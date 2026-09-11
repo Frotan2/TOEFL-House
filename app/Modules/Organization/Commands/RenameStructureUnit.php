@@ -6,13 +6,18 @@ namespace App\Modules\Organization\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Organization\Domain\StructureChangeDefinition;
 use App\Modules\Organization\Domain\StructureUnit;
+use App\Modules\Organization\Domain\UniqueTopologyName;
+use App\Modules\Organization\Models\Campus;
+use App\Modules\Organization\Models\Department;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\StructureDecision;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,6 +31,7 @@ final class RenameStructureUnit
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly UniqueTopologyName $uniqueNames,
     ) {}
 
     /** @return array{id: string, unit_type: string, name: string, correlation_id: string} */
@@ -42,7 +48,7 @@ final class RenameStructureUnit
         try {
             return $this->idempotency->execute('organization.structure.rename', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($unit, $newName, $decision): array {
-                    $decision->authorize($this->access, $unit->structureScope());
+                    $decision->authorize($this->access, StructureChangeDefinition::authorityScope($unit, false));
 
                     /** @var Model&StructureUnit $locked */
                     $locked = $unit::query()->whereKey($unit->unitId())->lockForUpdate()->firstOrFail();
@@ -50,9 +56,17 @@ final class RenameStructureUnit
                     if ($beforeName === $newName) {
                         throw BusinessRejection::forCode('organization.rename_no_change', 'new name equals the current name');
                     }
+                    $this->requireRenameAvailable($locked, $newName);
 
                     $locked->forceFill(['name' => $newName]);
-                    $locked->save();
+                    try {
+                        $locked->save();
+                    } catch (UniqueConstraintViolationException) {
+                        throw BusinessRejection::forCode(
+                            'organization.structure.duplicate',
+                            sprintf('a %s with this name already exists in the chosen scope', $locked->unitType()),
+                        );
+                    }
                     $event = $this->audit->record(
                         $decision->initiator->actorId,
                         'organization.structure.rename',
@@ -72,6 +86,24 @@ final class RenameStructureUnit
             );
         } catch (AuthorizationDenied $denial) {
             $this->attemptedOperation->deniedByActor($denial, $decision->initiator, 'organization.structure.rename', $unit->unitType(), $unit->unitId());
+        }
+    }
+
+    private function requireRenameAvailable(Model&StructureUnit $locked, string $newName): void
+    {
+        if ($locked instanceof Campus) {
+            $this->uniqueNames->requireAvailable('campus', $newName, 'organization', $locked->organization_id, $locked->id);
+
+            return;
+        }
+        if ($locked instanceof Department) {
+            $this->uniqueNames->requireAvailable('department', $newName, $locked->scope_type, $locked->scope_id, $locked->id);
+
+            return;
+        }
+        $unitType = $locked->unitType();
+        if ($unitType === 'branch' || $unitType === 'organization') {
+            $this->uniqueNames->requireAvailable($unitType, $newName, null, null, $locked->unitId());
         }
     }
 }

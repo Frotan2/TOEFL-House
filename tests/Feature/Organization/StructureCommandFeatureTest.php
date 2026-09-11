@@ -122,7 +122,19 @@ final class StructureCommandFeatureTest extends TestCase
         $organization = $this->establishActiveOrganization();
         $this->establishActiveCampus($organization, 'Main Campus');
 
-        $this->expectException(QueryException::class);
-        $this->createCommand()->createCampus($this->structureDecisionForGlobalActors(), $organization->id, 'Main Campus', RandomIdentifier::new());
+        try {
+            $this->createCommand()->createCampus($this->structureDecisionForGlobalActors(), $organization->id, 'Main Campus', RandomIdentifier::new());
+            $this->fail('duplicate campus names in one organization must be a business rejection, not a raw database failure');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('organization.structure.duplicate', $rejection->errorCode());
+        }
+
+        // Case/whitespace variants of the same name are the same topology.
+        try {
+            $this->createCommand()->createCampus($this->structureDecisionForGlobalActors(), $organization->id, '  main   campus ', RandomIdentifier::new());
+            $this->fail('a whitespace/case variant of an existing campus name must be rejected as duplicate topology');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('organization.structure.duplicate', $rejection->errorCode());
+        }
     }
 }

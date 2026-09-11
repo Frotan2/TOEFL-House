@@ -10,6 +10,7 @@
     "verify:concurrency": "node scripts/runtime/concurrency-verification.mjs",
     "verify:invariants": "node scripts/runtime/database-invariants.mjs",
     "verify:browser": "node scripts/runtime/browser-e2e.mjs",
+    "verify:browser:structure": "node scripts/runtime/structure-browser-e2e.mjs",
     "verify:environment": "node scripts/runtime/verify-environment.mjs"
   },
   "devDependencies": {
