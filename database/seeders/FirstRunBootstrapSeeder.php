@@ -66,7 +66,7 @@ final class FirstRunBootstrapSeeder extends Seeder
         'admissions.approve', 'admissions.initiate', 'admissions.register', 'admissions.review',
         'communication.notification.read', 'communication.thread.manage', 'communication.send',
         'crm.automation', 'crm.catalog', 'crm.followup', 'crm.visitor',
-        'documents.classify', 'documents.register', 'documents.retention', 'documents.verify',
+        'documents.classify', 'documents.register', 'documents.retention', 'documents.submit', 'documents.verify',
         'facilities.work', 'facilities.work_approve',
         'finance.chart', 'finance.correct', 'finance.correct_approve', 'finance.credit', 'finance.credit_approve', 'finance.coverage_revoke', 'finance.coverage_revoke_approve', 'finance.discount', 'finance.discount_approve', 'finance.employment_settlement', 'finance.fund', 'finance.fund_allocate', 'finance.gate_exception', 'finance.gate_exception_approve', 'finance.installment', 'finance.installment_approve', 'finance.journal', 'finance.obligation', 'finance.payroll_liability', 'finance.opening.approve', 'finance.opening.prepare', 'finance.payment', 'finance.period', 'finance.reconcile', 'finance.reconcile_approve', 'finance.refund', 'finance.refund_approve', 'finance.expense', 'finance.expense_approve', 'finance.cash_drawer_manage', 'finance.cash_drawer_move', 'finance.scholarship', 'finance.scholarship_approve',
         'governance.config',
