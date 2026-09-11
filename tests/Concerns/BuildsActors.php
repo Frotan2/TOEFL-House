@@ -89,7 +89,7 @@ trait BuildsActors
     protected function documentsOfficer(string $actorId = 'doc-1'): Actor
     {
         $this->personWithAuthority($actorId, [
-            'documents.classify', 'documents.register', 'documents.submit', 'documents.verify', 'documents.retention',
+            'documents.classify', 'documents.register', 'documents.verify', 'documents.retention',
         ]);
 
         return new Actor($actorId, 'Documents Officer');

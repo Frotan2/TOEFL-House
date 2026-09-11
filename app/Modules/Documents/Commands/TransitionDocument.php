@@ -20,16 +20,19 @@ use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Explicit document lifecycle transitions. Verification records the
- * verifier, result, and reason as append-only evidence; the verifier may
- * not be the uploader of the version under review, and only a passing
- * verification moves the document forward. A failed verification leaves
- * the document rejected until a new version is submitted.
+ * Explicit document lifecycle transitions. Registration and version
+ * submission are both registrar/uploader acts under the single
+ * {@see RegisterDocument::CAPABILITY} authority; the audit operation and
+ * denial code for the submission act remain documents.submit*. Verification
+ * is an independent authority (documents.verify): it records the verifier,
+ * result, and reason as append-only evidence, the verifier may not be the
+ * uploader of the version under review, and only a passing verification moves
+ * the document forward. A failed verification leaves the document rejected
+ * until the registrar submits a new version.
  */
 final class TransitionDocument
 {
     public const CAPABILITY = 'documents.verify';
-    public const SUBMIT_CAPABILITY = 'documents.submit';
 
     public function __construct(
         private readonly AccessDecision $access,
@@ -49,7 +52,15 @@ final class TransitionDocument
                     /** @var Document $locked */
                     $locked = Document::query()->whereKey($document->id)->lockForUpdate()->firstOrFail();
                     $scope = PersonBranchScope::resolve($locked->subject_person_id);
-                    $outcome = $this->access->decide($actor, self::SUBMIT_CAPABILITY, $scope);
+                    // Submitting a version is the registrar/uploader act of
+                    // appending evidence: the same authority that registers
+                    // version 1 (documents.register) authorizes later
+                    // versions. The verifier capability stays independent
+                    // (documents.verify); the uploader-vs-verifier separation
+                    // of duties is enforced when a version is verified. The
+                    // operation keeps its own audit namespace and denial code
+                    // (documents.submit*) so evidence records name the act.
+                    $outcome = $this->access->decide($actor, RegisterDocument::CAPABILITY, $scope);
                     if (! $outcome->allowed) {
                         throw AuthorizationDenied::forCode('documents.submit_denied', $outcome->reason);
                     }
