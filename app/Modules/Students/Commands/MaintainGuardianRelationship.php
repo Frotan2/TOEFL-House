@@ -20,6 +20,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Guardian relationship control: recorded unverified, verified as its own
@@ -31,10 +32,13 @@ final class MaintainGuardianRelationship
     public const CAPABILITY = 'students.guardian';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly BranchScopedAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /**
@@ -118,7 +122,7 @@ final class MaintainGuardianRelationship
                     if ($locked->verification_state === 'verified') {
                         throw BusinessRejection::forCode('students.guardian_already_verified', 'this relationship is already verified');
                     }
-                    $verifiedAt = CarbonImmutable::now();
+                    $verifiedAt = $this->calendar->nowUtc();
                     $locked->forceFill([
                         'verification_state' => 'verified',
                         'verification_evidence_ref' => $verificationEvidenceRef,

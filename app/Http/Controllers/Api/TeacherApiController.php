@@ -19,6 +19,7 @@ use App\Modules\Identity\Models\Person;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical Teacher workspace transport. It returns server-derived profile,
@@ -36,8 +37,8 @@ final class TeacherApiController extends Controller
         $branchProfileScope = static function ($branchScoped) use ($branchIds): void {
             $branchScoped->whereIn('current_home_branch_id', $branchIds)
                 ->orWhereHas('branchAuthorizations', function ($authorization) use ($branchIds): void {
-                    $authorization->whereIn('branch_id', $branchIds)->where('lifecycle_state', 'active')->where('effective_from', '<=', now()->toDateString())->where(function ($valid): void {
-                        $valid->whereNull('effective_to')->orWhere('effective_to', '>', now()->toDateString());
+                    $authorization->whereIn('branch_id', $branchIds)->where('lifecycle_state', 'active')->where('effective_from', '<=', app(CalendarAuthority::class)->todayAsString())->where(function ($valid): void {
+                        $valid->whereNull('effective_to')->orWhere('effective_to', '>', app(CalendarAuthority::class)->todayAsString());
                     });
                 });
         };
@@ -106,7 +107,7 @@ final class TeacherApiController extends Controller
                     /** @var Employment|null $employment */
                     $employment = $profile->employment;
                     $employmentState = $employment !== null ? (string) $employment->lifecycle_state : 'unknown';
-                    $onLeave = Leave::query()->where('employment_id', $profile->employment_id)->where('lifecycle_state', 'approved')->where('date_from', '<=', now()->toDateString())->where('date_to', '>=', now()->toDateString())->exists();
+                    $onLeave = Leave::query()->where('employment_id', $profile->employment_id)->where('lifecycle_state', 'approved')->where('date_from', '<=', app(CalendarAuthority::class)->todayAsString())->where('date_to', '>=', app(CalendarAuthority::class)->todayAsString())->exists();
                     $effectiveState = $profile->lifecycle_state !== TeacherProfile::STATE_ACTIVE ? 'profile_'.$profile->lifecycle_state : ($employmentState !== 'active' ? 'employment_'.$employmentState : ($onLeave ? 'on_leave' : 'operational'));
                     /** @var Person|null $profilePerson */
                     $profilePerson = $profile->person;

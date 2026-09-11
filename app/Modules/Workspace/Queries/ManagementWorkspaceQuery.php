@@ -18,6 +18,7 @@ use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Management decision-support composition over governed projections and
@@ -128,7 +129,7 @@ final class ManagementWorkspaceQuery
             'operational_health' => $health,
             'latest_reports' => $latestReports,
             'source_policy' => 'all values are governed read projections; mutations remain in owning domains',
-            'generated_at' => CarbonImmutable::now()->toIso8601String(),
+            'generated_at' => app(CalendarAuthority::class)->nowAsIso(),
         ];
     }
 

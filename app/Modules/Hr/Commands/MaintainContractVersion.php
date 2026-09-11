@@ -26,6 +26,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Versioned teacher contracts: the Finance Manager prepares a draft
@@ -49,10 +50,13 @@ final class MaintainContractVersion
     ];
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /**
@@ -391,7 +395,7 @@ final class MaintainContractVersion
                         ], $rules),
                     ], JSON_THROW_ON_ERROR));
 
-                    $finalState = $locked->effective_from <= now()->toDateString()
+                    $finalState = $locked->effective_from <= $this->calendar->todayAsString()
                         ? ContractVersionLifecycle::STATE_ACTIVE
                         : ContractVersionLifecycle::STATE_APPROVED;
                     $before = ['lifecycle_state' => $locked->lifecycle_state];

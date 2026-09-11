@@ -29,6 +29,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Class and session control: a class delivers a published program version
@@ -42,6 +43,8 @@ final class MaintainClass
     public const CAPABILITY = 'academic.schedule';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AcademicAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
@@ -49,6 +52,7 @@ final class MaintainClass
         private readonly SchedulingConstraints $scheduling,
         private readonly MaintainTeacherAssignment $teacherAssignments,
         private readonly ActorBranches $branches,
+    
     ) {}
 
     /** @return array{class_id: string, correlation_id: string} */
@@ -214,8 +218,8 @@ final class MaintainClass
                         ->where('branch_id', $locked->branch_id)
                         ->whereNotNull('teacher_profile_id')
                         ->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhereIn('lifecycle_state', ['planned', 'active']))
-                        ->where('effective_from', '<=', CarbonImmutable::today()->toDateString())
-                        ->where(fn ($window) => $window->whereNull('effective_to')->orWhere('effective_to', '>', CarbonImmutable::today()->toDateString()))
+                        ->where('effective_from', '<=', $this->calendar->todayAsString())
+                        ->where(fn ($window) => $window->whereNull('effective_to')->orWhere('effective_to', '>', $this->calendar->todayAsString()))
                         ->whereHas('teacherProfile', static fn ($profile) => $profile->whereColumn('teacher_profiles.person_id', 'teacher_assignments.teacher_person_id')->where('teacher_profiles.lifecycle_state', 'active'))
                         ->doesntExist()) {
                         throw BusinessRejection::forCode('academic.class_needs_teacher', 'a class needs at least one current canonical teacher assignment to activate');
@@ -223,7 +227,7 @@ final class MaintainClass
                     if (in_array($toState, [ClassLifecycle::STATE_CANCELLED, ClassLifecycle::STATE_COMPLETED], true)) {
                         $this->assertNoOpenSeats($locked->id, $toState);
                         $futureSessions = ClassSession::query()->where('class_id', $locked->id)
-                            ->where('scheduled_on', '>=', CarbonImmutable::today()->toDateString())
+                            ->where('scheduled_on', '>=', $this->calendar->todayAsString())
                             ->count();
                         if ($futureSessions > 0) {
                             throw BusinessRejection::forCode('academic.class_future_sessions', "class cannot move to {$toState} while {$futureSessions} future session(s) remain");
@@ -352,7 +356,7 @@ final class MaintainClass
                         }
                     }
                     if (in_array($toState, [ClassSectionLifecycle::STATE_CLOSED, ClassSectionLifecycle::STATE_CANCELLED, ClassSectionLifecycle::STATE_ARCHIVED], true)) {
-                        $future = ClassSession::query()->where('section_id', $locked->id)->where('scheduled_on', '>=', CarbonImmutable::today()->toDateString())->count();
+                        $future = ClassSession::query()->where('section_id', $locked->id)->where('scheduled_on', '>=', $this->calendar->todayAsString())->count();
                         if ($future > 0) {
                             throw BusinessRejection::forCode('academic.section_has_future_sessions', 'a section cannot close or archive while future sessions reference it');
                         }

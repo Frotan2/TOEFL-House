@@ -24,6 +24,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Cross-module conversion lineage recorder. The AUTHORIZING workflow is
@@ -38,8 +39,11 @@ use Illuminate\Support\Facades\DB;
 final class VisitorConversionRecorder
 {
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AuditRecorder $audit,
         private readonly IdempotentExecution $idempotency,
+    
     ) {}
 
     /** @return array{conversion_id: string, visitor_id: string, status: string, converted_at: string|null, conversion_time_basis: string|null, correlation_id: string} */
@@ -284,8 +288,8 @@ final class VisitorConversionRecorder
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->first(['b.id as branch_id', 'c.organization_id']);
 
         return $scope === null ? [] : [
@@ -312,8 +316,8 @@ final class VisitorConversionRecorder
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->first(['b.id as branch_id', 'c.organization_id']);
 
         return $topology === null ? [] : [
@@ -381,8 +385,8 @@ final class VisitorConversionRecorder
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->exists();
         if ($branch === null || ! $topology) {
             throw BusinessRejection::forCode('crm.downstream_provenance_invalid', 'the downstream conversion branch must be operationally active');

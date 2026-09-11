@@ -8,6 +8,7 @@ use App\Modules\Access\Models\AccessPolicy;
 use App\Modules\Access\Models\Position;
 use App\Support\Errors\AuthorizationDenied;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical guard for conferring a position's effective authority. Possessing
@@ -18,7 +19,10 @@ use Carbon\CarbonImmutable;
  */
 final class PositionConferability
 {
-    public function __construct(private readonly AccessDecision $access) {}
+    public function __construct(
+        private readonly CalendarAuthority $calendar,
+private readonly AccessDecision $access
+    ) {}
 
     public function require(Actor $actor, Position $position, StructureScope $scope): void
     {
@@ -36,7 +40,7 @@ final class PositionConferability
             return;
         }
 
-        $today = CarbonImmutable::now()->startOfDay()->toDateString();
+        $today = $this->calendar->todayAsString();
         $roleIds = AccessPolicy::query()
             ->where('binding_type', 'position')
             ->where('binding_id', $position->id)

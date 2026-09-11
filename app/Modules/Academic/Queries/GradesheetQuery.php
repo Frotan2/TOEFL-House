@@ -21,6 +21,7 @@ use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Per-class grade compilation over the certified assessment result chain.
@@ -53,8 +54,11 @@ final class GradesheetQuery
     ];
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /**
@@ -220,7 +224,7 @@ final class GradesheetQuery
         if ($profileId === null) {
             return false;
         }
-        $today = CarbonImmutable::today()->toDateString();
+        $today = $this->calendar->todayAsString();
         $open = TeacherAssignment::query()
             ->where('class_id', $class->id)
             ->where('branch_id', $class->branch_id)
@@ -254,7 +258,7 @@ final class GradesheetQuery
             return false;
         }
 
-        return $endsOn < CarbonImmutable::today()->toDateString();
+        return $endsOn < $this->calendar->todayAsString();
     }
 
     private function isOversight(Actor $actor): bool

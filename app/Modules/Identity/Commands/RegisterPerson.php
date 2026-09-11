@@ -18,6 +18,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Person intake: opens the unverified person record every other boundary
@@ -35,10 +36,13 @@ final class RegisterPerson
     public const CAPABILITY = 'identity.admin';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /** @return array{person_id: string, correlation_id: string} */
@@ -64,7 +68,7 @@ final class RegisterPerson
                         throw BusinessRejection::forCode('identity.person_birthdate_invalid', 'a person record requires a valid YYYY-MM-DD date of birth');
                     }
                     $born = CarbonImmutable::parse($dateOfBirth)->startOfDay();
-                    if ($born->isAfter(CarbonImmutable::now()->startOfDay())) {
+                    if ($born->isAfter($this->calendar->today())) {
                         throw BusinessRejection::forCode('identity.person_birthdate_future', 'date of birth cannot be in the future');
                     }
 

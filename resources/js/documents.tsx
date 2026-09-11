@@ -46,7 +46,13 @@ const hashLabel = (value: string) => value.length > 26 ? `${value.slice(0, 18)}â
 const recordedAt = (value: string | null) => {
   if (!value) return 'Recorded';
   const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  // Calendar authority: format using Kabul AFT fixed offset, not browser locale
+  if (Number.isNaN(date.valueOf())) return value;
+  try {
+    return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kabul' }).format(date);
+  } catch {
+    return date.toISOString();
+  }
 };
 
 /**

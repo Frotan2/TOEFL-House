@@ -21,6 +21,7 @@ use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Rebuildable employee workspace composition.
@@ -35,7 +36,7 @@ final class EmployeeWorkspaceQuery
     /** @return array<string, mixed> */
     public function snapshot(Actor $actor): array
     {
-        $today = CarbonImmutable::today()->toDateString();
+        $today = app(CalendarAuthority::class)->todayAsString();
         $eligible = $this->employmentEligible($actor->actorId);
         $branches = $eligible ? app(ActorBranches::class)->visibleBranchIds($actor) : [];
         $organizationIds = $eligible ? $this->authorizedOrganizations($actor) : [];
@@ -181,7 +182,7 @@ final class EmployeeWorkspaceQuery
                 'count' => count($items),
             ],
             'notifications' => $notifications,
-            'generated_at' => CarbonImmutable::now()->toIso8601String(),
+            'generated_at' => app(CalendarAuthority::class)->nowAsIso(),
         ];
     }
 

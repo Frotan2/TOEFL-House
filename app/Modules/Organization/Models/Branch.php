@@ -9,6 +9,7 @@ use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Branch; its campus attribution over time lives in campus assignments.
@@ -33,7 +34,7 @@ final class Branch extends Model implements StructureUnit
 
     public function activeCampusAssignment(?CarbonImmutable $asOf = null): ?CampusAssignment
     {
-        $day = ($asOf ?? CarbonImmutable::now())->startOfDay()->toDateString();
+        $day = ($asOf ?? app(CalendarAuthority::class)->nowUtc())->startOfDay()->toDateString();
         $assignments = $this->campusAssignments()
             ->where('effective_from', '<=', $day)
             ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', $day))

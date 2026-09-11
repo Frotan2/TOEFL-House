@@ -16,6 +16,7 @@ use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\CampusAssignment;
 use App\Modules\Organization\Models\Department;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-side branch visibility (WP-ACAD-SCOPE): the set of branches an actor
@@ -28,7 +29,10 @@ use Carbon\CarbonImmutable;
  */
 final class ActorBranches
 {
-    public function __construct(private readonly ?CarbonImmutable $effectiveTime = null) {}
+    public function __construct(
+        private readonly CalendarAuthority $calendar,
+private readonly ?CarbonImmutable $effectiveTime = null
+    ) {}
 
     /** @return list<string> sorted unique branch ids */
     public function visibleBranchIds(Actor $actor): array
@@ -36,7 +40,7 @@ final class ActorBranches
         if (trim($actor->actorId) === '' || ! $this->employmentEligible($actor->actorId)) {
             return [];
         }
-        $today = ($this->effectiveTime ?? CarbonImmutable::now())->startOfDay()->toDateString();
+        $today = ($this->effectiveTime ?? $this->calendar->nowUtc())->startOfDay()->toDateString();
         $branches = [];
         foreach ($this->activeGrantScopes($actor->actorId, $today) as [$scopeType, $scopeId]) {
             foreach ($this->branchesForScope($scopeType, $scopeId, $today) as $branchId) {

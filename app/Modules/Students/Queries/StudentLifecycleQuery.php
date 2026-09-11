@@ -13,6 +13,7 @@ use App\Modules\Students\Models\StudentStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * The authoritative, read-only student learner lifecycle file. It composes
@@ -30,7 +31,7 @@ final class StudentLifecycleQuery
      */
     public function for(Student $student, ?CarbonImmutable $asOf = null, bool $includeFinance = true, bool $includeGuardianReview = false, ?array $financeObligationBranches = null, ?array $financePaymentBranches = null): array
     {
-        $day = ($asOf ?? CarbonImmutable::now())->startOfDay()->toDateString();
+        $day = ($asOf ?? app(CalendarAuthority::class)->nowUtc())->startOfDay()->toDateString();
         $student->load([
             'person', 'admissionDecision.applicant', 'placementProfile',
             'statuses' => fn ($query) => $query->orderBy('seq'),

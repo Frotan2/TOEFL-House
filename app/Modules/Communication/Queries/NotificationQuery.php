@@ -13,6 +13,7 @@ use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Modules\Calendar\CalendarAuthority;
 
 /** Recipient-scoped notification projection; per-recipient state is canonical. */
 final class NotificationQuery
@@ -20,7 +21,7 @@ final class NotificationQuery
     /** @return array{status: string, unread_count: int, items: list<array<string, mixed>>} */
     public function forActor(Actor $actor, int $limit = 50): array
     {
-        $now = CarbonImmutable::now();
+        $now = app(CalendarAuthority::class)->nowUtc();
         $candidateBranches = app(ActorBranches::class)->visibleBranchIds($actor);
         /** @var list<string> $branches */
         $branches = $this->authorizedBranches($actor, $candidateBranches);

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AcademicApiController;
+use App\Http\Controllers\Api\CalendarApiController;
 use App\Http\Controllers\Api\CrmApiController;
 use App\Http\Controllers\Api\FinanceApiController;
 use App\Http\Controllers\Api\IdentityApiController;
@@ -277,6 +278,13 @@ Route::prefix('v1')->middleware(['employee', 'throttle:employee-api'])->group(fu
         Route::get('/automation-rules', [CrmApiController::class, 'automationRules'])->name('automation.rules');
         Route::post('/automation-rules', [CrmApiController::class, 'defineAutomationRule'])->name('automation.define');
         Route::post('/automation-rules/{ruleId}/retire', [CrmApiController::class, 'retireAutomationRule'])->name('automation.retire');
+    });
+
+    Route::prefix('calendar')->name('api.calendar.')->group(function (): void {
+        Route::get('/today', [CalendarApiController::class, 'today'])->name('today');
+        Route::get('/convert', [CalendarApiController::class, 'convert'])->name('convert');
+        Route::get('/periods', [CalendarApiController::class, 'periods'])->name('periods');
+        Route::get('/boundaries', [CalendarApiController::class, 'boundaries'])->name('boundaries');
     });
 
     // Workspace/search are projections over canonical module data. Work item

@@ -127,6 +127,23 @@ final class ReportingApiController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Authoritative period selectors — no free-text period keys
+        $academicPeriods = \Illuminate\Support\Facades\DB::table('academic_periods')
+            ->select(['id', 'name', 'starts_on', 'ends_on', 'lifecycle_state'])
+            ->orderBy('starts_on')
+            ->limit(100)
+            ->get();
+        $financialPeriods = \Illuminate\Support\Facades\DB::table('financial_periods')
+            ->select(['id', 'period_key', 'starts_on', 'ends_on', 'lifecycle_state'])
+            ->orderBy('starts_on')
+            ->limit(100)
+            ->get();
+        $payrollPeriods = \Illuminate\Support\Facades\DB::table('payroll_periods')
+            ->select(['id', 'period_key', 'starts_on', 'ends_on', 'lifecycle_state'])
+            ->orderBy('starts_on')
+            ->limit(100)
+            ->get();
+
         return response()->json([
             'data' => [
                 'metrics' => $metrics->map(static fn (MetricDefinition $metric): array => [
@@ -134,6 +151,7 @@ final class ReportingApiController extends Controller
                     'key' => (string) $metric->key,
                     'name' => (string) $metric->name,
                     'current_version' => (int) $metric->current_version,
+                    'period_authority' => $metric->period_authority ?? null,
                 ])->values()->all(),
                 'runs' => $runs->map(static fn (ReportRun $run): array => [
                     'id' => (string) $run->id,
@@ -157,6 +175,11 @@ final class ReportingApiController extends Controller
                     'organization_id' => (string) $dashboard->organization_id,
                 ])->values()->all(),
                 'dashboard_organizations' => array_values($dashboardOrganizationIds),
+                'periods' => [
+                    'academic' => $academicPeriods,
+                    'financial' => $financialPeriods,
+                    'payroll' => $payrollPeriods,
+                ],
             ],
         ]);
     }

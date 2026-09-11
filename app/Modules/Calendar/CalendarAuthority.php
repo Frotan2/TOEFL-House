@@ -30,6 +30,15 @@ use Carbon\CarbonImmutable;
  * reference clock for instants; the server local timezone is never used and an
  * implicit Tehran timezone is never assumed. Fail-closed: any date/year the
  * ratified series does not cover is rejected (never extrapolated).
+ *
+ * CAL-01: This is the ONE canonical server-side Calendar/Date-Time authority.
+ * - Enforces Kabul timezone (Asia/Kabul, fixed AFT UTC+04:30, no DST)
+ * - Enforces Shamsi business-date semantics via ratified v1 series
+ * - Gregorian storage/transport (YYYY-MM-DD UTC midnight)
+ * - Date vs datetime distinction (civilDate UTC midnight vs instant)
+ * - Period boundaries via EffectivePeriod
+ * - DST/timezone-safe via explicit +270min offset never server TZ
+ * - API serialization via toApiPayload/currentBusinessDatePayload
  */
 final class CalendarAuthority
 {
@@ -41,7 +50,22 @@ final class CalendarAuthority
     /** Ratified Kabul civil reference clock (D2). */
     public const KABUL_AFT_UTC_OFFSET_MINUTES = 270;
 
+    /** Alias for tests and API */
+    public const KABUL_OFFSET_MINUTES = self::KABUL_AFT_UTC_OFFSET_MINUTES;
+
+    /** Kabul IANA timezone — fixed AFT, no DST. */
+    public const KABUL_TIMEZONE = 'Asia/Kabul';
+
+    /** Canonical storage timezone — Gregorian dates stored as UTC midnight. */
+    public const STORAGE_TIMEZONE = 'UTC';
+
     public const DEFAULT_VERSION_ID = CalendarVersionCatalog::DEFAULT_VERSION_ID;
+
+    /** Gregorian date pattern YYYY-MM-DD */
+    public const GREGORIAN_DATE_PATTERN = '/^\d{4}-\d{2}-\d{2}$/';
+
+    /** Shamsi canonical pattern YYYY-MM-DD */
+    public const SHAMSI_DATE_PATTERN = '/^\d{4}-\d{2}-\d{2}$/';
 
     public function __construct(
         private readonly ?CalendarVersionCatalog $catalog = null,
@@ -58,6 +82,194 @@ final class CalendarAuthority
         return $this->nowUtc !== null
             ? call_user_func($this->nowUtc)
             : CarbonImmutable::now('UTC');
+    }
+
+    // -------- Kabul timezone / now / today (canonical) --------
+
+    /** Current UTC instant — canonical storage instant. */
+    public function nowUtc(): CarbonImmutable
+    {
+        return $this->nowUtcInstant()->utc();
+    }
+
+    /** Current instant in Kabul civil time (AFT UTC+04:30, no DST). */
+    public function nowKabul(): CarbonImmutable
+    {
+        return $this->nowUtcInstant()->utc()->addMinutes(self::KABUL_AFT_UTC_OFFSET_MINUTES);
+    }
+
+    /** Today as Gregorian civil day in Kabul (UTC midnight storage). */
+    public function today(?string $versionId = null): CarbonImmutable
+    {
+        return $this->gregorianCivilDayFromInstant($this->nowUtcInstant());
+    }
+
+    public function todayAsString(?string $versionId = null): string
+    {
+        return $this->today($versionId)->toDateString();
+    }
+
+    /** Today as Shamsi business date (Kabul civil clock). */
+    public function todayShamsi(?string $versionId = null): SolarHijriDate
+    {
+        return $this->currentBusinessDate($versionId);
+    }
+
+    public function nowAsIso(): string
+    {
+        return $this->nowUtc()->toIso8601String();
+    }
+
+    // -------- Parsing / validation --------
+
+    public function parseGregorianDate(string $ymd, ?string $versionId = null): CarbonImmutable
+    {
+        $ymd = trim($ymd);
+        if (! preg_match(self::GREGORIAN_DATE_PATTERN, $ymd)) {
+            throw ValidationError::forCode('calendar.invalid_gregorian_format', sprintf('Gregorian date must be YYYY-MM-DD, got %s', $ymd));
+        }
+        $date = CarbonImmutable::parse($ymd, 'UTC')->startOfDay();
+        if ($date->toDateString() !== $ymd) {
+            throw ValidationError::forCode('calendar.invalid_gregorian_date', sprintf('invalid Gregorian date %s', $ymd));
+        }
+        return $date;
+    }
+
+    public function isValidGregorianDate(string $ymd): bool
+    {
+        try {
+            $this->parseGregorianDate($ymd);
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public function parseShamsiDate(string $ymd, ?string $versionId = null): SolarHijriDate
+    {
+        $ymd = trim($ymd);
+        if (! preg_match(self::SHAMSI_DATE_PATTERN, $ymd)) {
+            throw ValidationError::forCode('calendar.invalid_shamsi_format', sprintf('Shamsi date must be YYYY-MM-DD, got %s', $ymd));
+        }
+        [$y, $m, $d] = array_map('intval', explode('-', $ymd));
+        $sh = new SolarHijriDate($y, $m, $d);
+        $this->validateSolarHijri($sh, $versionId);
+        return $sh;
+    }
+
+    // -------- Conversion / formatting --------
+
+    public function toShamsi(CarbonImmutable|string $gregorian, ?string $versionId = null): SolarHijriDate
+    {
+        $date = $gregorian instanceof CarbonImmutable ? $gregorian : $this->parseGregorianDate($gregorian, $versionId);
+        return $this->forward($date, $versionId);
+    }
+
+    public function toGregorian(SolarHijriDate $shamsi, ?string $versionId = null): string
+    {
+        return $this->reverse($shamsi, $versionId)->toDateString();
+    }
+
+    public function toGregorianAsCarbon(SolarHijriDate $shamsi, ?string $versionId = null): CarbonImmutable
+    {
+        return $this->reverse($shamsi, $versionId);
+    }
+
+    public function formatGregorian(CarbonImmutable|string $date): string
+    {
+        $carbon = $date instanceof CarbonImmutable ? $date : $this->parseGregorianDate($date);
+        return $this->civilDate($carbon)->toDateString();
+    }
+
+    public function formatShamsi(SolarHijriDate $date): string
+    {
+        return $date->toCanonicalString();
+    }
+
+    /** @return array{gregorian: string, shamsi: string, shamsi_year: int, shamsi_month: int, shamsi_day: int, shamsi_month_name: string, version: string, kabul_timezone: string, kabul_offset_minutes: int} */
+    public function toApiPayload(CarbonImmutable|string $gregorian, ?string $versionId = null): array
+    {
+        $versionId = $versionId ?? self::DEFAULT_VERSION_ID;
+        $carbon = $gregorian instanceof CarbonImmutable ? $gregorian : $this->parseGregorianDate($gregorian, $versionId);
+        $sh = $this->forward($carbon, $versionId);
+        return [
+            'gregorian' => $this->formatGregorian($carbon),
+            'shamsi' => $this->formatShamsi($sh),
+            'shamsi_year' => $sh->year,
+            'shamsi_month' => $sh->month,
+            'shamsi_day' => $sh->day,
+            'shamsi_month_name' => $sh->monthName(),
+            'version' => $versionId,
+            'kabul_timezone' => self::KABUL_TIMEZONE,
+            'kabul_offset_minutes' => self::KABUL_AFT_UTC_OFFSET_MINUTES,
+        ];
+    }
+
+    /** @return array{gregorian: string, shamsi: string, shamsi_year: int, shamsi_month: int, shamsi_day: int, shamsi_month_name: string, version: string, kabul_offset_minutes: int, kabul_timezone: string, utc_now: string, kabul_now: string, utc_timezone: string, storage_timezone: string} */
+    public function currentBusinessDatePayload(?string $versionId = null): array
+    {
+        $versionId = $versionId ?? self::DEFAULT_VERSION_ID;
+        $gregorian = $this->today($versionId);
+        $sh = $this->forward($gregorian, $versionId);
+        return [
+            'gregorian' => $this->formatGregorian($gregorian),
+            'shamsi' => $this->formatShamsi($sh),
+            'shamsi_year' => $sh->year,
+            'shamsi_month' => $sh->month,
+            'shamsi_day' => $sh->day,
+            'shamsi_month_name' => $sh->monthName(),
+            'version' => $versionId,
+            'kabul_offset_minutes' => self::KABUL_AFT_UTC_OFFSET_MINUTES,
+            'kabul_timezone' => self::KABUL_TIMEZONE,
+            'utc_timezone' => self::STORAGE_TIMEZONE,
+            'storage_timezone' => self::STORAGE_TIMEZONE,
+            'utc_now' => $this->nowUtc()->toIso8601String(),
+            'kabul_now' => $this->nowKabul()->toIso8601String(),
+        ];
+    }
+
+    // -------- Period boundaries (Shamsi-aware) --------
+
+    /** @return array{starts_on: string, ends_on: string, shamsi_year: int, starts_on_exclusive_end: string} */
+    public function shamsiYearPeriod(int $year, ?string $versionId = null): array
+    {
+        $boundaries = $this->yearBoundaries($year, $versionId);
+        return [
+            'starts_on' => $boundaries->effectiveFrom->toDateString(),
+            'ends_on' => $boundaries->effectiveTo ? $boundaries->effectiveTo->subDay()->toDateString() : '',
+            'shamsi_year' => $year,
+            'starts_on_exclusive_end' => $boundaries->effectiveTo?->toDateString() ?? '',
+        ];
+    }
+
+    /** @return array{starts_on: string, ends_on: string, shamsi_year: int, shamsi_month: int, shamsi_month_name: string, length: int, starts_on_exclusive_end: string} */
+    public function shamsiMonthPeriod(int $year, int $month, ?string $versionId = null): array
+    {
+        $info = $this->monthInfo($year, $month, $versionId);
+        $boundaries = $this->monthBoundaries($year, $month, $versionId);
+        return [
+            'starts_on' => $info->firstDayGregorian->toDateString(),
+            'ends_on' => $info->lastDayGregorian()->toDateString(),
+            'shamsi_year' => $year,
+            'shamsi_month' => $month,
+            'shamsi_month_name' => $info->name,
+            'length' => $info->length,
+            'starts_on_exclusive_end' => $boundaries->effectiveTo?->toDateString() ?? '',
+        ];
+    }
+
+    public function isKabulMidnight(CarbonImmutable $instant): bool
+    {
+        $kabul = $instant->utc()->addMinutes(self::KABUL_AFT_UTC_OFFSET_MINUTES);
+        return $kabul->format('H:i:s') === '00:00:00';
+    }
+
+    public function isUtcMidnightRolloverRisk(CarbonImmutable $utcInstant): bool
+    {
+        $kabul = $utcInstant->utc()->addMinutes(self::KABUL_AFT_UTC_OFFSET_MINUTES);
+        $utcDay = $utcInstant->toDateString();
+        $kabulDay = $kabul->toDateString();
+        return $utcDay !== $kabulDay;
     }
 
     /** Resolve a calendar version by id; defaults to the active (version-1). */

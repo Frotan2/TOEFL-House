@@ -9,6 +9,7 @@ use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentHoldEvent;
 use App\Modules\Students\Models\StudentStatus;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-only student record: the effective status as of a day (history
@@ -36,7 +37,7 @@ final class StudentRecordQuery
     {
         /** @var Student $student */
         $student = Student::query()->findOrFail($studentId);
-        $day = ($asOf ?? CarbonImmutable::now())->startOfDay()->toDateString();
+        $day = ($asOf ?? app(CalendarAuthority::class)->nowUtc())->startOfDay()->toDateString();
 
         /** @var StudentStatus|null $status */
         $status = StudentStatus::query()

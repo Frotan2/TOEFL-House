@@ -17,6 +17,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Maintain a visitor: update contact/ownership/interest/notes and advance the
@@ -31,10 +32,13 @@ final class MaintainVisitor
     public const CAPABILITY = 'crm.visitor';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly CrmAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /** @return array{visitor_id: string, status: string, correlation_id: string} */
@@ -212,8 +216,8 @@ final class MaintainVisitor
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->first(['b.id as branch_id', 'c.organization_id']);
 
         return $scope === null ? [] : [

@@ -25,6 +25,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Employment lifecycle: verified person -> candidate -> active, with leave,
@@ -40,12 +41,15 @@ final class MaintainEmployment
     public const CAPABILITY_TERMINATE = 'hr.terminate';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly TransitionPositionAssignment $assignments,
         private readonly MaintainTeacherAssignment $teacherAssignments,
+    
     ) {}
 
     /** @return array{employment_id: string, correlation_id: string} */
@@ -73,7 +77,7 @@ final class MaintainEmployment
                         'person_id' => $person->id,
                         'lifecycle_state' => EmploymentLifecycle::STATE_CANDIDATE,
                     ]);
-                    $this->appendStatus($employment, EmploymentLifecycle::STATE_CANDIDATE, 'employment opened', now()->toDateString(), $actor);
+                    $this->appendStatus($employment, EmploymentLifecycle::STATE_CANDIDATE, 'employment opened', $this->calendar->todayAsString(), $actor);
                     $event = $this->audit->record($actor->actorId, 'hr.employment.employ', 'employment', $employment->id, null, ['person_id' => $person->id, 'branch_id' => $branch->id, 'organization_id' => $scope->organizationId]);
 
                     return ['employment_id' => $employment->id, 'correlation_id' => $event->correlation_id];

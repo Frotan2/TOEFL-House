@@ -15,6 +15,7 @@ use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Modules\Payroll\Models\PayrollResult;
 use App\Modules\Students\Models\Student;
 use Illuminate\View\View;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Printing — a first-class capability. Produces operational documents
@@ -47,7 +48,7 @@ final class PrintingController extends Controller
             'documentNo' => $documentNo,
             'payment' => $payment,
             'student' => $this->studentForBranch((string) $payment->student_id, $branchId),
-            'issuedOn' => now()->toDateString(),
+            'issuedOn' => app(CalendarAuthority::class)->todayAsString(),
         ]);
     }
 
@@ -65,7 +66,7 @@ final class PrintingController extends Controller
             'documentNo' => $documentNo,
             'obligation' => $obligation,
             'student' => $this->studentForBranch((string) $obligation->student_id, $branchId),
-            'issuedOn' => now()->toDateString(),
+            'issuedOn' => app(CalendarAuthority::class)->todayAsString(),
         ]);
     }
 
@@ -81,7 +82,7 @@ final class PrintingController extends Controller
             'documentNo' => $documentNo,
             'certificate' => $certificate,
             'student' => $this->studentForBranch((string) $certificate->student_id, $branchId),
-            'issuedOn' => now()->toDateString(),
+            'issuedOn' => app(CalendarAuthority::class)->todayAsString(),
         ]);
     }
 
@@ -120,7 +121,7 @@ final class PrintingController extends Controller
             'documentNo' => $documentNo,
             'result' => $result,
             'period' => $period,
-            'issuedOn' => now()->toDateString(),
+            'issuedOn' => app(CalendarAuthority::class)->todayAsString(),
         ]);
     }
 
@@ -136,7 +137,7 @@ final class PrintingController extends Controller
             'documentNo' => $documentNo,
             'enrollment' => $enrollment,
             'student' => $this->studentForBranch((string) $enrollment->student_id, $branchId),
-            'issuedOn' => now()->toDateString(),
+            'issuedOn' => app(CalendarAuthority::class)->todayAsString(),
         ]);
     }
 
@@ -150,7 +151,7 @@ final class PrintingController extends Controller
         return view('print.idcard', [
             'documentNo' => $documentNo,
             'student' => $student,
-            'issuedOn' => now()->toDateString(),
+            'issuedOn' => app(CalendarAuthority::class)->todayAsString(),
         ]);
     }
 

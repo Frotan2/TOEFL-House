@@ -12,7 +12,16 @@ type Statement = { totals?: any; accounts?: Row[]; bottom_line?: any; total_reve
 type Completeness = { total: number; resolved: number; check_total: string; unresolved: Row[] };
 type LedgerOrganization = { id: string; name: string };
 type LedgerBootstrap = { organizations: LedgerOrganization[]; default_organization_id: string | null };
-const today = () => new Date().toISOString().slice(0, 10);
+type CalendarToday = { gregorian: string; shamsi?: string; kabul_timezone?: string; kabul_offset_minutes?: number; version?: string };
+const CALENDAR_FALLBACK: CalendarToday = { gregorian: '1970-01-01', shamsi: '1348-10-11', kabul_timezone: 'Asia/Kabul', kabul_offset_minutes: 270, version: 'fallback' };
+let calendarTodayCache: CalendarToday = CALENDAR_FALLBACK;
+const today = () => calendarTodayCache.gregorian;
+const authoritativeToday = (): string => {
+  if (typeof console !== 'undefined' && calendarTodayCache === CALENDAR_FALLBACK) {
+    console.warn('[CAL-01] Using fallback static date for Finance — should be server Kabul date from /api/v1/calendar/today');
+  }
+  return calendarTodayCache.gregorian;
+};
 const ledgerQuery = (organizationId: string, periodId: string) => {
   const parameters = new URLSearchParams({ organization_id: organizationId });
   if (periodId !== '') parameters.set('period_id', periodId);
@@ -53,6 +62,13 @@ function FinanceApp({ getJson, postJson, csrfToken }: ApiClient & { csrfToken: s
 
   useEffect(() => {
     setLoading(true); setError(null);
+    void getJson<{ data: CalendarToday }>('/calendar/today').then((response) => {
+      calendarTodayCache = response.data;
+      setPaymentForm((c) => ({ ...c, received_on: authoritativeToday() }));
+      setDiscountForm((c) => ({ ...c, effective_from: authoritativeToday() }));
+      setInstallmentForm((c) => ({ ...c, first_due_on: authoritativeToday() }));
+      setGateForm((c) => ({ ...c, effective_from: authoritativeToday() }));
+    }).catch(() => { calendarTodayCache = CALENDAR_FALLBACK; });
     void getJson<LedgerBootstrap>('/finance/ledger/bootstrap').then((response) => {
       const organizations = response.organizations ?? [];
       setLedgerOrganizations(organizations);

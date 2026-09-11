@@ -21,6 +21,7 @@ use App\Support\Authorization\Actor;
 use App\Support\Authorization\Decision;
 use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical server authorization: resolves Position + Assignment + Role +
@@ -52,7 +53,10 @@ final class AccessResolution implements AccessDecision
      */
     private array $eligibilityMemo = [];
 
-    public function __construct(private readonly ?CarbonImmutable $effectiveTime = null) {}
+    public function __construct(
+        private readonly CalendarAuthority $calendar,
+private readonly ?CarbonImmutable $effectiveTime = null
+    ) {}
 
     public function decide(Actor $actor, string $capability, ?StructureScope $scope): Decision
     {
@@ -65,7 +69,7 @@ final class AccessResolution implements AccessDecision
             return Decision::deny('target provenance is unknown');
         }
 
-        $today = ($this->effectiveTime ?? CarbonImmutable::now())->startOfDay()->toDateString();
+        $today = ($this->effectiveTime ?? $this->calendar->nowUtc())->startOfDay()->toDateString();
         if ($scope !== null && ! $scope->allowInactiveLifecycle && ! $this->operationalScopeIsActive($scope, $today)) {
             return Decision::deny('target organization structure is not operationally active');
         }

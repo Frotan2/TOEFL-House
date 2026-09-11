@@ -20,6 +20,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Registers a subject evidence document as a draft with its first
@@ -32,11 +33,14 @@ final class RegisterDocument
     public const CAPABILITY = 'documents.register';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionTraceRecorder $crmTrace,
+    
     ) {}
 
     /**
@@ -112,7 +116,7 @@ final class RegisterDocument
             'document',
             'other',
             sprintf('Document "%s" registered for the lead subject.', $title),
-            CarbonImmutable::now(),
+            $this->calendar->nowUtc(),
             documentId: $documentId,
             authorityAuditEventId: $authorityAuditEventId,
         );

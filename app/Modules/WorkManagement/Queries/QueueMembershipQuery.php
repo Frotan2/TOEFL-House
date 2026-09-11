@@ -9,6 +9,7 @@ use App\Modules\WorkManagement\Models\QueueMembership;
 use App\Support\Authorization\Actor;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Modules\Calendar\CalendarAuthority;
 
 /** Queue membership is explicit and time-bounded; absent membership denies claim. */
 final class QueueMembershipQuery
@@ -38,7 +39,7 @@ final class QueueMembershipQuery
                 return [];
             }
         }
-        $now = CarbonImmutable::now();
+        $now = app(CalendarAuthority::class)->nowUtc();
         $query = QueueMembership::query()
             ->where('actor_id', $actor->actorId)
             ->where('lifecycle_state', 'active')

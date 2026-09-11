@@ -9,6 +9,7 @@ use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSection;
 use App\Modules\Academic\Models\ClassSession;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-only timetable projection. The room timetable is the canonical
@@ -92,7 +93,7 @@ final class TimetableQuery
 
     private function day(?CarbonImmutable $day): CarbonImmutable
     {
-        return ($day ?? CarbonImmutable::today())->startOfDay();
+        return ($day ?? app(CalendarAuthority::class)->today())->startOfDay();
     }
 
     /** @return array<string, mixed> */
