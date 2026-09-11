@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Modules\Calendar\CalendarAuthority;
 
 /** Canonical academic capability profile; not an identity or job-title alias. */
 final class TeacherProfile extends Model
@@ -38,7 +39,7 @@ final class TeacherProfile extends Model
         self::creating(function (self $profile): void {
             $status = EmploymentStatus::query()
                 ->where('employment_id', $profile->employment_id)
-                ->whereDate('effective_from', '<=', CarbonImmutable::today()->toDateString())
+                ->whereDate('effective_from', '<=', app(CalendarAuthority::class)->todayAsString())
                 ->orderByDesc('effective_from')
                 ->orderByDesc('seq')
                 ->value('status');

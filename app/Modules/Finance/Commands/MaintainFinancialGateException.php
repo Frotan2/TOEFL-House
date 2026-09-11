@@ -24,6 +24,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use App\Support\MoneyAmount;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Finance-owned, approved gate exception. An approved exception carries an
@@ -37,11 +38,14 @@ final class MaintainFinancialGateException
     public const CAPABILITY_APPROVE = 'finance.gate_exception_approve';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly FinancialCoverageCommitmentAllocator $coverageCommitments,
+    
     ) {}
 
     /** @return array{exception_id: string, correlation_id: string} */
@@ -164,7 +168,7 @@ final class MaintainFinancialGateException
 
     private function assertEffectiveToday(FinancialGateException $exception): void
     {
-        $today = CarbonImmutable::today()->toDateString();
+        $today = $this->calendar->todayAsString();
         $effectiveFrom = (string) $exception->effective_from;
         $effectiveTo = $exception->effective_to !== null ? (string) $exception->effective_to : null;
         if ($effectiveFrom > $today || ($effectiveTo !== null && $effectiveTo < $today)) {

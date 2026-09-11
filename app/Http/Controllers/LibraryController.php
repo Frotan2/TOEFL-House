@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Library &amp; Resources console: assets, book copies, circulation (issue,
@@ -216,7 +217,7 @@ final class LibraryController extends Controller
      */
     private function applyRootScope($query, string $table, array $branchIds): void
     {
-        $today = CarbonImmutable::today()->toDateString();
+        $today = app(CalendarAuthority::class)->todayAsString();
         $query->whereIn($table.'.originating_branch_id', $branchIds)
             ->whereNotNull($table.'.organization_id')
             ->whereNotNull($table.'.originating_branch_id')

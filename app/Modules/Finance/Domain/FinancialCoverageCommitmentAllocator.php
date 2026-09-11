@@ -15,6 +15,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use App\Support\MoneyAmount;
 use Illuminate\Support\Carbon;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Materializes an approved enrollment-gate source into immutable, exact
@@ -29,8 +30,11 @@ use Illuminate\Support\Carbon;
 final class FinancialCoverageCommitmentAllocator
 {
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly FinancialBalanceQuery $balances,
         private readonly FinancialCoverageCommitmentQuery $commitments,
+    
     ) {}
 
     /** @return list<array{commitment_id: string, obligation_id: string, amount: numeric-string}> */
@@ -100,7 +104,7 @@ final class FinancialCoverageCommitmentAllocator
             ->get()
             ->all();
         $obligationIds = array_map(static fn (Obligation $obligation): string => (string) $obligation->id, $obligations);
-        $existing = $this->commitments->activeForCoverageAllocation($obligationIds, Carbon::today()->toDateString());
+        $existing = $this->commitments->activeForCoverageAllocation($obligationIds, $this->calendar->todayAsString());
         /** @var array<string, numeric-string> $committedByObligation */
         $committedByObligation = [];
         foreach ($existing as $commitment) {

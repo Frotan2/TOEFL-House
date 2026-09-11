@@ -22,6 +22,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical JSON workspace for Library & Resources.
@@ -221,7 +222,7 @@ final class ResourcesApiController extends Controller
      */
     private function applyRootScope(Builder $query, string $table, array $branchIds): void
     {
-        $today = CarbonImmutable::today()->toDateString();
+        $today = app(CalendarAuthority::class)->todayAsString();
         $query->whereIn($table.'.originating_branch_id', $branchIds)
             ->whereNotNull($table.'.organization_id')
             ->whereNotNull($table.'.originating_branch_id')

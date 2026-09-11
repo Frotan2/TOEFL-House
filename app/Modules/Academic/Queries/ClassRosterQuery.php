@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\TeacherAssignment;
 use Illuminate\Support\Collection;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-only roster of a class: every live seat claim (requested, active,
@@ -33,7 +34,7 @@ final class ClassRosterQuery
             'state_reason' => $enrollment->state_reason !== null ? trim((string) $enrollment->state_reason) : null,
         ])->values()->all());
 
-        $today = now()->toDateString();
+        $today = app(CalendarAuthority::class)->todayAsString();
         /** @var Collection<int, TeacherAssignment> $teachers */
         $teachers = TeacherAssignment::query()->where('class_id', $classId)->where('branch_id', $class->branch_id)->whereNotNull('teacher_profile_id')->whereHas('teacherProfile', static fn ($profile) => $profile->whereColumn('teacher_profiles.person_id', 'teacher_assignments.teacher_person_id')->where('teacher_profiles.lifecycle_state', 'active'))->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))->where('effective_from', '<=', $today)->where(function ($query) use ($today): void {
             $query->whereNull('effective_to')->orWhere('effective_to', '>', $today);

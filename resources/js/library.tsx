@@ -13,7 +13,10 @@ type WorkspaceData = {
   book_branches: Branch[]; asset_branches: Branch[]; work_branches: Branch[]; borrowers: Person[]; custodians: Person[];
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+type CalendarToday = { gregorian: string; shamsi?: string; shamsi_month_name?: string; kabul_timezone?: string; kabul_offset_minutes?: number; version?: string };
+const CALENDAR_FALLBACK: CalendarToday = { gregorian: '1970-01-01', shamsi: '1348-10-11', shamsi_month_name: 'Jadi', kabul_timezone: 'Asia/Kabul', kabul_offset_minutes: 270, version: 'fallback' };
+let calendarTodayCache: CalendarToday = CALENDAR_FALLBACK;
+const today = () => calendarTodayCache.gregorian;
 const text = (value: unknown, fallback = '—') => typeof value === 'string' && value !== '' ? value : fallback;
 const human = (value: unknown) => text(value, 'recorded').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const confirmAction = (message: string, irreversible = false) => window.confirm(irreversible ? `${message}\n\nThis action is irreversible.` : message);
@@ -34,6 +37,7 @@ export function LibraryApp({ getJson, postJson, csrfToken }: ApiClient & { csrfT
 
   const load = () => {
     setLoading(true); setError(null);
+    void getJson<{ data: CalendarToday }>('/calendar/today').then((cal) => { calendarTodayCache = cal.data; }).catch(() => { calendarTodayCache = CALENDAR_FALLBACK; });
     void getJson<WorkspaceData>('/resources/workspace').then((workspace) => {
       setData(workspace);
       setSelectedBorrowerId((current) => workspace.borrowers.some((person) => person.id === current) ? current : '');

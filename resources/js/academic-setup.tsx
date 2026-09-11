@@ -118,7 +118,7 @@ export function AcademicSetupApp({ getJson, csrfToken }: { getJson: <T>(path: st
     <main id="workspace-main" className="workspace academic-setup" aria-labelledby="academic-setup-title">
       <header className="workspace-header setup-header">
         <div><p className="eyebrow">Academic Operations · Setup</p><h1 id="academic-setup-title">Build a delivery-ready academic operation.</h1><p className="lede">A guided control center over the existing Academic authority. Each step reads live server facts and sends you to the owning workspace for changes.</p></div>
-        <div className="setup-header-actions"><span className="source-note">Snapshot · {new Date(data.generated_at).toLocaleString()}</span><a className="button secondary" href="/academic">Open full academic workspace</a></div>
+        <div className="setup-header-actions"><span className="source-note">Snapshot · {(() => { try { return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Kabul' }).format(new Date(data.generated_at)); } catch { return new Date(data.generated_at).toISOString(); } })()}</span><a className="button secondary" href="/academic">Open full academic workspace</a></div>
       </header>
 
       {error && <div className="alert" role="alert">{error}</div>}

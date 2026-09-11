@@ -26,6 +26,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Teacher/Faculty capability lifecycle. This command is the only writer for
@@ -39,10 +40,13 @@ final class MaintainTeacherProfile
     public const CAPABILITY_APPROVE = 'academic.teacher_approve';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /** @return array{teacher_profile_id: string, correlation_id: string} */
@@ -84,14 +88,14 @@ final class MaintainTeacherProfile
                     ]);
                     TeacherProfileStatus::query()->create([
                         'id' => RandomIdentifier::new(), 'teacher_profile_id' => $profile->id,
-                        'status' => TeacherProfile::STATE_PENDING, 'effective_from' => CarbonImmutable::today()->toDateString(),
+                        'status' => TeacherProfile::STATE_PENDING, 'effective_from' => $this->calendar->todayAsString(),
                         'reason' => 'teacher profile registered', 'actor_id' => $actor->actorId,
                     ]);
                     TeacherProfileBranch::query()->create([
                         'id' => RandomIdentifier::new(),
                         'teacher_profile_id' => $profile->id,
                         'branch_id' => $branch->id,
-                        'effective_from' => CarbonImmutable::today()->toDateString(),
+                        'effective_from' => $this->calendar->todayAsString(),
                         'effective_to' => null,
                         'lifecycle_state' => 'active',
                         'provenance_reason' => 'originating verified person branch',
@@ -196,7 +200,7 @@ final class MaintainTeacherProfile
                     $locked->forceFill(['lifecycle_state' => $toState, 'approved_by' => $actor->actorId, 'approved_at' => now()])->save();
                     TeacherProfileStatus::query()->create([
                         'id' => RandomIdentifier::new(), 'teacher_profile_id' => $locked->id,
-                        'status' => $toState, 'effective_from' => CarbonImmutable::today()->toDateString(),
+                        'status' => $toState, 'effective_from' => $this->calendar->todayAsString(),
                         'reason' => $reason, 'actor_id' => $actor->actorId,
                     ]);
                     $event = $this->audit->record($actor->actorId, 'academic.teacher.profile.transition', 'teacher_profile', $locked->id, $before, ['lifecycle_state' => $toState, 'reason' => $reason]);
@@ -431,13 +435,13 @@ final class MaintainTeacherProfile
             throw BusinessRejection::forCode('academic.teacher_employment_inactive', 'teacher activation requires active employment');
         }
         if (! TeacherQualification::query()->where('teacher_profile_id', $profile->id)->where('lifecycle_state', 'verified')->where(function ($query): void {
-            $query->whereNull('valid_from')->orWhere('valid_from', '<=', CarbonImmutable::today()->toDateString());
+            $query->whereNull('valid_from')->orWhere('valid_from', '<=', $this->calendar->todayAsString());
         })->where(function ($query): void {
-            $query->whereNull('valid_to')->orWhere('valid_to', '>=', CarbonImmutable::today()->toDateString());
+            $query->whereNull('valid_to')->orWhere('valid_to', '>=', $this->calendar->todayAsString());
         })->exists()) {
             throw BusinessRejection::forCode('academic.teacher_qualification_missing', 'teacher activation requires a current verified qualification');
         }
-        $today = CarbonImmutable::today()->toDateString();
+        $today = $this->calendar->todayAsString();
         if (! TeacherProfileBranch::query()->where('teacher_profile_id', $profile->id)->where('branch_id', $profile->current_home_branch_id)->where('lifecycle_state', 'active')->where('effective_from', '<=', $today)->where(function ($query) use ($today): void {
             $query->whereNull('effective_to')->orWhere('effective_to', '>', $today);
         })->exists()) {

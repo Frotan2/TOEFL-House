@@ -15,6 +15,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Signing\AcademicEligibilitySigner;
 use App\Support\Signing\CanonicalJson;
 use Illuminate\Support\Carbon;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Builds the complete signed academic-context payload from the immutable
@@ -65,7 +66,7 @@ final class AcademicEligibilitySnapshotBuilder
                 'schema_version' => self::SCHEMA_VERSION,
                 'version_no' => $versionNo,
                 'supersedes_snapshot_id' => $supersedesSnapshotId,
-                'signed_at' => now()->toIso8601String(),
+                'signed_at' => app(CalendarAuthority::class)->nowAsIso(),
                 'signed_by' => $signer->actorId,
                 'producer' => 'academic/placement',
             ],

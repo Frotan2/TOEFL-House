@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Providers;
 
 use App\Modules\Access\AccessResolution;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Integrations\Adapters\ConfiguredTransportDispatcher;
 use App\Modules\Integrations\Domain\SignatureVerifier;
 use App\Modules\Integrations\Domain\Transport;
@@ -24,6 +25,7 @@ final class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(AccessDecision::class, AccessResolution::class);
+        $this->app->singleton(CalendarAuthority::class, fn (): CalendarAuthority => new CalendarAuthority);
         $this->app->singleton(Transport::class, fn (): ConfiguredTransportDispatcher => new ConfiguredTransportDispatcher((array) config('integrations.transports')));
         $this->app->singleton(SignatureVerifier::class, fn (): SignatureVerifier => new SignatureVerifier((array) config('integrations.secrets')));
     }

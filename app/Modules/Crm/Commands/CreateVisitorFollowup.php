@@ -18,6 +18,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Manually schedule a next action on a visitor. This is the same destination
@@ -29,10 +30,13 @@ final class CreateVisitorFollowup
     public const CAPABILITY = 'crm.followup';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly CrmAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /** @return array{followup_id: string, correlation_id: string} */
@@ -132,8 +136,8 @@ final class CreateVisitorFollowup
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->first(['b.id as branch_id', 'c.organization_id']);
 
         return $scope === null ? [] : [

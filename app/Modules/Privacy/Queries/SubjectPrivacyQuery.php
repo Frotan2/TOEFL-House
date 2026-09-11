@@ -7,6 +7,7 @@ namespace App\Modules\Privacy\Queries;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\Disclosure;
 use Carbon\CarbonImmutable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-only privacy view of one subject as of a day: effective consents
@@ -20,7 +21,7 @@ final class SubjectPrivacyQuery
      */
     public function subjectProfile(string $subjectPersonId, ?CarbonImmutable $asOf = null): array
     {
-        $day = ($asOf ?? CarbonImmutable::now())->startOfDay()->toDateString();
+        $day = ($asOf ?? app(CalendarAuthority::class)->nowUtc())->startOfDay()->toDateString();
 
         $consents = array_values(Consent::query()
             ->where('subject_person_id', $subjectPersonId)

@@ -22,6 +22,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Communication: a message is queued post-commit only under an ACTIVE
@@ -34,11 +35,14 @@ final class SendMessage
     public const CAPABILITY = 'communication.send';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionTraceRecorder $crmTrace,
+    
     ) {}
 
     /** @return array{message_id: string, correlation_id: string} */
@@ -68,7 +72,7 @@ final class SendMessage
                         throw BusinessRejection::forCode('communication.channel_mismatch', sprintf('purpose %s is registered for channel %s', $purpose->name, $purpose->channel));
                     }
 
-                    $today = now()->toDateString();
+                    $today = $this->calendar->todayAsString();
                     $consented = Consent::query()
                         ->where('subject_person_id', $subjectPersonId)
                         ->where('purpose_id', $purpose->id)
@@ -167,7 +171,7 @@ final class SendMessage
             in_array($channel, ['call', 'whatsapp', 'email', 'sms'], true) ? $channel : 'other',
             'connected',
             sprintf('Message queued through the %s purpose channel (consent-gated).', $purposeName),
-            CarbonImmutable::now(),
+            $this->calendar->nowUtc(),
             messageId: $messageId,
             authorityAuditEventId: $authorityAuditEventId,
         );

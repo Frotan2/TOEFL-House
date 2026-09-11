@@ -28,6 +28,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use App\Support\Signing\CanonicalJson;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Graduation eligibility and certification: propose with the requirements
@@ -54,6 +55,8 @@ final class DecideGraduation
     public const DOCUMENT_CATEGORY = 'academic.certificate';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AcademicAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
@@ -61,6 +64,7 @@ final class DecideGraduation
         private readonly FinancialGateQuery $financialGate,
         private readonly RegisterDocument $registerDocument,
         private readonly TransitionDocument $transitionDocument,
+    
     ) {}
 
     /** @return array{decision_id: string, correlation_id: string} */
@@ -157,7 +161,7 @@ final class DecideGraduation
 
                     $certificateId = RandomIdentifier::new();
                     $serial = 'CERT-'.strtoupper(bin2hex(random_bytes(6)));
-                    $issuedAt = CarbonImmutable::now()->toIso8601String();
+                    $issuedAt = $this->calendar->nowAsIso();
                     $contentHash = hash('sha256', CanonicalJson::encode([
                         'certificate_id' => $certificateId,
                         'serial' => $serial,

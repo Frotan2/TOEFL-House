@@ -15,6 +15,7 @@ use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Modules\Calendar\CalendarAuthority;
 
 /** Fail-closed operational projection; discovery never authorizes source commands. */
 final class WorkItemQuery
@@ -84,7 +85,7 @@ final class WorkItemQuery
             }
         });
 
-        $now = CarbonImmutable::now();
+        $now = app(CalendarAuthority::class)->nowUtc();
 
         return array_values($query->limit(100)->get([
             'id', 'kind', 'title', 'source_type', 'source_id', 'action_key', 'organization_id', 'branch_id', 'priority', 'due_at', 'lifecycle_state', 'sla_policy_key', 'sla_state', 'escalation_level', 'last_escalated_at',

@@ -14,7 +14,11 @@ type GrantRequest = { id: string; person_id: string; permission: string; organiz
 type Delegation = { id: string; delegator_person_id: string; delegate_person_id: string; permission: string | null; scope_type: string | null; scope_id: string | null; lifecycle_state: string; effective_from: string; effective_to: string };
 type AccessWorkspace = { people: Person[]; organizations: Named[]; campuses: Named[]; departments: Array<Named & { scope_type: string; scope_id: string }>; positions: Named[]; roles: Named[]; assignments: Assignment[]; policies: Policy[]; grants: Grant[]; grant_requests: GrantRequest[]; delegations: Delegation[]; scope: { organization_ids: string[]; branch_ids: string[] } };
 const humanize = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const today = () => new Date().toISOString().slice(0, 10);
+// Calendar authority: today comes from server Kabul date, not browser UTC
+type CalendarToday = { gregorian: string; shamsi?: string; shamsi_month_name?: string; kabul_timezone?: string; kabul_offset_minutes?: number; version?: string };
+const CALENDAR_FALLBACK: CalendarToday = { gregorian: '1970-01-01', shamsi: '1348-10-11', shamsi_month_name: 'Jadi', kabul_timezone: 'Asia/Kabul', kabul_offset_minutes: 270, version: 'fallback' };
+let calendarTodayCache: CalendarToday = CALENDAR_FALLBACK;
+const today = () => calendarTodayCache.gregorian;
 
 export function AccessApp({ getJson, postJson, csrfToken }: ApiClient & { csrfToken: string }) {
   const [data, setData] = useState<AccessWorkspace | null>(null); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null); const [filter, setFilter] = useState('');
@@ -22,7 +26,7 @@ export function AccessApp({ getJson, postJson, csrfToken }: ApiClient & { csrfTo
   const [grant, setGrant] = useState({ person_id: '', permission: '', scope_type: 'branch', scope_id: '', effective_from: today(), effective_to: '', emergency: false }); const [orgGrant, setOrgGrant] = useState({ person_id: '', permission: '', organization_id: '', effective_from: today(), effective_to: '', emergency: false });
   const [delegation, setDelegation] = useState({ delegator_person_id: '', delegate_person_id: '', permission: '', scope_type: '', scope_id: '', effective_from: today(), effective_to: '', reason: '' });
   const [tab, setTab] = useState<'overview' | 'assignments' | 'grants' | 'delegations'>('overview');
-  const load = () => { setLoading(true); setError(null); void getJson<AccessWorkspace>('/access/workspace').then(setData).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Access governance data could not be loaded.')).finally(() => setLoading(false)); };
+  const load = () => { setLoading(true); setError(null); void getJson<{ data: CalendarToday }>('/calendar/today').then((cal) => { calendarTodayCache = cal.data; }).catch(() => { calendarTodayCache = CALENDAR_FALLBACK; }); void getJson<AccessWorkspace>('/access/workspace').then(setData).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Access governance data could not be loaded.')).finally(() => setLoading(false)); };
   useEffect(load, []);
   const command = (request: Promise<unknown>, success: string) => { setBusy(true); setError(null); setMessage(null); void request.then(() => { setMessage(success); load(); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Access command was rejected by the server.')).finally(() => setBusy(false)); };
   const submit = (event: FormEvent<HTMLFormElement>, path: string, body: Record<string, unknown>, success: string) => { event.preventDefault(); command(postJson(path, body), success); };

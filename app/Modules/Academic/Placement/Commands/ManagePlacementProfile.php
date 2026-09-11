@@ -33,6 +33,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Placement profiles and server-authoritative attempts.
@@ -47,12 +48,15 @@ final class ManagePlacementProfile
     public const CAPABILITY = 'placement.conduct';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly PlacementAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionTraceRecorder $crmTrace,
         private readonly PlacementEvidenceVerifier $evidenceVerifier,
+    
     ) {}
 
     /** @return array{profile_id: string, correlation_id: string} */
@@ -236,7 +240,7 @@ final class ManagePlacementProfile
                     $questions = $this->publishedQuestions($version->id);
                     $this->assertAllQuestionsAnswered($questions, $answers);
 
-                    $endedAt = CarbonImmutable::now();
+                    $endedAt = $this->calendar->nowUtc();
                     $startedAt = $locked->started_at !== null ? CarbonImmutable::parse($locked->started_at) : $endedAt;
                     $duration = max(0, (int) $startedAt->diffInSeconds($endedAt));
                     $test = PlacementTest::query()->whereKey($version->placement_test_id)->firstOrFail();
@@ -322,7 +326,7 @@ final class ManagePlacementProfile
                     if ($evidenceRef === '') {
                         throw BusinessRejection::forCode('placement.attempt_evidence_missing', 'a physical attempt requires an evidence reference');
                     }
-                    $endedAt = CarbonImmutable::now();
+                    $endedAt = $this->calendar->nowUtc();
                     $startedAt = $locked->started_at !== null ? CarbonImmutable::parse($locked->started_at) : $endedAt;
                     $duration = max(0, (int) $startedAt->diffInSeconds($endedAt));
                     /** @var PlacementTestVersion $version */
@@ -398,7 +402,7 @@ final class ManagePlacementProfile
                     $questions = $this->publishedQuestions($version->id);
                     $this->assertAllQuestionsAnswered($questions, $answers);
 
-                    $endedAt = CarbonImmutable::now();
+                    $endedAt = $this->calendar->nowUtc();
                     $startedAt = $locked->started_at !== null ? CarbonImmutable::parse($locked->started_at) : $endedAt;
                     $duration = max(0, (int) $startedAt->diffInSeconds($endedAt));
                     $test = PlacementTest::query()->whereKey($version->placement_test_id)->firstOrFail();
@@ -677,6 +681,6 @@ final class ManagePlacementProfile
         if ($visitorId === null) {
             return;
         }
-        $this->crmTrace->record($actor, $visitorId, 'outbound', 'placement', 'other', 'placement attempt submitted for the person linked to this lead.', CarbonImmutable::now(), placementAttemptId: $attemptId, authorityAuditEventId: $authorityAuditEventId);
+        $this->crmTrace->record($actor, $visitorId, 'outbound', 'placement', 'other', 'placement attempt submitted for the person linked to this lead.', $this->calendar->nowUtc(), placementAttemptId: $attemptId, authorityAuditEventId: $authorityAuditEventId);
     }
 }

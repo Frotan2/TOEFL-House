@@ -1,5 +1,15 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell, PageStatus } from './ui';
+// Calendar authority: business date from server Kabul, not browser UTC
+type CalendarToday = { gregorian: string; shamsi?: string; shamsi_month_name?: string; kabul_timezone?: string; kabul_offset_minutes?: number; version?: string };
+const CALENDAR_FALLBACK: CalendarToday = { gregorian: '1970-01-01', shamsi: '1348-10-11', shamsi_month_name: 'Jadi', kabul_timezone: 'Asia/Kabul', kabul_offset_minutes: 270, version: 'fallback' };
+let calendarTodayCache: CalendarToday = CALENDAR_FALLBACK;
+const authoritativeToday = (): string => {
+  if (typeof console !== 'undefined' && calendarTodayCache === CALENDAR_FALLBACK) {
+    console.warn('[CAL-01] Using fallback static date for CRM — should be server Kabul date from /api/v1/calendar/today');
+  }
+  return calendarTodayCache.gregorian;
+};
 import type { ApiClient } from './core/api';
 
 export type CrmAppProps = ApiClient & { csrfToken: string };
@@ -77,6 +87,7 @@ export function CrmApp({ getJson, postJson, csrfToken }: CrmAppProps) {
   };
   useEffect(() => {
     loadVisitors();
+    void getJson<{ data: CalendarToday }>('/calendar/today').then((response) => { calendarTodayCache = { gregorian: response.data.gregorian }; }).catch(() => { calendarTodayCache = CALENDAR_FALLBACK; });
     void getJson<{ sources: CrmCatalogItem[] }>('/crm/sources').then((response) => setSources(response.sources)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'CRM sources could not be loaded.'));
     void getJson<{ campaigns: CrmCatalogItem[] }>('/crm/campaigns').then((response) => setCampaigns(response.campaigns)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'CRM campaigns could not be loaded.'));
     void getJson<CrmBranchesResponse>('/crm/branches').then((response) => {
@@ -125,7 +136,7 @@ export function CrmApp({ getJson, postJson, csrfToken }: CrmAppProps) {
   const recordInteraction = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); if (selected === null || interaction.summary.trim() === '') return;
     setSaving(true); setError(null);
-    const interactionBody = { ...interaction, occurred_on: new Date().toISOString().slice(0, 10) };
+    const interactionBody = { ...interaction, occurred_on: authoritativeToday() };
     const slot = `interaction-${selected.id}-${JSON.stringify(interactionBody)}`;
     void postJson(`/crm/visitors/${encodeURIComponent(selected.id)}/interactions`, interactionBody, requestKey(slot)).then(() => getJson<CrmTimelineResponse>(`/crm/visitors/${encodeURIComponent(selected.id)}/timeline`)).then((response) => { clearRequestKey(slot); setInteraction((current) => ({ ...current, summary: '' })); setTimeline(response.timeline); setMessage('Interaction appended to the immutable timeline.'); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The interaction could not be recorded.')).finally(() => setSaving(false));
   };

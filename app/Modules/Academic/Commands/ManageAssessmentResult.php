@@ -25,6 +25,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Evidence and result chain: submit the raw attempt (immutable once
@@ -44,6 +45,8 @@ final class ManageAssessmentResult
     public const CAPABILITY_RELEASE = 'academic.release';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AcademicAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
@@ -51,6 +54,7 @@ final class ManageAssessmentResult
         private readonly CrmInteractionTraceRecorder $crmTrace,
         private readonly StudentOperationalEligibility $studentEligibility,
         private readonly TeacherAuthority $teacherAuthority,
+    
     ) {}
 
     /** @return array{attempt_id: string, correlation_id: string} */
@@ -69,7 +73,7 @@ final class ManageAssessmentResult
                     if ($class === null) {
                         throw BusinessRejection::forCode('academic.assessment_class_missing', 'assessment evidence requires an authoritative class');
                     }
-                    $this->teacherAuthority->requireActorDeliveryAuthority($assessor, $class, CarbonImmutable::today(), null, self::CAPABILITY_ASSESS, 'academic.assess_denied');
+                    $this->teacherAuthority->requireActorDeliveryAuthority($assessor, $class, $this->calendar->today(), null, self::CAPABILITY_ASSESS, 'academic.assess_denied');
                     if (! in_array($kind, ['placement', 'assessment'], true)) {
                         throw BusinessRejection::forCode('academic.attempt_kind_unknown', sprintf('unknown attempt kind %s', $kind));
                     }
@@ -84,7 +88,7 @@ final class ManageAssessmentResult
                     $attempt = AssessmentAttempt::query()->create([
                         'id' => RandomIdentifier::new(),
                         'enrollment_id' => $locked->id,
-                        'assessed_on' => CarbonImmutable::today()->toDateString(),
+                        'assessed_on' => $this->calendar->todayAsString(),
                         'kind' => $kind,
                         'evidence_ref' => $evidenceRef,
                         'lifecycle_state' => 'submitted',
@@ -122,7 +126,7 @@ final class ManageAssessmentResult
                     if ($class === null) {
                         throw BusinessRejection::forCode('academic.assessment_class_missing', 'assessment scoring requires an authoritative class');
                     }
-                    $this->teacherAuthority->requireActorDeliveryAuthority($scorer, $class, $locked->assessed_on !== null ? CarbonImmutable::parse((string) $locked->assessed_on) : CarbonImmutable::today(), null, self::CAPABILITY_ASSESS, 'academic.assess_denied');
+                    $this->teacherAuthority->requireActorDeliveryAuthority($scorer, $class, $locked->assessed_on !== null ? CarbonImmutable::parse((string) $locked->assessed_on) : $this->calendar->today(), null, self::CAPABILITY_ASSESS, 'academic.assess_denied');
                     if ($locked->lifecycle_state !== 'submitted') {
                         throw BusinessRejection::forCode('academic.attempt_not_submitted', 'only a submitted attempt can be scored');
                     }
@@ -399,7 +403,7 @@ final class ManageAssessmentResult
             'assessment',
             'other',
             sprintf('%s attempt submitted for the student linked to this lead.', ucfirst($kind)),
-            CarbonImmutable::now(),
+            $this->calendar->nowUtc(),
             assessmentAttemptId: $attemptId,
             authorityAuditEventId: $authorityAuditEventId,
         );

@@ -18,6 +18,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Cross-module CRM timeline recorder. The AUTHORIZING workflow is always the
@@ -33,8 +34,11 @@ use Illuminate\Support\Facades\DB;
 final class CrmInteractionTraceRecorder
 {
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AuditRecorder $audit,
         private readonly CrmInteractionLineage $lineage,
+    
     ) {}
 
     public function visitorIdForPerson(string $personId): ?string
@@ -112,7 +116,7 @@ final class CrmInteractionTraceRecorder
         if (trim($summary) === '' || mb_strlen($summary) > 2000) {
             throw BusinessRejection::forCode('crm.interaction_summary', 'an interaction requires a summary of at most 2000 characters');
         }
-        if ($occurredOn->toDateString() > CarbonImmutable::today()->toDateString()) {
+        if ($occurredOn->toDateString() > $this->calendar->todayAsString()) {
             throw BusinessRejection::forCode('crm.interaction_future', 'an interaction cannot be dated in the future');
         }
         if ($messageId !== null && $messageId !== '' && Message::query()->whereKey($messageId)->doesntExist()) {
@@ -240,8 +244,8 @@ final class CrmInteractionTraceRecorder
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->first(['b.id as branch_id', 'c.organization_id']);
 
         return $scope === null ? [] : [

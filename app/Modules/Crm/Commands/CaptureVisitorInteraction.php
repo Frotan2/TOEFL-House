@@ -23,6 +23,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Append an immutable contact/engagement fact and run in-transaction
@@ -35,12 +36,15 @@ final class CaptureVisitorInteraction
     public const CAPABILITY = 'crm.visitor';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly CrmAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionLineage $lineage,
         private readonly CreateVisitorFollowup $followups,
+    
     ) {}
 
     /** @return array{interaction_id: string, scheduled_followup_id: ?string, correlation_id: string} */
@@ -85,7 +89,7 @@ final class CaptureVisitorInteraction
                     if (trim($summary) === '' || mb_strlen($summary) > 2000) {
                         throw BusinessRejection::forCode('crm.interaction_summary', 'an interaction requires a summary of at most 2000 characters');
                     }
-                    if ($occurredOn->toDateString() > CarbonImmutable::today()->toDateString()) {
+                    if ($occurredOn->toDateString() > $this->calendar->todayAsString()) {
                         throw BusinessRejection::forCode('crm.interaction_future', 'an interaction cannot be dated in the future');
                     }
                     if ($messageId !== null && $messageId !== '' && Message::query()->whereKey($messageId)->doesntExist()) {
@@ -158,8 +162,8 @@ final class CaptureVisitorInteraction
             ->where('b.lifecycle_state', 'active')
             ->where('c.lifecycle_state', 'active')
             ->where('o.lifecycle_state', 'active')
-            ->where('ca.effective_from', '<=', now()->toDateString())
-            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', now()->toDateString()))
+            ->where('ca.effective_from', '<=', $this->calendar->todayAsString())
+            ->where(fn ($query) => $query->whereNull('ca.effective_to')->orWhere('ca.effective_to', '>', $this->calendar->todayAsString()))
             ->first(['b.id as branch_id', 'c.organization_id']);
 
         return $scope === null ? [] : [
@@ -194,7 +198,7 @@ final class CaptureVisitorInteraction
             $actor,
             $visitor,
             $assignee,
-            CarbonImmutable::now()->addDays($days),
+            $this->calendar->nowUtc()->addDays($days),
             $title,
             'Created automatically from interaction outcome '.$outcome.'.',
             'crm-automation-followup-'.$correlationId,

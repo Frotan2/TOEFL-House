@@ -12,6 +12,7 @@ use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Idempotency\IdempotentExecution;
 use Throwable;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Worker entry to the delivery core: every due delivery is processed in
@@ -23,16 +24,19 @@ final class ProcessDeliveries
     public const CAPABILITY = 'integrations.process';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AccessDecision $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly DeliveryProcessor $processor,
+    
     ) {}
 
     /** @return array{results: list<array{delivery_id: string, outcome: string, attempts: int}>, considered: int} */
     public function processDue(Actor $actor, string $idempotencyKey): array
     {
-        $payload = hash('sha256', implode('|', ['integrations.delivery.process', now()->toIso8601String(), $actor->actorId]));
+        $payload = hash('sha256', implode('|', ['integrations.delivery.process', $this->calendar->nowAsIso(), $actor->actorId]));
 
         try {
             return $this->idempotency->execute('integrations.delivery.process', $idempotencyKey, $payload,
@@ -44,10 +48,10 @@ final class ProcessDeliveries
                             $state->whereIn('status', ['queued', 'failed'])
                                 ->orWhere(function ($lease): void {
                                     $lease->where('status', 'processing')
-                                        ->where(fn ($expired) => $expired->whereNull('lease_until')->orWhere('lease_until', '<=', now()));
+                                        ->where(fn ($expired) => $expired->whereNull('lease_until')->orWhere('lease_until', '<=', $this->calendar->nowUtc()));
                                 });
                         })
-                        ->where(fn ($query) => $query->whereNull('next_run_at')->orWhere('next_run_at', '<=', now()))
+                        ->where(fn ($query) => $query->whereNull('next_run_at')->orWhere('next_run_at', '<=', $this->calendar->nowUtc()))
                         ->orderBy('created_at')
                         ->pluck('id');
                     foreach ($due as $deliveryId) {

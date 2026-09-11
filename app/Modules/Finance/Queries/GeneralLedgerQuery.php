@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Finance's authoritative general-ledger read model.
@@ -476,7 +477,7 @@ final class GeneralLedgerQuery
      */
     private function organizationBranchIds(string $organizationId): array
     {
-        $today = CarbonImmutable::now()->startOfDay()->toDateString();
+        $today = app(CalendarAuthority::class)->todayAsString();
 
         return DB::table('branches as completeness_branch')
             ->join('campus_assignments as completeness_assignment', function ($join) use ($today): void {

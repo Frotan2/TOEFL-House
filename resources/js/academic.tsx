@@ -230,7 +230,7 @@ export function AcademicApp({ getJson, postJson, csrfToken }: AcademicProps) {
       <header className="workspace-header"><div><p className="eyebrow">Academic Classes · governed workspace</p><h1 id="academic-title">Classes that tell the whole delivery story.</h1><p className="lede">Offerings, live seat claims, sections, sessions, teachers, attendance and waitlists stay linked to one server authority.</p></div><button className="button secondary" type="button" onClick={load} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh authority'}</button></header>
       {error && <div className="alert" role="alert">{error}</div>}
       {message && <div className="notice" role="status">{message}</div>}
-      <div className="source-note academic-authority-note">Last projection: {new Date(data.generated_at).toLocaleString()} · lifecycle, capacity and permitted actions are server-derived · branch scope is fail-closed.</div>
+      <div className="source-note academic-authority-note">Last projection: {(() => { try { return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Kabul' }).format(new Date(data.generated_at)); } catch { return new Date(data.generated_at).toISOString(); } })()} · lifecycle, capacity and permitted actions are server-derived · branch scope is fail-closed. Calendar: Kabul AFT (UTC+04:30) · Shamsi via version-1 authority.</div>
 
       <section className="summary-grid" aria-label="Academic delivery summary">
         <div className="panel"><span className="metric">{data.classes.length}</span><span className="metric-label">Visible classes</span></div>

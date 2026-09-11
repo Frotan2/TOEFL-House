@@ -11,6 +11,7 @@ use App\Modules\Finance\Models\Obligation;
 use App\Support\Errors\BusinessRejection;
 use App\Support\MoneyAmount;
 use Illuminate\Support\Carbon;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Finance-authoritative enrollment gate assessment.
@@ -25,8 +26,11 @@ use Illuminate\Support\Carbon;
 final class FinancialGateQuery
 {
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly FinancialBalanceQuery $balances,
         private readonly FinancialCoverageCommitmentQuery $coverageCommitments,
+    
     ) {}
 
     /** @return array<string, mixed> */
@@ -66,7 +70,7 @@ final class FinancialGateQuery
             ->get()
             ->all();
         $obligationIds = array_map(static fn (Obligation $obligation): string => (string) $obligation->id, $obligations);
-        $today = Carbon::today()->toDateString();
+        $today = $this->calendar->todayAsString();
         $commitments = $studentClearance
             ? $this->coverageCommitments->activeForStudentClearance($obligationIds, $today)
             : $this->coverageCommitments->activeForEnrollment($obligationIds, $offeringId, $classId, $today);
@@ -162,7 +166,7 @@ final class FinancialGateQuery
 
         $evidence = [
             'schema_version' => FinancialGateEvidence::SCHEMA_VERSION,
-            'assessed_at' => now()->toIso8601String(),
+            'assessed_at' => $this->calendar->nowAsIso(),
             'student_id' => $studentId,
             'obligations' => $obligationEvidence,
             'uncovered' => $uncovered,

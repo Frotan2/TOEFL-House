@@ -25,6 +25,7 @@ use App\Support\Identifiers\RandomIdentifier;
 use App\Support\Signing\CanonicalJson;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Issues the official transcript: composes the record from immutable
@@ -43,6 +44,8 @@ final class IssueTranscript
     public const SCHEMA_VERSION = 'transcript/v1';
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AcademicAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
@@ -50,6 +53,7 @@ final class IssueTranscript
         private readonly TranscriptComposer $composer,
         private readonly RegisterDocument $registerDocument,
         private readonly TransitionDocument $transitionDocument,
+    
     ) {}
 
     /** @return array{transcript_id: string, document_id: string, content_hash: string, correlation_id: string} */
@@ -80,7 +84,7 @@ final class IssueTranscript
                         }
 
                         $transcriptId = RandomIdentifier::new();
-                        $issuedAt = CarbonImmutable::now()->toIso8601String();
+                        $issuedAt = $this->calendar->nowAsIso();
                         $content = $this->composer->compose((string) $student->id, $programVersionId);
                         $frozen = array_merge([
                             'schema' => self::SCHEMA_VERSION,

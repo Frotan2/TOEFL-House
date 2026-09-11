@@ -18,6 +18,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Room resource control: a branch-owned physical room with capacity and an
@@ -33,10 +34,13 @@ final class MaintainRoom
     private const ROOM_TYPES = ['classroom', 'lab', 'computer', 'hall', 'other'];
 
     public function __construct(
+        private readonly CalendarAuthority $calendar,
+
         private readonly AcademicAccess $access,
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+    
     ) {}
 
     /** @return array{room_id: string, correlation_id: string} */
@@ -87,7 +91,7 @@ final class MaintainRoom
                     $from = $locked->lifecycle_state;
                     RoomLifecycle::requireTransition($from, $toState);
                     if (in_array($toState, [RoomLifecycle::STATE_MAINTENANCE, RoomLifecycle::STATE_RETIRED], true)) {
-                        $future = ClassSession::query()->where('room_id', $locked->id)->where('scheduled_on', '>=', CarbonImmutable::today()->toDateString())->count();
+                        $future = ClassSession::query()->where('room_id', $locked->id)->where('scheduled_on', '>=', $this->calendar->todayAsString())->count();
                         if ($future > 0) {
                             throw BusinessRejection::forCode('academic.room_has_future_sessions', 'a room cannot be taken out of service while future sessions reference it');
                         }

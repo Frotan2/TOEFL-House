@@ -43,6 +43,7 @@ use App\Modules\Academic\Models\ProgressionDecision;
 use App\Modules\Academic\Models\ResultCorrection;
 use App\Modules\Academic\Models\Skill;
 use App\Modules\Academic\Models\TeacherAssignment;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\Transcript;
 use App\Modules\Academic\Placement\Models\PlacementProfile;
@@ -422,8 +423,8 @@ final class AcademicApiController extends Controller
                 ->whereHas('person', static fn ($query) => $query->where('verification_state', Person::VERIFICATION_VERIFIED))
                 ->whereHas('employment', static fn ($query) => $query->where('lifecycle_state', 'active'))
                 ->whereHas('branchAuthorizations', function ($query) use ($branchScopes): void {
-                    $query->whereIn('branch_id', $branchScopes['schedule'])->where('lifecycle_state', 'active')->where('effective_from', '<=', now()->toDateString())->where(function ($valid): void {
-                        $valid->whereNull('effective_to')->orWhere('effective_to', '>', now()->toDateString());
+                    $query->whereIn('branch_id', $branchScopes['schedule'])->where('lifecycle_state', 'active')->where('effective_from', '<=', app(CalendarAuthority::class)->todayAsString())->where(function ($valid): void {
+                        $valid->whereNull('effective_to')->orWhere('effective_to', '>', app(CalendarAuthority::class)->todayAsString());
                     });
                 })
                 ->with(['person:id,legal_name', 'branchAuthorizations'])
@@ -431,7 +432,7 @@ final class AcademicApiController extends Controller
                     /** @var Person|null $profilePerson */
                     $profilePerson = $profile->person;
 
-                    return $profile->branchAuthorizations->filter(static fn ($authorization): bool => $authorization->lifecycle_state === 'active' && in_array((string) $authorization->branch_id, $branchScopes['schedule'], true) && (string) $authorization->effective_from <= now()->toDateString() && ($authorization->effective_to === null || (string) $authorization->effective_to > now()->toDateString()))->map(static fn ($authorization): array => [
+                    return $profile->branchAuthorizations->filter(static fn ($authorization): bool => $authorization->lifecycle_state === 'active' && in_array((string) $authorization->branch_id, $branchScopes['schedule'], true) && (string) $authorization->effective_from <= app(CalendarAuthority::class)->todayAsString() && ($authorization->effective_to === null || (string) $authorization->effective_to > app(CalendarAuthority::class)->todayAsString()))->map(static fn ($authorization): array => [
                         'id' => (string) $profile->person_id,
                         'teacher_profile_id' => (string) $profile->id,
                         'name' => $profilePerson !== null ? (string) $profilePerson->legal_name : (string) $profile->person_id,
@@ -486,7 +487,8 @@ final class AcademicApiController extends Controller
             : [];
 
         return response()->json([
-            'generated_at' => now()->toIso8601String(),
+            'generated_at' => app(CalendarAuthority::class)->nowAsIso(),
+            'calendar' => app(CalendarAuthority::class)->currentBusinessDatePayload(),
             'scope' => ['branches' => $branches, 'branch_ids' => $visibleBranches],
             'capabilities' => [
                 'structure' => $structureAllowed,
