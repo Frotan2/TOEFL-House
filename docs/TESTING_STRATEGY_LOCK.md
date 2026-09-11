@@ -25,9 +25,9 @@ abstract class TestCase extends \Illuminate\Foundation\Testing\TestCase
 ### Why this matters
 
 `DatabaseMigrations` replays the entire migration chain **before every single
-test**. With 185 migrations and 867 tests that is not a small tax — it made the
-suite effectively unrunnable, which in turn hid real defects because nobody
-could get a full result.
+test**. With a large migration chain and hundreds of tests that is not a small
+tax — it made the suite effectively unrunnable, which in turn hid real defects
+because nobody could get a full result.
 
 `RefreshDatabase` gives each test the *same* pristine database: it migrates
 once per test process, then wraps each test in a transaction that is rolled

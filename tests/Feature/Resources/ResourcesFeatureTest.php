@@ -42,8 +42,8 @@ final class ResourcesFeatureTest extends TestCase
 
     public function test_custody_transfers_close_the_prior_row_and_disposal_needs_two_approvers(): void
     {
-        $this->personWithAuthority('res-custodian-1', []);
-        $this->personWithAuthority('res-custodian-2', []);
+        $this->personWithAuthority('res-custodian-1', [], $this->resourceBranchId);
+        $this->personWithAuthority('res-custodian-2', [], $this->resourceBranchId);
         $manager = $this->grantedActor('res-manager', ['resources.asset', 'resources.dispose_request', 'resources.dispose_approve']);
         $approverOne = $this->grantedActor('res-approver-1', ['resources.dispose_approve']);
         $approverTwo = $this->grantedActor('res-approver-2', ['resources.dispose_approve']);
@@ -119,6 +119,38 @@ final class ResourcesFeatureTest extends TestCase
 
         $this->expectException(QueryException::class);
         DB::statement('UPDATE asset_disposals SET method = ? WHERE id = ?', ['donation', $disposal['disposal_id']]);
+    }
+
+    public function test_custody_assignment_rejects_a_person_homed_in_another_branch_of_the_same_organization(): void
+    {
+        $manager = $this->grantedActor('res-branch-manager', ['resources.asset']);
+        $this->personWithAuthority('res-other-branch-custodian', [], $this->bootstrapBranchId());
+
+        $asset = app(MaintainAsset::class)->register(
+            $manager,
+            'PROJ-BRANCH-001',
+            'Branch-bound projector',
+            'electronics',
+            'Campus A / Room 7',
+            '2026-01-15',
+            $this->resourceBranchId,
+            'res-register-branch-projector',
+        );
+
+        try {
+            app(MaintainAsset::class)->assignCustody(
+                $manager,
+                Asset::query()->findOrFail($asset['asset_id']),
+                'res-other-branch-custodian',
+                '2026-02-01',
+                'res-branch-custody-rejection',
+            );
+            $this->fail('custody must not cross a branch boundary, even inside one organization');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('resources.custodian_branch_mismatch', $rejection->errorCode());
+        }
+
+        $this->assertDatabaseMissing('custodies', ['asset_id' => $asset['asset_id']]);
     }
 
     public function test_work_orders_require_independent_approval_and_completion_evidence(): void

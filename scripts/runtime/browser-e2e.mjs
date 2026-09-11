@@ -29,6 +29,8 @@ const EXECUTABLE = required('CHROMIUM_PATH');
 
 const CONSOLES = [
   ['/workspace', 'Workspace'],
+  ['/library', 'Library'],
+  ['/documents', 'Documents'],
   ['/students', 'Students'],
   ['/academic', 'Academic'],
   ['/teachers', 'Teacher'],
@@ -42,6 +44,8 @@ const CONSOLES = [
   ['/access', 'Access'],
   ['/organization', 'Organization'],
   ['/identity', 'Identity'],
+  ['/governance/privacy', 'Privacy'],
+  ['/governance/audit', 'Audit'],
 ];
 
 const results = [];
@@ -65,10 +69,15 @@ try {
 record('Health endpoint is reachable', health.ok, `HTTP ${health.status}`);
 if (!health.ok) process.exit(1);
 
+// Ubuntu's chromium package is a Snap wrapper. A runner can finish package
+// installation while its first confined browser start is still warming, so retain
+// a bounded launch allowance instead of treating that runner-only startup lag as
+// a product failure (Puppeteer's implicit default is only 30 seconds).
 const browser = await puppeteer.launch({
   executablePath: EXECUTABLE,
   args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   headless: true,
+  timeout: 90_000,
 });
 
 try {
@@ -80,6 +89,9 @@ try {
   const consoleErrors = [];
   const failedRequests = [];
   const apiCalls = [];
+  // The employee UI consumes the one composed workspace contract. Its work
+  // and notification projections are intentionally not redundant direct API reads.
+  const workspaceProjectionResponses = [];
 
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`${page.url()} :: ${message.text().slice(0, 200)}`);
@@ -88,7 +100,19 @@ try {
   page.on('requestfailed', (request) => failedRequests.push(`${request.url().slice(0, 160)} :: ${request.failure()?.errorText ?? 'request failed'}`));
   page.on('response', (response) => {
     const url = response.url();
-    if (url.includes('/api/v1/')) apiCalls.push({ url: url.replace(BASE, ''), status: response.status() });
+    if (url.includes('/api/v1/')) {
+      apiCalls.push({ url: url.replace(BASE, ''), status: response.status() });
+      if (new URL(url).pathname === '/api/v1/workspace' && response.request().method() === 'GET') {
+        workspaceProjectionResponses.push(response.json()
+          .then((responseBody) => ({
+            hasWork: Array.isArray(responseBody?.data?.work?.items) && Number.isInteger(responseBody?.data?.work?.count),
+            hasNotifications: Array.isArray(responseBody?.data?.notifications?.items)
+              && Number.isInteger(responseBody?.data?.notifications?.unread_count)
+              && typeof responseBody?.data?.notifications?.status === 'string',
+          }))
+          .catch(() => ({ hasWork: false, hasNotifications: false })));
+      }
+    }
     if (response.status() >= 400 && !url.includes('favicon')) failedRequests.push(`${response.status()} ${url.replace(BASE, '').slice(0, 140)}`);
   });
 
@@ -113,18 +137,15 @@ try {
     const mounted = await page.evaluate(() => Array.from(document.querySelectorAll('[id$="-console"], #react-console, #app, main')).some((node) => node.childElementCount > 0));
     const text = (await page.evaluate(() => document.body.innerText || '')).replace(/\s+/g, ' ');
     const matched = text.toLowerCase().includes(expected.toLowerCase());
-    let detail = `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`;
-    if (!mounted || !matched) {
-      const diagnostics = await page.evaluate(() => ({
-        baseURI: document.baseURI,
-        baseHref: document.querySelector('base')?.getAttribute('href') ?? null,
-        stylesheetHrefs: Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map((link) => link.href).slice(0, 8),
-        scriptSrcs: Array.from(document.scripts).map((script) => script.src).filter(Boolean).slice(0, 8),
-      }));
-      detail += ` baseURI=${diagnostics.baseURI} baseHref=${diagnostics.baseHref} stylesheetHrefs=${JSON.stringify(diagnostics.stylesheetHrefs)} scriptSrcs=${JSON.stringify(diagnostics.scriptSrcs)}`;
-    }
-    record(`Console ${path} renders without browser errors`, mounted && matched && consoleErrors.length === beforeErrors && failedRequests.length === beforeFailures, detail);
+    record(`Console ${path} renders without browser errors`, mounted && matched && consoleErrors.length === beforeErrors && failedRequests.length === beforeFailures,
+      `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`);
   }
+
+  const workspaceProjections = await Promise.all(workspaceProjectionResponses);
+  const hasNotificationsProjection = workspaceProjections.some(({ hasNotifications }) => hasNotifications);
+  const hasWorkProjection = workspaceProjections.some(({ hasWork }) => hasWork);
+  record('Workspace receives canonical communication and work projections', hasNotificationsProjection && hasWorkProjection,
+    `workspaceResponses=${workspaceProjections.length} notifications=${hasNotificationsProjection} workItems=${hasWorkProjection}`);
 
   const badCalls = apiCalls.filter((call) => call.status >= 400);
   record('Frontend uses canonical API successfully', apiCalls.length > 0 && badCalls.length === 0,

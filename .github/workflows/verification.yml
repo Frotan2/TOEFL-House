@@ -30,8 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -42,13 +42,14 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:frontend
+      - run: npm run test:runtime-safety
 
   static-analysis:
     name: Static analysis (Pint, PHPStan, audits)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
@@ -90,14 +91,14 @@ jobs:
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           tools: composer:${{ env.COMPOSER_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -150,17 +151,15 @@ jobs:
       DB_PASSWORD: postgres
       APP_ENV: production
       APP_DEBUG: 'false'
-      APP_URL: http://127.0.0.1:8999
-      ASSET_URL: http://127.0.0.1:8999
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
           tools: composer:${{ env.COMPOSER_VERSION }}
           extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -188,14 +187,30 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Bootstrap owner account
         run: php artisan db:seed --class=FirstRunBootstrapSeeder --force
-      - name: Install Chromium
+      - name: Install and warm Chromium
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium
+          # Ubuntu's package starts Chromium through Snap. Force its one-time
+          # confinement setup now, before Puppeteer's bounded launch timeout.
+          timeout 120s /usr/bin/chromium --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --version
       - name: Start application
         run: |
-          php -S 127.0.0.1:8999 -t public public/index.php > /tmp/toefl-house.log 2>&1 &
-          for i in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8999/health >/dev/null && exit 0; sleep 1; done
+          # The PHP built-in server treats its router script as the handler for
+          # every request. Use Laravel's static-aware router (from public/) so
+          # Vite assets are served as JS/CSS instead of being redirected through
+          # the authenticated application front controller.
+          (
+            cd public
+            php -S 127.0.0.1:8999 -t . ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+          ) > /tmp/toefl-house.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 http://127.0.0.1:8999/health >/dev/null \
+              && curl --fail --silent --show-error --connect-timeout 2 --max-time 5 --output /dev/null --write-out '%{http_code} %{content_type}' http://127.0.0.1:8999/build/manifest.json | grep -Eq '^200 application/json'; then
+              exit 0
+            fi
+            sleep 1
+          done
           cat /tmp/toefl-house.log
           exit 1
       - name: Run browser E2E

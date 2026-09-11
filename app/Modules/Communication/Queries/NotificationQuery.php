@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Communication\Queries;
 
-use App\Modules\Communication\Models\Notification;
+use App\Modules\Communication\Models\NotificationRecipientState;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\AccessDecision;
@@ -14,7 +14,7 @@ use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
-/** Recipient-scoped notification read projection; no global notification feed. */
+/** Recipient-scoped notification projection; per-recipient state is canonical. */
 final class NotificationQuery
 {
     /** @return array{status: string, unread_count: int, items: list<array<string, mixed>>} */
@@ -26,10 +26,6 @@ final class NotificationQuery
         $branches = $this->authorizedBranches($actor, $candidateBranches);
         /** @var array<string, string> $branchOrganizations */
         $branchOrganizations = $this->branchOrganizations($branches);
-        // Resolve organization scope directly through AccessResolution rather
-        // than inferring it from visible branches. An organization grant is a
-        // real branchless authority and remains valid when an organization has
-        // no current campus/branch assignment; null branch is never a wildcard.
         $organizationIds = $this->authorizedOrganizations($actor);
         $scope = static function ($query) use ($organizationIds, $branchOrganizations): void {
             $query->where(function ($scope) use ($organizationIds, $branchOrganizations): void {
@@ -54,16 +50,24 @@ final class NotificationQuery
                 }
             });
         };
-        $items = array_values(Notification::query()
+
+        $states = NotificationRecipientState::query()
             ->where('recipient_actor_id', $actor->actorId)
-            ->where($scope)
             ->whereIn('lifecycle_state', ['unread', 'read'])
-            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', $now))
+            ->whereHas('notification', function ($query) use ($scope, $now): void {
+                $scope($query);
+                $query->where(fn ($expires) => $expires->whereNull('expires_at')->orWhere('expires_at', '>', $now));
+            })
+            ->with('notification')
             ->orderByRaw("CASE WHEN lifecycle_state = 'unread' THEN 0 ELSE 1 END")
             ->orderByDesc('created_at')
             ->limit(max(1, min($limit, 100)))
-            ->get(['id', 'source_type', 'source_id', 'title', 'body_ref', 'severity', 'scope_type', 'organization_id', 'branch_id', 'lifecycle_state', 'read_at', 'created_at'])
-            ->map(static fn (Notification $notification): array => [
+            ->get();
+
+        $items = array_values($states->map(static function (NotificationRecipientState $state): array {
+            $notification = $state->notification;
+
+            return [
                 'id' => (string) $notification->id,
                 'source_type' => (string) $notification->source_type,
                 'source_id' => (string) $notification->source_id,
@@ -73,18 +77,21 @@ final class NotificationQuery
                 'scope_type' => (string) $notification->scope_type,
                 'organization_id' => $notification->organization_id,
                 'branch_id' => $notification->branch_id,
-                'status' => (string) $notification->lifecycle_state,
-                'read_at' => $notification->read_at?->toIso8601String(),
+                'status' => (string) $state->lifecycle_state,
+                'read_at' => $state->read_at?->toIso8601String(),
                 'created_at' => $notification->created_at?->toIso8601String(),
-            ])->values()->all());
+            ];
+        })->all());
 
         return [
             'status' => 'ready',
-            'unread_count' => Notification::query()
+            'unread_count' => NotificationRecipientState::query()
                 ->where('recipient_actor_id', $actor->actorId)
-                ->where($scope)
                 ->where('lifecycle_state', 'unread')
-                ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', $now))
+                ->whereHas('notification', function ($query) use ($scope, $now): void {
+                    $scope($query);
+                    $query->where(fn ($expires) => $expires->whereNull('expires_at')->orWhere('expires_at', '>', $now));
+                })
                 ->count(),
             'items' => $items,
         ];
@@ -99,7 +106,6 @@ final class NotificationQuery
         if ($branchIds === []) {
             return [];
         }
-
         $organizations = [];
         foreach (Branch::query()->whereIn('id', $branchIds)->get() as $branch) {
             try {

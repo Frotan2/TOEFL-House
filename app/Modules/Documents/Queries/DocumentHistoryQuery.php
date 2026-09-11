@@ -33,7 +33,7 @@ final class DocumentHistoryQuery
                 ->orderBy('created_at')
                 ->get(['verifier_person_id', 'result', 'reason', 'created_at'])
                 ->map(static fn (DocumentVerification $verification): array => [
-                    'verifier' => $verification->verifier_person_id,
+                    'verifier' => trim((string) $verification->verifier_person_id),
                     'result' => $verification->result,
                     'reason' => $verification->reason,
                     'at' => $verification->created_at?->toDateTimeString(),
@@ -41,14 +41,14 @@ final class DocumentHistoryQuery
                 ->all();
             $history[] = [
                 'version_no' => (int) $version->version_no,
-                'content_hash' => $version->content_hash,
-                'uploaded_by' => $version->uploaded_by,
+                'content_hash' => (string) $version->content_hash,
+                'uploaded_by' => trim((string) $version->uploaded_by),
                 'verifications' => $verifications,
             ];
         }
 
         return [
-            'document_id' => $documentId,
+            'document_id' => trim($documentId),
             'lifecycle_state' => $document->lifecycle_state,
             'versions' => $history,
         ];

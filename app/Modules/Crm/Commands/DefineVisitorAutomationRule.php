@@ -92,7 +92,12 @@ final class DefineVisitorAutomationRule
                     if (Person::query()->whereKey($assigneeId)->where('verification_state', Person::VERIFICATION_VERIFIED)->doesntExist()) {
                         throw BusinessRejection::forCode('crm.assignee_unverified', 'the rule assignee must be a verified identity');
                     }
-                    $this->access->require(new Actor($assigneeId, 'CRM automation assignee'), CreateVisitorFollowup::CAPABILITY, null, 'crm.assignee_not_authorized');
+                    // A rule has no visitor target yet. `crm.followup` is a
+                    // record capability, so it must never be evaluated with a
+                    // null/unknown branch here. When the rule fires,
+                    // CreateVisitorFollowup authorizes both the triggering
+                    // actor and this assignee against the concrete immutable
+                    // visitor origin branch in the same transaction.
                     if (VisitorAutomationRule::query()->where('is_active', true)
                         ->where('trigger_type', $triggerType)->where('trigger_value', $triggerValue)
                         ->where('action_type', $actionType)->exists()) {

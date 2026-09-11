@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Academic\Models;
 
 use App\Modules\Hr\Models\Employment;
+use App\Modules\Hr\Models\EmploymentStatus;
 use App\Modules\Identity\Models\Person;
+use App\Support\Errors\BusinessRejection;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -29,6 +32,25 @@ final class TeacherProfile extends Model
         'id', 'person_id', 'employment_id', 'originating_branch_id', 'current_home_branch_id',
         'lifecycle_state', 'professional_title', 'profile_summary', 'approved_by', 'approved_at',
     ];
+
+    protected static function booted(): void
+    {
+        self::creating(function (self $profile): void {
+            $status = EmploymentStatus::query()
+                ->where('employment_id', $profile->employment_id)
+                ->whereDate('effective_from', '<=', CarbonImmutable::today()->toDateString())
+                ->orderByDesc('effective_from')
+                ->orderByDesc('seq')
+                ->value('status');
+
+            if ($status !== 'active') {
+                throw BusinessRejection::forCode(
+                    'academic.teacher_employment_inactive',
+                    'a teacher profile requires employment that is active as of the registration date',
+                );
+            }
+        });
+    }
 
     /** @return list<string> */
     public static function allowedTransitions(string $state): array

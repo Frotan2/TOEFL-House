@@ -88,8 +88,14 @@ final class MaintainAsset
                     if ($custodianScope->organizationId !== $scope->organizationId) {
                         throw BusinessRejection::forCode('resources.custodian_organization_mismatch', 'custody must remain inside the asset organization');
                     }
+                    if ($custodianScope->branchId !== $scope->branchId) {
+                        throw BusinessRejection::forCode('resources.custodian_branch_mismatch', 'custody custodian must belong to the asset branch');
+                    }
                     if ($locked->lifecycle_state !== 'in_service') {
                         throw BusinessRejection::forCode('resources.asset_not_in_service', 'custody attaches only to an in-service asset');
+                    }
+                    if ($assignedOn < $locked->acquired_on) {
+                        throw BusinessRejection::forCode('resources.custody_assigned_on', 'custody cannot begin before the asset was acquired');
                     }
 
                     /** @var Custody|null $open */
@@ -97,6 +103,9 @@ final class MaintainAsset
                     if ($open !== null) {
                         if (trim((string) $open->custodian_person_id) === $custodianPersonId) {
                             throw BusinessRejection::forCode('resources.custody_same_custodian', 'this custodian already holds the asset');
+                        }
+                        if ($assignedOn < $open->assigned_on) {
+                            throw BusinessRejection::forCode('resources.custody_assigned_on', 'a custody transfer cannot move backward in time');
                         }
                         $open->forceFill(['released_on' => $assignedOn]);
                         $open->save();
@@ -137,6 +146,9 @@ final class MaintainAsset
 
                     /** @var Custody $open */
                     $open = Custody::query()->where('asset_id', $locked->id)->whereNull('released_on')->lockForUpdate()->firstOrFail();
+                    if ($releasedOn < $open->assigned_on) {
+                        throw BusinessRejection::forCode('resources.custody_released_on', 'custody cannot be released before it was assigned');
+                    }
                     $open->forceFill(['released_on' => $releasedOn]);
                     $open->save();
                     $event = $this->audit->record($actor->actorId, 'resources.custody.release', 'custody', $open->id, null, [

@@ -7,22 +7,17 @@ namespace App\Modules\Privacy\Commands;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Privacy\Domain\PrivacyScopePolicy;
 use App\Modules\Privacy\Models\Disclosure;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
-use App\Support\Authorization\PersonBranchScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Records the release of personal information: recipient, purpose,
- * authority, scope, time, and disclosed category. Disclosure of restricted
- * categories additionally requires the disclose capability; the record is
- * append-only evidence and can never be rewritten.
- */
+/** Records immutable release evidence under server-resolved subject provenance. */
 final class RecordDisclosure
 {
     public const CAPABILITY = 'privacy.disclose';
@@ -34,9 +29,7 @@ final class RecordDisclosure
         private readonly AttemptedOperation $attemptedOperation,
     ) {}
 
-    /**
-     * @return array{disclosure_id: string, correlation_id: string}
-     */
+    /** @return array{disclosure_id: string, correlation_id: string} */
     public function disclose(Actor $discloser, string $subjectPersonId, string $recipient, string $purpose, string $authority, string $scopeType, string $scopeId, string $disclosedCategory, string $idempotencyKey): array
     {
         $payload = hash('sha256', implode('|', ['privacy.disclose', $subjectPersonId, $recipient, $purpose, $authority, $scopeType, $scopeId, $disclosedCategory, $discloser->actorId]));
@@ -44,12 +37,11 @@ final class RecordDisclosure
         try {
             return $this->idempotency->execute('privacy.disclose', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($discloser, $subjectPersonId, $recipient, $purpose, $authority, $scopeType, $scopeId, $disclosedCategory): array {
-                    $subject = Person::query()->whereKey($subjectPersonId)->first();
-                    if ($subject === null) {
+                    if (! Person::query()->whereKey($subjectPersonId)->exists()) {
                         throw BusinessRejection::forCode('privacy.disclose_subject_unknown', 'disclosure requires a known subject');
                     }
-                    $scope = PersonBranchScope::resolve($subject->id);
-                    $outcome = $this->access->decide($discloser, self::CAPABILITY, $scope);
+                    $subjectScope = PrivacyScopePolicy::assertDeclaredScopeMatchesSubject($subjectPersonId, $scopeType, $scopeId);
+                    $outcome = $this->access->decide($discloser, self::CAPABILITY, $subjectScope);
                     if (! $outcome->allowed) {
                         throw AuthorizationDenied::forCode('privacy.disclose_denied', $outcome->reason);
                     }
@@ -75,7 +67,8 @@ final class RecordDisclosure
                         'purpose' => $purpose,
                         'scope' => $scopeType.':'.$scopeId,
                         'disclosed_category' => $disclosedCategory,
-                        'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,
+                        'branch_id' => $subjectScope->branchId,
+                        'organization_id' => $subjectScope->organizationId,
                     ]);
 
                     return ['disclosure_id' => $disclosure->id, 'correlation_id' => $event->correlation_id];

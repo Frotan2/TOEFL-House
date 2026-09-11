@@ -6,6 +6,12 @@
 
 CRM manages visitor/lead/follow-up/conversion interaction history without becoming student, academic or financial authority.
 
+Automation rules are configuration, not a grant of CRM record authority. When
+a rule schedules a follow-up, the canonical follow-up command re-authorizes
+the triggering actor and configured assignee against the visitor's immutable
+origin branch in the same transaction; an unscoped rule never turns a
+branch-scoped follow-up capability into global authority.
+
 ## Employee Workspace
 
 Workspace is:

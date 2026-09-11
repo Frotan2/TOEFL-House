@@ -1,7 +1,7 @@
 # TOEFL House — Setup, Verification & Runtime Readiness
 
-**STATUS: CURRENT CANONICAL — RUNTIME PROCEDURE (synchronized 2026-09-09 with
-the certified state; see `docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md`)**
+**STATUS: ACTIVE RUNTIME PROCEDURE (synchronized 2026-09-10; current release
+status is owned by `docs/RUNTIME-RELEASE.md`)**
 
 This document describes the supported local/Windows deployment path, the
 clean-environment provisioner, and the developer verification commands. It
@@ -13,28 +13,28 @@ The authoritative specification is
 [`docs/RUNTIME_ENVIRONMENT_LOCK.md`](docs/RUNTIME_ENVIRONMENT_LOCK.md),
 machine-checked by `npm run verify:environment`. Summary:
 
-| Component | Locked | Allowed range |
+| Component | Reproducible local reference | Supported range |
 |---|---|---|
 | PHP | 8.4.14 | `>=8.2 <8.5` (`composer.json` `^8.2`) |
-| Composer | 2.9.2 | `>=2.5 <3.0` |
-| Laravel | 12.67.0 | `^12.67.0` (Laravel 13 is **prohibited**) |
+| Composer | 2.9.2 | `>=2.5 <3` |
+| Laravel | 12.67.0 | `>=12.67 <13.0` (Laravel 13 is **prohibited**) |
 | PostgreSQL | 18.4 | `>=18.0 <19.0` |
 | Node | 22.22.3 | `>=22.0 <23.0` (`package.json` engines) |
-| npm | 10.9.8 | `>=10.0` |
+| npm | 10.9.8 | `>=10.0 <11.0` |
 | React / Vite / TypeScript | 19.1.1 / 7.3.6 / 5.9.x | per lockfiles |
 
-Concrete patch pins used by a deployment artifact (the Windows launcher) are
-deployment implementation details and must remain consistent with the
-dependency lockfiles. **SQLite/pdo_sqlite are deliberately excluded** —
+CI and the Windows launcher use concrete reference patches inside these
+ranges; the compatibility lock, not a duplicated patch comparison, decides
+whether a host is eligible. **SQLite/pdo_sqlite are deliberately excluded** —
 PostgreSQL is the only supported database.
 
 ## 2. Repository facts
 
-The current database migration chain contains exactly **185 migration files**,
-with ordinals running `000001`–`000190`; the numbering gap
+The current database migration chain contains exactly **202 migration files**,
+with ordinals running `000001`–`000207`; the numbering gap
 `000175`–`000179` is intentional historical numbering and is not, by itself,
-a defect. The chain replays cleanly to completion on the locked runtime
-(185/185, verified on PostgreSQL 18.4).
+a defect. The chain replays cleanly to completion on the reproducible local
+runtime (202/202, re-verified on PostgreSQL 18.4 on 2026-09-10).
 
 The migration chain has **not** been replaced by a guessed schema baseline.
 PostgreSQL baseline consolidation remains governed by
@@ -174,7 +174,7 @@ four-actor `StructureDecision` chain, and only at genesis.
 npm run verify:environment
 ```
 
-Asserts the locked runtime (versions + required PHP extensions, 8 checks).
+Asserts the supported runtime contract (compatibility ranges + required PHP extensions, 9 checks).
 
 ### Database migration audit
 
@@ -184,8 +184,8 @@ php scripts/database-migration-audit.php
 
 Dependency-free static migration audit: validates migration filename
 numbering and known data-writing exceptions; it does not prove PostgreSQL
-schema equivalence (that is what `migrate:fresh` + the schema census on the
-locked runtime proves).
+schema equivalence (that is what `migrate:fresh` + the schema census on a
+supported PostgreSQL runtime proves).
 
 ### Terminology audit
 
@@ -222,9 +222,23 @@ npm run test:frontend
 ### Database invariants and concurrency (real PostgreSQL)
 
 ```text
+npm run test:runtime-safety   # no-DB guard/preflight contract
 npm run verify:invariants     # PostgreSQL itself rejects invalid states (6/6)
 npm run verify:concurrency    # genuinely simultaneous transactions (4/4)
 ```
+
+Run both only against an isolated, migration-backed disposable database. The
+invariant script asserts the exact named PostgreSQL boundary for each invalid
+write; the concurrency script races independent database connections against
+real `idempotency_keys`, `scope_grants`, `org_wide_grant_requests`, and
+`accounts` tables, not a mirror schema. Both commands reject a non-disposable
+`DB_DATABASE` name unless the reviewed rehearsal escape hatch described in
+`docs/RUNTIME-RELEASE.md` is set. They require a dedicated disposable-database
+verifier role that can `SET LOCAL session_replication_role = 'replica'` (a
+superuser or a role with `GRANT SET ON PARAMETER session_replication_role`),
+not the normal application login. The invariant command additionally needs the
+ownership-level trigger-control access described in that release document. Do
+not run them alongside PHPUnit or a migration process.
 
 ### End-to-end business journeys (real HTTP, fresh first-boot databases)
 
@@ -237,9 +251,23 @@ the release protocol's critical-journey gate requires:
 | `e2e-payment-journey.php` | Payment lifecycle: obligations, payments, allocations, refunds — 29 checks |
 | `e2e-payroll-journey.php` | Payroll → Finance liability recognition → exactly-once journal → reconciliation — 27 checks |
 
-Run each against its own freshly migrated database and a served instance
-(`php -S 127.0.0.1:<port> -t public public/index.php` with `PHP_CLI_SERVER_WORKERS` > 1);
-see the header of each script for the exact reset recipe.
+Run each against its own freshly migrated database and a served instance. From
+the repository root, use Laravel's static-aware built-in-server router (not
+`public/index.php` directly, which would route Vite JS/CSS through Laravel):
+
+```bash
+(
+  cd public
+  PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:<port> -t . \
+    ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+)
+```
+
+The router must run with `public/` as its working directory: it returns static
+assets to the PHP server and sends only application routes to `index.php`.
+Choose an appropriate worker count for the host; the journey concurrency checks
+require more than one worker. See the header of each script for the exact reset
+recipe.
 
 ### Browser E2E
 
@@ -283,17 +311,18 @@ The following are release-critical and require real runtime evidence:
 - backup/restore drills;
 - production-like deployment/recovery checks.
 
-A documented command is not evidence that the command passed. As of
-2026-09-09, every gate above except the browser E2E and deployment-rehearsal
-items has been **executed on the locked runtime** — see
-`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md` for the per-gate evidence and
-the honest boundary of what was carried forward versus re-executed.
+A documented command is not evidence that the command passed. The
+2026-09-09 certification record is historical evidence only; it does not
+certify a later checkout. Determine the current release state from
+`docs/RUNTIME-RELEASE.md`, the actual commit, and fresh applicable gate
+results.
 
 ## 7. Environment limitations (current, honest)
 
-The locked runtime is fully reproducible from a clean environment via
-`scripts/runtime/provision.sh` — Composer, PostgreSQL and the complete
-verification chain are all executable. The remaining known limitations are:
+The reproducible local reference runtime is available from a clean environment
+via `scripts/runtime/provision.sh` — Composer, PostgreSQL and the applicable
+non-browser verification chain are executable. The remaining known limitations
+are:
 
 - **Browser E2E** (`npm run verify:browser`) requires a Chromium binary
   (`CHROMIUM_PATH`) plus NSS libraries; sandboxes without Chromium cannot run
@@ -315,8 +344,8 @@ Do not delete the historical migration chain merely to reduce file count.
 Before physical consolidation:
 
 1. provision a disposable PostgreSQL instance;
-2. replay all 185 accepted migrations from zero (demonstrated on the locked
-   runtime: 185/185);
+2. replay all 202 accepted migrations from zero (re-verified on the
+   reproducible local runtime: 202/202 on 2026-09-10);
 3. capture an authoritative schema-only PostgreSQL snapshot;
 4. inventory tables, columns, nullability, defaults, keys, checks,
    exclusions, indexes, sequences, types, extensions, functions, triggers,
@@ -362,12 +391,12 @@ build, runtime, and backup artifacts.
 ## 11. Production-readiness statement
 
 The repository's release authority is
-[`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md`](docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md):
-TOEFL House is **certified production-ready at commit `96925d3`** on the
-locked runtime, with the exact evidence boundary (what was executed fresh,
-what is carried forward, what remains environment-limited) stated there.
+[`docs/RUNTIME-RELEASE.md`](docs/RUNTIME-RELEASE.md). This checkout is **not
+release certified** until the required gates have passed for its exact commit;
+`docs/AUDIT-2026-09-09-FINAL-CERTIFICATION.md` remains a historical record for
+its own commit only.
 
-This setup document is a procedure, not a certification. Any future
-lock-version bump or material change requires re-running the full
-verification chain of §5 and updating `docs/RUNTIME_ENVIRONMENT_LOCK.md` and
-`docs/RUNTIME_VERIFICATION_HANDOFF.md` together.
+This setup document is a procedure, not a certification. Any future runtime
+range/reference change or material change requires re-running the applicable
+verification chain and updating `docs/RUNTIME_ENVIRONMENT_LOCK.md` together
+with the release control and fresh evidence.

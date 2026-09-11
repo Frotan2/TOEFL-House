@@ -7,18 +7,23 @@ namespace App\Modules\Crm\Queries;
 use App\Modules\Audit\Models\AuditEvent;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorConversionHandoff;
+use App\Support\Errors\BusinessRejection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Read model of a visitor's immutable timeline: interactions and follow-ups
  * unified chronologically. Evidence-first, never rewritten, always attributable.
+ * Unknown provenance is not a readable wildcard.
  */
 final class VisitorTimelineQuery
 {
     /** @return list<array<string, mixed>> */
     public function for(Visitor $visitor, int $limit = 100): array
     {
+        if (trim((string) ($visitor->origin_branch_id ?? '')) === '') {
+            throw BusinessRejection::forCode('crm.visitor_provenance_unknown', 'visitor provenance is unknown and its timeline cannot be exposed');
+        }
         $limit = max(1, min($limit, 500));
         $visitor->loadMissing(['conversion']);
         $interactions = $visitor->interactions()->limit($limit)->get();
@@ -33,8 +38,6 @@ final class VisitorTimelineQuery
             $rows->push([
                 'kind' => 'conversion',
                 'id' => $visitor->conversion->id,
-                // A CRM mirror-row created_at is not the downstream
-                // conversion occurrence and must never substitute for it.
                 'at' => $authorityTimed ? $visitor->conversion->converted_at?->toDateTimeString() : null,
                 'time_basis' => $visitor->conversion->conversion_time_basis,
                 'time_evidence_status' => $authorityTimed ? 'authority_event_recorded' : 'historic_unclassified',

@@ -18,8 +18,11 @@ final class IntegrationDomainTest extends TestCase
     public function test_job_catalog_is_closed(): void
     {
         $this->assertSame(['integrations.retry_sweep', 'outbox.relay'], JobCatalog::keys());
+        $this->assertSame(JobCatalog::keys(), array_keys(JobCatalog::EXECUTION_CAPABILITIES));
         $this->assertSame(IntegrationRetrySweepJob::class, JobCatalog::handlerFor('integrations.retry_sweep'));
         $this->assertSame(DomainEventRelayJob::class, JobCatalog::handlerFor('outbox.relay'));
+        $this->assertSame(['integrations.process'], JobCatalog::executionCapabilitiesFor('integrations.retry_sweep'));
+        $this->assertSame(['integrations.process'], JobCatalog::executionCapabilitiesFor('outbox.relay'));
 
         try {
             JobCatalog::handlerFor('integrations.invented');

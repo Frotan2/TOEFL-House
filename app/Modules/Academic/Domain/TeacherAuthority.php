@@ -167,8 +167,6 @@ final class TeacherAuthority
         /** @var TeacherProfile|null $profile */
         $profile = TeacherProfile::query()->where('person_id', $actor->actorId)->first();
         if ($profile === null) {
-            // The explicit capability is the governance path for assessors,
-            // moderators, and academic officers; it is not a teacher shortcut.
             return;
         }
         $assignment = TeacherAssignment::query()
@@ -324,16 +322,20 @@ final class TeacherAuthority
         if ($limit === null) {
             return;
         }
-        $proposed = CarbonImmutable::parse($on->toDateString().' '.$endsAt)->diffInMinutes(CarbonImmutable::parse($on->toDateString().' '.$startsAt)) / 60;
+        // Carbon 3 preserves the sign of a difference. Calculate from start
+        // to end so workload is a positive duration, matching the PostgreSQL
+        // race boundary that derives it as `ends_at - starts_at`.
+        $proposed = CarbonImmutable::parse($on->toDateString().' '.$startsAt)
+            ->diffInMinutes(CarbonImmutable::parse($on->toDateString().' '.$endsAt)) / 60;
         $used = 0.0;
         $sessions = ClassSession::query()->whereBetween('scheduled_on', [$on->startOfWeek()->toDateString(), $on->endOfWeek()->toDateString()])->get();
         foreach ($sessions as $session) {
-            if (! TeacherAssignment::query()->where('class_id', $session->class_id)->where('teacher_profile_id', $profile->id)->where('branch_id', $branchId)->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))->where('effective_from', '<=', $session->scheduled_on)->where(function ($query) use ($session): void {
+            if (TeacherAssignment::query()->where('class_id', $session->class_id)->where('teacher_profile_id', $profile->id)->where('branch_id', $branchId)->where(fn ($state) => $state->whereNull('lifecycle_state')->orWhere('lifecycle_state', '!=', 'cancelled'))->where('effective_from', '<=', $session->scheduled_on)->where(function ($query) use ($session): void {
                 $query->whereNull('effective_to')->orWhere('effective_to', '>', $session->scheduled_on);
             })->exists()) {
-                continue;
+                $used += CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->starts_at)
+                    ->diffInMinutes(CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->ends_at)) / 60;
             }
-            $used += CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->ends_at)->diffInMinutes(CarbonImmutable::parse((string) $session->scheduled_on.' '.$session->starts_at)) / 60;
         }
         if ($used + $proposed > (float) $limit->max_hours_per_week) {
             throw BusinessRejection::forCode('academic.teacher_workload_exceeded', 'the proposed session would exceed the teacher weekly workload limit');

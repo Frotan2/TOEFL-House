@@ -2,11 +2,11 @@
 #
 # TOEFL House — sandbox runtime provisioner (Linux x86_64).
 #
-# Rebuilds the exact, verified engineering runtime this repository was
-# converged on, WITHOUT any of the version-fighting that blocks a fresh agent:
+# Rebuilds a reproducible, supported local engineering runtime without relying
+# on host package mirrors:
 #
-#   * PHP 8.4.14 (native, with pdo_pgsql + every locked extension)
-#   * Composer 2.9.x (bundled with the PHP package)
+#   * PHP 8.4.14 (native, with pdo_pgsql + every required extension)
+#   * Composer 2.9.2 (bundled with the pinned PHP package)
 #   * PostgreSQL 18.4 (native server: postgres/initdb/pg_ctl)
 #
 # WHY THESE SOURCES: this sandbox's network egress is allow-listed. Debian apt
@@ -21,10 +21,11 @@
 # WHY PHP 8.4 (not 8.2): the amazon-linux-2 (8.2) native build depends on
 # OpenSSL 1.0 shared objects that do not exist on this Debian 12 host; the
 # amazon-linux-2023 (8.4) build is self-contained and runs unmodified. The
-# full 900-test suite, all 185 migrations and every runtime gate pass on
-# 8.4.14, and composer.json requires "^8.2" (i.e. >=8.2 <9.0), so 8.4 is in
-# range. No version here is sacred — this is simply the best-compatible,
-# fully-verified set. See docs/RUNTIME_ENVIRONMENT_LOCK.md.
+# The provisioned PHP/Composer pair is deliberately a supported local
+# reference, not a second patch-pinned release policy. CI and platform
+# launchers may exercise newer references inside the compatibility ranges.
+# See docs/RUNTIME_ENVIRONMENT_LOCK.md for the binding ranges and evidence
+# requirements.
 #
 # Idempotent: re-running refreshes the runtime in place. The database cluster
 # is only initialised if .runtime/pgdata does not already exist.
@@ -40,6 +41,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 PHP_PKG="@libphp/amazon-linux-2023-v84"
+PHP_PKG_VERSION="0.0.8"
 PG_PKG="@embedded-postgres/linux-x64"
 PG_VERSION="18.4.0-beta.17"
 
@@ -55,9 +57,9 @@ npm_tarball() { # $1 = url-encoded package, $2 = optional exact version
   fi
 }
 
-log "Provisioning PHP 8.4 (native, self-contained) from npm: $PHP_PKG"
+log "Provisioning PHP 8.4 (native, self-contained) from npm: $PHP_PKG@$PHP_PKG_VERSION"
 mkdir -p "$TMP/php"
-curl -fsSL "$(npm_tarball '@libphp%2Famazon-linux-2023-v84')" -o "$TMP/php.tgz"
+curl -fsSL "$(npm_tarball '@libphp%2Famazon-linux-2023-v84' "$PHP_PKG_VERSION")" -o "$TMP/php.tgz"
 tar -xzf "$TMP/php.tgz" -C "$TMP/php"
 rm -rf "$RT/php" "$RT/lib"
 mkdir -p "$RT/php" "$RT/lib"
@@ -228,8 +230,8 @@ fi
 log "Installing PHP dependencies (composer install, dist from api.github.com)"
 ( cd "$ROOT" && "$RT/bin/composer" install --no-interaction --no-progress --prefer-dist )
 
-log "Installing frontend dependencies (npm)"
-( cd "$ROOT" && npm install --no-audit --no-fund )
+log "Installing frontend dependencies from the committed lock (npm ci)"
+( cd "$ROOT" && npm ci --engine-strict --no-audit --no-fund )
 
 log "Runtime provisioned."
 cat <<'DONE'

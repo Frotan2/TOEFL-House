@@ -140,7 +140,14 @@ final class CirculateBooks
     private function close(Actor $actor, BookIssuance $issuance, string $toState, ?string $returnedOn, ?string $lossEvidence, string $idempotencyKey): array
     {
         $verb = $toState === ResourceLifecycle::ISSUANCE_RETURNED ? 'return' : 'loss';
-        $payload = hash('sha256', implode('|', ['resources.books.'.$verb, $issuance->id, $toState, $actor->actorId]));
+        $payload = hash('sha256', implode('|', [
+            'resources.books.'.$verb,
+            $issuance->id,
+            $toState,
+            $returnedOn ?? '',
+            $lossEvidence ?? '',
+            $actor->actorId,
+        ]));
 
         try {
             return $this->idempotency->execute('resources.books.'.$verb, $idempotencyKey, $payload,
@@ -155,6 +162,9 @@ final class CirculateBooks
                         throw BusinessRejection::forCode('resources.borrower_organization_mismatch', 'a book borrower must remain inside the copy organization');
                     }
                     ResourceLifecycle::requireIssuanceTransition($locked->lifecycle_state, $toState);
+                    if ($toState === ResourceLifecycle::ISSUANCE_RETURNED && ($returnedOn === null || $returnedOn < $locked->issued_on)) {
+                        throw BusinessRejection::forCode('resources.issuance_returned_on', 'the return date cannot precede the issue date');
+                    }
 
                     $before = ['lifecycle_state' => $locked->lifecycle_state];
                     $locked->forceFill(['lifecycle_state' => $toState]);

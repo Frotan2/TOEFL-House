@@ -10,6 +10,14 @@ use Illuminate\Database\Eloquent\Model;
  * Idempotency and retry ledger for one (domain event, consumer) pair. This
  * is delivery/processing state, not domain truth; it is safe to rebuild or
  * replay from the immutable domain_events log.
+ *
+ * @property string $id
+ * @property string $event_id
+ * @property string $consumer_key
+ * @property 'pending'|'processing'|'succeeded'|'failed'|'dead_letter' $status
+ * @property int $attempts
+ * @property int $max_attempts
+ * @property int $replay_count
  */
 final class ConsumerReceipt extends Model
 {
@@ -21,7 +29,7 @@ final class ConsumerReceipt extends Model
 
     protected $fillable = [
         'id', 'event_id', 'consumer_key', 'status', 'attempts', 'max_attempts',
-        'next_attempt_at', 'last_error', 'processed_at',
+        'next_attempt_at', 'last_error', 'processed_at', 'replay_count',
     ];
 
     protected $casts = [
@@ -29,5 +37,6 @@ final class ConsumerReceipt extends Model
         'claimed_at' => 'datetime',
         'lease_until' => 'datetime',
         'processed_at' => 'datetime',
+        'replay_count' => 'integer',
     ];
 }

@@ -15,8 +15,8 @@ use Tests\Support\TestDatabaseGuard;
  * is rolled back on teardown.
  *
  * This is deliberately not `DatabaseMigrations`, which replays the full
- * migration chain (185 migrations) for every single test. Both give each test
- * a pristine database; only the cost differs. PostgreSQL supports
+ * migration chain for every single test. Both give each test a pristine
+ * database; only the cost differs. PostgreSQL supports
  * transactional DDL, so tests that issue statements such as
  * `ALTER TABLE ... DISABLE TRIGGER` are still rolled back correctly.
  */

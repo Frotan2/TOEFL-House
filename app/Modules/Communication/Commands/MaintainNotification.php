@@ -7,6 +7,7 @@ namespace App\Modules\Communication\Commands;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Communication\Models\Notification;
+use App\Modules\Communication\Models\NotificationRecipientState;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\AccessDecision;
@@ -19,11 +20,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Owns notification read/dismiss projection state only. Recipient identity
- * and current notification lifecycle are rechecked under lock; this command
- * never acknowledges the linked domain action.
- */
+/** Owns only recipient notification projection state; never acknowledges source work. */
 final class MaintainNotification
 {
     public const CAPABILITY = 'communication.notification.read';
@@ -43,7 +40,6 @@ final class MaintainNotification
     public function transition(Actor $actor, Notification $notification, string $toState, string $idempotencyKey): array
     {
         $payload = hash('sha256', implode('|', ['communication.notification.'.$toState, $notification->id, $actor->actorId]));
-
         try {
             return $this->idempotency->execute('communication.notification.'.$toState, $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($actor, $notification, $toState): array {
@@ -53,13 +49,9 @@ final class MaintainNotification
                         throw AuthorizationDenied::forCode('communication.notification_recipient_denied', 'only the notification recipient may change read state');
                     }
                     if ($locked->branch_id !== null && trim((string) $locked->branch_id) !== '') {
-                        if ($locked->scope_type !== 'branch') {
+                        if ($locked->scope_type !== 'branch' || trim((string) $locked->organization_id) === '') {
                             throw AuthorizationDenied::forCode('communication.notification_denied', 'notification scope provenance is inconsistent');
                         }
-                        if (trim((string) $locked->organization_id) === '') {
-                            throw AuthorizationDenied::forCode('communication.notification_denied', 'branch notification provenance is incomplete');
-                        }
-                        /** @var Branch $branch */
                         $branch = Branch::query()->whereKey($locked->branch_id)->first();
                         if ($branch === null) {
                             throw AuthorizationDenied::forCode('communication.notification_denied', 'notification branch provenance is unknown');
@@ -81,24 +73,42 @@ final class MaintainNotification
                         if ($organization === null || $organization->lifecycle_state !== 'active') {
                             throw AuthorizationDenied::forCode('communication.notification_denied', 'notification organization provenance is not active');
                         }
-                        $outcome = $this->access->decide($actor, self::CAPABILITY, new StructureScope($organization->id));
+                        $outcome = $this->access->decide($actor, self::CAPABILITY, StructureScope::organization($organization->id));
                         if (! $outcome->allowed) {
                             throw AuthorizationDenied::forCode('communication.notification_denied', $outcome->reason);
                         }
                     }
-                    if (! in_array($toState, ['read', 'dismissed'], true) || $locked->lifecycle_state === 'dismissed') {
-                        throw BusinessRejection::forCode('communication.notification_transition', 'notification state can move from unread/read to read or dismissed');
+                    if (! in_array($toState, ['read', 'dismissed'], true)) {
+                        throw BusinessRejection::forCode('communication.notification_transition', 'notification state can move only to read or dismissed');
                     }
-
-                    $before = ['lifecycle_state' => $locked->lifecycle_state, 'branch_id' => $locked->branch_id, 'organization_id' => $locked->organization_id];
+                    /** @var NotificationRecipientState $state */
+                    $state = NotificationRecipientState::query()
+                        ->where('notification_id', $locked->id)
+                        ->where('recipient_actor_id', $actor->actorId)
+                        ->lockForUpdate()->firstOrFail();
+                    if ($state->lifecycle_state === 'dismissed') {
+                        throw BusinessRejection::forCode('communication.notification_transition', 'dismissed notification state is terminal');
+                    }
                     $changes = ['lifecycle_state' => $toState];
                     if ($toState === 'read') {
                         $changes['read_at'] = now();
-                    } else {
+                    }
+                    if ($toState === 'dismissed') {
                         $changes['dismissed_at'] = now();
                     }
-                    $locked->forceFill($changes)->save();
-                    $event = $this->audit->record($actor->actorId, 'communication.notification.'.$toState, 'notification', $locked->id, $before, ['lifecycle_state' => $toState, 'branch_id' => $locked->branch_id, 'organization_id' => $locked->organization_id]);
+                    $state->forceFill($changes)->save();
+
+                    // Legacy notification columns remain a compatibility mirror only.
+                    $mirror = ['lifecycle_state' => $toState];
+                    if ($toState === 'read') {
+                        $mirror['read_at'] = $state->read_at;
+                    }
+                    if ($toState === 'dismissed') {
+                        $mirror['dismissed_at'] = $state->dismissed_at;
+                    }
+                    $locked->forceFill($mirror)->save();
+                    $event = $this->audit->record($actor->actorId, 'communication.notification.'.$toState, 'notification', $locked->id,
+                        ['lifecycle_state' => $locked->getOriginal('lifecycle_state')], ['lifecycle_state' => $toState]);
 
                     return ['notification_id' => $locked->id, 'status' => $toState, 'correlation_id' => $event->correlation_id];
                 }),

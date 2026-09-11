@@ -11,6 +11,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\OperatesStructure;
 use Tests\TestCase;
@@ -105,15 +106,23 @@ final class BranchTransferFeatureTest extends TestCase
         $secondCampus = $this->establishActiveCampus($organization, 'Second');
         $branch = $this->establishActiveBranch($firstCampus);
 
-        $this->expectException(QueryException::class);
-        CampusAssignment::query()->create([
-            'id' => RandomIdentifier::new(),
-            'branch_id' => $branch->id,
-            'campus_id' => $secondCampus->id,
-            'effective_from' => '2026-09-01',
-            'effective_to' => null,
-            'transfer_correlation_id' => 'race-simulation',
-        ]);
+        DB::beginTransaction();
+        try {
+            CampusAssignment::query()->create([
+                'id' => RandomIdentifier::new(),
+                'branch_id' => $branch->id,
+                'campus_id' => $secondCampus->id,
+                'effective_from' => '2026-09-01',
+                'effective_to' => null,
+                'transfer_correlation_id' => 'race-simulation',
+            ]);
+            $this->fail('a second open campus attribution must be rejected');
+        } catch (QueryException $exception) {
+            $this->assertSame('23505', $exception->errorInfo[0] ?? null);
+            $this->assertStringContainsString('campus_assignments_one_open_per_branch', $exception->getMessage());
+        } finally {
+            DB::rollBack();
+        }
     }
 
     public function test_closed_historical_attribution_cannot_overlap_the_current_attribution(): void
@@ -125,15 +134,26 @@ final class BranchTransferFeatureTest extends TestCase
 
         // This does not violate the old one-open-row index, but it creates
         // two effective organization roots during March 2026 and must fail.
-        $this->expectException(QueryException::class);
-        CampusAssignment::query()->create([
-            'id' => RandomIdentifier::new(),
-            'branch_id' => $branch->id,
-            'campus_id' => $secondCampus->id,
-            'effective_from' => '2026-03-01',
-            'effective_to' => '2026-04-01',
-            'transfer_correlation_id' => 'overlap-probe',
-        ]);
+        // A nested transaction preserves the outer RefreshDatabase transaction
+        // after PostgreSQL rejects the statement, so the assertion proves this
+        // named exclusion boundary rather than merely observing any DB error.
+        DB::beginTransaction();
+        try {
+            CampusAssignment::query()->create([
+                'id' => RandomIdentifier::new(),
+                'branch_id' => $branch->id,
+                'campus_id' => $secondCampus->id,
+                'effective_from' => '2026-03-01',
+                'effective_to' => '2026-04-01',
+                'transfer_correlation_id' => 'overlap-probe',
+            ]);
+            $this->fail('an overlapping historical campus attribution must be rejected');
+        } catch (QueryException $exception) {
+            $this->assertSame('23P01', $exception->errorInfo[0] ?? null);
+            $this->assertStringContainsString('campus_assignments_no_effective_overlap', $exception->getMessage());
+        } finally {
+            DB::rollBack();
+        }
     }
 
     /**

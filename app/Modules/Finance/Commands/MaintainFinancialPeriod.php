@@ -96,7 +96,7 @@ final class MaintainFinancialPeriod
                     // the period must already be journalized. A period with an
                     // un-journalized obligation, payment, discount, refund, fund
                     // allocation, payroll liability, or expense cannot be closed.
-                    $unresolved = $this->ledger->completeness($locked->id)['unresolved'];
+                    $unresolved = $this->ledger->completenessForPeriodClose($locked->id)['unresolved'];
                     if ($unresolved !== []) {
                         throw BusinessRejection::forCode('finance.period_incomplete_ledger', sprintf('%d money facts in this period are not yet journalized; complete the ledger before closing', count($unresolved)));
                     }

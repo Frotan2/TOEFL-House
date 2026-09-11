@@ -54,7 +54,10 @@ final class ProcessJobRun
     private function executeClaimed(Actor $actor, string $runId): array
     {
         $claim = DB::transaction(function () use ($actor, $runId): array {
-            $this->require($actor);
+            // Do not reveal a run to someone who cannot operate scheduled
+            // work at all. Job-specific authority is checked after the row is
+            // locked and before it is claimed.
+            $this->require($actor, [self::CAPABILITY]);
 
             /** @var JobRun|null $locked */
             $locked = JobRun::query()->whereKey($runId)->lockForUpdate()->first();
@@ -74,6 +77,7 @@ final class ProcessJobRun
             }
 
             $handlerClass = JobCatalog::handlerFor($locked->job_key);
+            $this->require($actor, JobCatalog::executionCapabilitiesFor((string) $locked->job_key));
             $attempts = ((int) $locked->attempts) + 1;
             $locked->forceFill([
                 'status' => 'processing',
@@ -191,11 +195,17 @@ final class ProcessJobRun
         });
     }
 
-    private function require(Actor $actor): void
+    /** @param list<string> $capabilities */
+    private function require(Actor $actor, array $capabilities): void
     {
-        $outcome = $this->access->decide($actor, self::CAPABILITY, null);
-        if (! $outcome->allowed) {
-            throw AuthorizationDenied::forCode('integrations.jobs_denied', $outcome->reason);
+        foreach ($capabilities as $capability) {
+            $outcome = $this->access->decide($actor, $capability, null);
+            if (! $outcome->allowed) {
+                throw AuthorizationDenied::forCode(
+                    $capability === self::CAPABILITY ? 'integrations.jobs_denied' : 'integrations.job_execution_denied',
+                    $outcome->reason,
+                );
+            }
         }
     }
 }

@@ -104,8 +104,8 @@ Locked in `docs/TESTING_STRATEGY_LOCK.md` and enforced by
 
 - `tests/TestCase.php` uses **`RefreshDatabase`** — migrate once per process,
   roll back a transaction per test.
-- `DatabaseMigrations` is **prohibited**: it replays all 185 migrations per
-  test. Measured on 27 tests: **62.9s → 3.0s (~21×)**.
+- `DatabaseMigrations` is **prohibited**: it replays the full current migration
+  chain per test. Measured on 27 tests: **62.9s → 3.0s (~21×)**.
 - PostgreSQL only. SQLite is deliberately compiled out of the PHP build.
 - PostgreSQL's transactional DDL is why tests that issue
   `ALTER TABLE ... DISABLE TRIGGER` still roll back.
@@ -183,8 +183,8 @@ diagnose it (see the orphaned-process section of the strategy lock).
 ## 9. CI
 
 `.github/workflows/verification.yml` runs the frontend gates, static analysis
-and audits, the runtime environment lock, the full 185-migration replay,
-database invariants, concurrency, and the PHPUnit suite (which includes the
+and audits, the runtime environment lock, the full current migration-chain
+replay, database invariants, concurrency, and the PHPUnit suite (which includes the
 strategy lock). Browser E2E runs where a Chromium binary is available via
 `CHROMIUM_PATH`.
 

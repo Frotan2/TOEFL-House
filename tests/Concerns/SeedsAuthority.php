@@ -118,6 +118,7 @@ trait SeedsAuthority
     protected function personWithAuthority(string $personId, array $capabilities, ?string $homeBranchId = null): Person
     {
         $this->ensureBootstrapAuthority();
+        $requestedHomeBranchId = $homeBranchId === null ? null : trim($homeBranchId);
         if (! isset($this->authorityPeople[$personId])) {
             $this->authorityPeople[$personId] = Person::query()->create([
                 'id' => $personId,
@@ -130,10 +131,15 @@ trait SeedsAuthority
                 'verified_at' => now()->toDateTimeString(),
                 // Set at creation: a verified person is immutable, so home
                 // provenance cannot be attached by a later UPDATE.
-                'home_branch_id' => $this->bootstrapBranchId,
+                'home_branch_id' => $requestedHomeBranchId !== null && $requestedHomeBranchId !== ''
+                    ? $requestedHomeBranchId
+                    : $this->bootstrapBranchId,
             ]);
         }
         $person = $this->authorityPeople[$personId];
+        if ($requestedHomeBranchId !== null && $requestedHomeBranchId !== '' && $person->home_branch_id !== $requestedHomeBranchId) {
+            throw new \LogicException("Authority fixture {$personId} already has a different home branch");
+        }
         $this->authorityCapabilities[$personId] = array_values(array_unique(array_merge(
             $this->authorityCapabilities[$personId] ?? [],
             $capabilities,
@@ -216,6 +222,7 @@ trait SeedsAuthority
                 'identity_evidence_ref' => 'evidence/fixture/'.$personId,
                 'verified_by' => 'fixture-verifier',
                 'verified_at' => now()->toDateTimeString(),
+                'home_branch_id' => $this->bootstrapBranchId,
             ]);
         }
 

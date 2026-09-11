@@ -2,26 +2,34 @@
 
 **STATUS: ACTIVE / CANONICAL / NORMATIVE**  
 **Authority:** `main` + `.github/workflows/verification.yml`  
-**Last reconciled:** 2026-09-09  
-**Purpose:** Single source of truth for supported runtime, verification layers, evidence semantics and release certification.
+**Last reconciled:** 2026-09-10
+**Purpose:** Single source of truth for release policy, verification layers, evidence semantics and release certification.
 
-> This is the only current runtime/release control document. It deliberately does not hard-code a commit SHA or workflow run number because every material repository change can supersede the previous evidence.
+> This is the current runtime/release control document. Its technical compatibility
+> ranges are defined by [`RUNTIME_ENVIRONMENT_LOCK.md`](RUNTIME_ENVIRONMENT_LOCK.md),
+> whose machine enforcer deploys and CI run. This document deliberately does not
+> hard-code a commit SHA or workflow run number because every material repository
+> change can supersede the previous evidence.
 
-## 1. Locked verification environment
+## 1. Runtime compatibility and execution references
 
-| Component | Required version | Enforcement |
-|---|---:|---|
-| PHP | **8.4.25** | CI + `npm run verify:environment` |
-| Composer | **2.10.3** | CI + environment verification |
-| Laravel | **12.67.0** | `composer.lock` / `composer.json` |
-| PostgreSQL | **18.4** | CI service + environment verification |
-| Node | **22.22.3** | CI + `package.json` engines |
-| npm | **10.9.8** | CI + package engines |
-| React | **19.1.1** | package lock |
-| Vite | **7.3.6** | package lock |
-| TypeScript | **5.9.x** | package lock |
+| Component | Supported range | CI / Windows reference | Reproducible local reference |
+|---|---|---:|---:|
+| PHP | `>=8.2 <8.5` | 8.4.25 | 8.4.14 |
+| Composer | `>=2.5 <3` | 2.10.3 | 2.9.2 |
+| Laravel | `>=12.67 <13.0` | 12.67.0 | 12.67.0 |
+| PostgreSQL | `>=18.0 <19.0` | 18.4 | 18.4 |
+| Node | `>=22.0 <23.0` | 22.22.3 | 22.22.3 |
+| npm | `>=10.0 <11.0` | 10.9.8 | 10.9.8 |
+| React | lockfile-controlled | 19.1.1 | 19.1.1 |
+| Vite | lockfile-controlled | 7.3.6 | 7.3.6 |
+| TypeScript | lockfile-controlled | 5.9.x | 5.9.x |
 
-PostgreSQL is the only supported database. SQLite is not a fallback. Laravel 13 is prohibited for this release line.
+CI and platform launchers intentionally use concrete reference versions inside
+the supported ranges. Host eligibility is enforced by the compatibility lock,
+not by duplicating those patch pins in deployment code. PostgreSQL is the only
+supported database, SQLite is not a fallback, and Laravel 13 is prohibited for
+this release line.
 
 Any runtime or dependency change requires fresh applicable verification.
 
@@ -48,8 +56,48 @@ vendor/bin/phpunit --no-coverage
 npm run typecheck
 npm run build
 npm run test:frontend
+npm run test:runtime-safety
 npm run verify:browser
 ```
+
+### PostgreSQL verification safety and scope
+
+Run `verify:invariants` and `verify:concurrency` only after a fresh migration on
+an isolated, disposable verification database. Both commands deliberately write
+short-lived probe rows; the invariant command rolls every probe back, while the
+concurrency command verifies and removes its committed race fixtures. They fail
+closed for database names that do not identify a disposable target (`dev`,
+`test`, `ci`, `e2e`, or `verify`) unless an operator explicitly sets
+`RUNTIME_VERIFICATION_ALLOW_MUTATING_DATABASE=1`. That escape hatch is for a
+reviewed non-production rehearsal only, never a live business database.
+
+Before either command writes, it opens one timeout-bounded transaction, proves
+that its connected verifier role can run `SET LOCAL session_replication_role =
+'replica'`, reads the setting back, and rolls the transaction back. The verifier
+login must therefore be either a PostgreSQL superuser or a dedicated role granted
+that parameter privilege by a database administrator:
+
+```sql
+GRANT SET ON PARAMETER session_replication_role TO toefl_house_verifier;
+```
+
+The grant is intentionally insufficient on its own: the verifier also needs the
+DML privileges that the scripts preflight on their real fixture tables, and the
+invariant verifier must be authorized to execute `ALTER TABLE ... DISABLE TRIGGER
+USER` on `payments`, `enrollments`, `classes`, and `journal_lines`. The commands
+fail before fixture writes if those checks fail. Never grant this trigger-bypass
+capability to the normal application role; use a dedicated verifier only on the
+isolated disposable database.
+
+The invariant command asserts the exact named PostgreSQL check, foreign-key and
+unique-index boundaries reached by each probe, rather than accepting an earlier
+workflow trigger or an unrelated foreign-key failure. Both commands pin their
+connection `search_path` to `public`, preventing a verifier role's personal
+schema from shadowing the migrated application tables. The concurrency command
+uses independent PostgreSQL backends against the actual `idempotency_keys`,
+`scope_grants`, `org_wide_grant_requests`, and `accounts` tables; it creates no
+mirror schema. Do not run either command concurrently with migrations or the
+transaction-wrapped PHPUnit database suite.
 
 The official Verification workflow is authoritative for CI conclusions.
 

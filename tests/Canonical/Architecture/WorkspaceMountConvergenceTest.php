@@ -21,6 +21,7 @@ final class WorkspaceMountConvergenceTest extends CanonicalTestCase
         'teachers' => '/teachers',
         'crm' => '/crm',
         'management' => '/management',
+        'documents' => '/documents',
     ];
 
     public function test_each_console_route_is_served_by_the_shared_workspace_shell(): void
@@ -44,6 +45,7 @@ final class WorkspaceMountConvergenceTest extends CanonicalTestCase
             'teachers' => ['TeacherApp', 'TeacherDayApp'],
             'crm' => ['CrmApp', 'FrontOfficeApp'],
             'management' => ['ManagementApp'],
+            'documents' => ['DocumentsApp'],
         ];
 
         $this->assertStringContainsString('switch (view as ConsoleView | null)', $bootstrap);

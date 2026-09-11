@@ -7,7 +7,9 @@ namespace App\Modules\Integrations\Jobs;
 use App\Modules\Integrations\Domain\DeliveryProcessor;
 use App\Modules\Integrations\Domain\JobHandler;
 use App\Modules\Integrations\Models\IntegrationDelivery;
+use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
+use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 
 /**
@@ -18,11 +20,14 @@ use App\Support\Errors\BusinessRejection;
  */
 final class IntegrationRetrySweepJob implements JobHandler
 {
+    public const CAPABILITY = 'integrations.process';
+
     private const DEFAULT_BATCH = 100;
 
     private const MAX_BATCH = 500;
 
     public function __construct(
+        private readonly AccessDecision $access,
         private readonly DeliveryProcessor $processor,
     ) {}
 
@@ -41,6 +46,11 @@ final class IntegrationRetrySweepJob implements JobHandler
         $batch = max(1, min(self::MAX_BATCH, $batch));
 
         $operator = new Actor($runBy, 'Integration Sweep');
+        $decision = $this->access->decide($operator, self::CAPABILITY, null);
+        if (! $decision->allowed) {
+            throw AuthorizationDenied::forCode('integrations.process_denied', $decision->reason);
+        }
+
         $due = IntegrationDelivery::query()
             ->where(function ($state): void {
                 $state->whereIn('status', ['queued', 'failed'])

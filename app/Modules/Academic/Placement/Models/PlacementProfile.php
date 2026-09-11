@@ -10,6 +10,7 @@ use App\Modules\Academic\Models\ProgramVersion;
 use App\Modules\Academic\Models\ProgramVersionLevel;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Identity\Models\Person;
+use App\Support\Errors\AuthorizationDenied;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -72,6 +73,33 @@ final class PlacementProfile extends Model
         'reviewed_by', 'approved_by', 'released_by', 'created_by',
         'placement_recommendation_id', 'academic_eligibility_snapshot_id', 'lineage_version',
     ];
+
+    protected static function booted(): void
+    {
+        self::updating(function (self $profile): void {
+            if ($profile->getOriginal('lifecycle_state') !== self::STATE_APPROVED
+                || $profile->lifecycle_state !== self::STATE_RELEASED) {
+                return;
+            }
+
+            $releaser = trim((string) $profile->released_by);
+            $approver = trim((string) $profile->approved_by);
+            $reviewer = trim((string) $profile->reviewed_by);
+
+            if ($releaser === '') {
+                throw AuthorizationDenied::forCode(
+                    'placement.release_signer_required',
+                    'a released placement profile requires attributable release signer provenance',
+                );
+            }
+            if ($releaser === $approver || $releaser === $reviewer) {
+                throw AuthorizationDenied::forCode(
+                    'placement.release_not_independent',
+                    'the placement releaser must differ from both the approver and reviewer',
+                );
+            }
+        });
+    }
 
     /** @return BelongsTo<Person, $this> */
     public function person(): BelongsTo

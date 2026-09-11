@@ -30,8 +30,8 @@ modified to make the environment work.
 
 The sandbox has no PHP and cannot reach `deb.debian.org`, `php.net` or GitHub
 release assets. A php-wasm build was rejected: it has **no `pdo_pgsql`**, and
-137 of the 185 migrations use PostgreSQL-specific SQL, so SQLite substitution
-is both prohibited and useless here.
+the then-current migration chain used PostgreSQL-specific SQL, so SQLite
+substitution was both prohibited and useless there.
 
 PHP was therefore **built from official source**:
 

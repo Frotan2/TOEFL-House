@@ -48,6 +48,7 @@ use App\Modules\Finance\Models\ScholarshipAward;
 use App\Modules\Finance\Queries\GeneralLedgerQuery;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
+use App\Modules\Organization\Models\Organization;
 use App\Modules\Payroll\Models\SettlementProposal;
 use App\Support\Errors\AuthorizationDenied;
 use Illuminate\Http\JsonResponse;
@@ -626,6 +627,33 @@ final class FinanceApiController extends Controller
         return response()->json(['status' => 'approved', ...$result]);
     }
 
+    /**
+     * Bootstrap the only organization choices that may be supplied to the
+     * ledger endpoints. This is an authorization projection, not a client
+     * hint: each statement request rechecks the submitted organization.
+     */
+    public function glBootstrap(): JsonResponse
+    {
+        $organizations = Organization::query()
+            ->whereIn('id', $this->authorizedOrganizations('finance.journal'))
+            ->where('lifecycle_state', 'active')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return response()->json([
+            'organizations' => $organizations->map(static fn (Organization $organization): array => [
+                'id' => (string) $organization->id,
+                'name' => (string) $organization->name,
+            ])->values()->all(),
+            // A sole server-authorized organization is safe to preselect;
+            // multiple organizations intentionally require an explicit user
+            // choice rather than client-side guessing.
+            'default_organization_id' => $organizations->count() === 1
+                ? (string) $organizations->first()->id
+                : null,
+        ]);
+    }
+
     public function glTrialBalance(Request $request): JsonResponse
     {
         $input = $request->validate([
@@ -654,9 +682,10 @@ final class FinanceApiController extends Controller
     {
         $input = $request->validate([
             'period_id' => ['nullable', 'string'],
+            'organization_id' => ['required', 'string'],
         ]);
-        $this->requireOrganizationRead('finance.journal', 'finance.glcompleteness', 'journal');
-        $ledger = app(GeneralLedgerQuery::class)->completeness($input['period_id'] ?? null);
+        $this->requireOrganizationInScope('finance.journal', $input['organization_id'], 'finance.glcompleteness', 'journal');
+        $ledger = app(GeneralLedgerQuery::class)->completeness($input['period_id'] ?? null, $input['organization_id']);
 
         return response()->json($ledger);
     }

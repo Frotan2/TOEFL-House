@@ -2,31 +2,27 @@
 
 **Status:** BASELINE DEFERRED — SCHEMA FREEZE REQUIRED
 
-> **Progress note (2026-09-09):** the environment limitation cited below no
-> longer holds — the locked runtime (PostgreSQL 18.4 via
-> `scripts/runtime/provision.sh`) now exists, and the **entire 185-migration
-> chain has been replayed from zero (185/185)** with a live schema census
-> recorded in `AUDIT-2026-09-09-FINAL-CERTIFICATION.md` §4. The deferral
-> decision itself stands: physical consolidation still requires a schema
-> freeze and the full baseline procedure of §5 before any chain removal.
+> **Progress note (2026-09-10):** the locked runtime (PostgreSQL 18.4 via
+> `scripts/runtime/provision.sh`) can replay the entire **202-migration** chain
+> from zero. The deferral decision stands: physical consolidation still requires
+> a schema freeze, a reviewed schema-only capture, and the full equivalence
+> procedure of §5 before any chain removal.
 
-**Branch:** `frontend-transformation-2026-09`
-
-**Assessment date:** 2026-09-07
+**Assessment date:** 2026-09-10
 
 ## 1. Engineering decision
 
 The migration history must **not** be blindly deleted or squashed at this point.
 
-The branch contains exactly **185 ordered migration files**, with ordinals ending at `000190` (the `000175`–`000179` numbering gap accounts for the five-file difference). The late part of the chain is not historical noise: migrations `000160`–`000190` contain active domain-convergence, authority, provenance, financial, reporting, temporal, accounting, and capacity hardening. Several are very large and materially change the canonical schema.
+The repository contains exactly **202 ordered migration files**, with ordinals ending at `000207` (the `000175`–`000179` numbering gap remains historical). The late part of the chain is not historical noise: migrations `000160`–`000207` contain active domain convergence, authority, provenance, financial, reporting, temporal, accounting, privacy, recovery, and capacity hardening. Several materially change the canonical schema.
 
-The project is still pre-production, so eventual consolidation is reasonable **after a schema freeze**, but the current environment cannot execute PostgreSQL or Laravel migrations. There is no `psql`, no Docker runtime, and no Composer/vendor installation available in the verification environment. Consequently a real schema dump, fresh-database replay, live schema diff, and existing-database reconciliation cannot honestly be certified here.
+The project remains pre-production, so eventual consolidation is reasonable **after a schema freeze**. The current environment can execute PostgreSQL and Laravel migrations, but no approved physical baseline artifact or baseline-versus-chain schema diff exists yet. A successful chain replay is necessary evidence, not a substitute for that equivalence proof.
 
-**Decision:** establish the migration chain as the current implementation baseline, prepare the repository for a canonical baseline, but defer physical consolidation until PostgreSQL runtime verification produces a deterministic schema snapshot.
+**Decision:** establish the migration chain as the current implementation baseline, prepare the repository for a canonical baseline, but defer physical consolidation until the reviewed schema snapshot and equivalence procedure produce deterministic evidence.
 
 ## 2. Current migration inventory
 
-The branch-specific Git tree contains migrations `000001` through `000190` with no files after `000190`. Numeric gaps `000175`–`000179` exist. Those gaps are not themselves defects; they are historical numbering gaps and are permitted by this policy. Duplicate migration numbers are not permitted.
+The current Git tree contains migrations `000001` through `000207`, with no files after `000207`. Numeric gaps `000175`–`000179` exist. Those gaps are not themselves defects; they are historical numbering gaps and are permitted by this policy. Duplicate migration numbers are not permitted.
 
 The migration history contains these important phases:
 
@@ -37,6 +33,7 @@ The migration history contains these important phases:
 - `000139`–`000159`: waitlist/authority/financial correction, outbox, liability, work management, reporting provenance and student/admission hardening.
 - `000160`–`000174`: current major convergence of Academic, Teacher, Placement, Finance, Reporting, Campus Assignment and CRM authority.
 - `000180`–`000190`: financial coverage, expenses, cash drawer, scholarships, journal/ledger authority, employment settlement authority and offering/class capacity protection.
+- `000191`–`000207`: resource custody/provenance/history hardening, communication and work-management convergence, release-signoff/attendance/admission guards, retired payroll authority, notification-recipient projection, teacher-employment activation, assessment lineage, privacy evidence, and reporting/integrations recovery hardening.
 
 ## 3. Canonical-schema rule
 
@@ -71,13 +68,16 @@ Without these gates the baseline status is **UNVERIFIED**, not complete.
 
 ## 6. Existing databases
 
-No existing development/staging database is reachable from the current environment. Therefore:
+No pre-existing development, staging, or production database is part of this
+repository workspace. Therefore:
 
 **DATABASE RUNTIME RECONCILIATION — UNVERIFIED**
 
-No database will be dropped, rebuilt, or assigned fake migration history as part of this phase.
-
-When runtime access is available, existing databases must first be snapshotted/backed up and compared against the canonical schema. Data preservation takes priority over migration-table cosmetic cleanup.
+No existing database will be dropped, rebuilt, or assigned fake migration
+history as part of this phase. When an existing database is brought into a
+baseline operation, snapshot/back it up first and compare it against the
+canonical schema. Data preservation takes priority over migration-table
+cosmetic cleanup.
 
 ## 7. Future migration discipline
 
@@ -94,7 +94,7 @@ The fact that the project has many migrations is **not** by itself a defect.
 
 ## 8. Verification classification
 
-Rows updated 2026-09-09 once the locked runtime existed
+Rows updated 2026-09-10 against the locked runtime
 (`scripts/runtime/provision.sh`, PostgreSQL 18.4):
 
 | Area | Status |
@@ -103,14 +103,16 @@ Rows updated 2026-09-09 once the locked runtime existed
 | Historical retirement detection | STATICALLY REVIEWED |
 | Reference-data separation design | IMPLEMENTED |
 | Canonical physical baseline | UNVERIFIED — baseline not yet generated (deferred behind schema freeze) |
-| Fresh PostgreSQL database | **VERIFIED (2026-09-09)** — 185/185 replay from zero on fresh databases, repeated per journey |
-| Existing DB reconciliation | UNVERIFIED — no pre-existing production database exists in this environment to reconcile |
+| Fresh PostgreSQL database | **VERIFIED (2026-09-10)** — current 202-file chain replayed by the transaction-isolated test process before the Academic suite |
+| Existing DB reconciliation | UNVERIFIED — no pre-existing production database is available in this workspace to reconcile |
 | Old-chain vs baseline schema diff | UNVERIFIED — baseline not yet generated |
-| PostgreSQL constraint execution | **VERIFIED (2026-09-09)** — invariant (6/6) and concurrency (4/4) gates executed against the migrated schema |
-| Laravel migration/runtime boot | **VERIFIED (2026-09-09)** — full suite and three real-HTTP journeys booted the application on the locked runtime |
+| PostgreSQL constraint execution | **VERIFIED (2026-09-10)** — 6/6 exact named invariant boundaries and 4/4 real production-table concurrency races passed on the migrated schema |
+| Laravel migration/runtime boot | **VERIFIED (2026-09-10)** — the Academic suite booted the application on the locked runtime |
 
 ## 9. Required next runtime operation
 
 Run the migration-chain replay in a disposable PostgreSQL database, export the schema-only definition, and use that exact artifact as the input to physical baseline construction. The repository must not claim `DATABASE CONVERGED` until the fresh-baseline replay and schema equivalence checks are runtime-verified.
 
-The first half of this operation (fresh replay) is now routine — it is exactly what `migrate:fresh` did for the 2026-09-09 certification. What remains gated is the *baseline construction and equivalence proof* itself, pending a schema freeze.
+The first half of this operation (fresh replay) is now routine on the current
+202-file chain. What remains gated is the *baseline construction and equivalence
+proof* itself, pending a schema freeze.

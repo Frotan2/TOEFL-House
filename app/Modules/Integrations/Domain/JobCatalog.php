@@ -20,6 +20,19 @@ final class JobCatalog
         'outbox.relay' => DomainEventRelayJob::class,
     ];
 
+    /**
+     * Capabilities that are required in addition to integrations.jobs, which
+     * is checked by the enqueue/process commands themselves. Keep this next
+     * to the handler registry: a job may never silently gain a privileged
+     * execution path merely because it is added to the scheduler catalog.
+     *
+     * @var array<string, list<string>>
+     */
+    public const EXECUTION_CAPABILITIES = [
+        'integrations.retry_sweep' => [IntegrationRetrySweepJob::CAPABILITY],
+        'outbox.relay' => [DomainEventRelayJob::CAPABILITY],
+    ];
+
     /** @return list<string> */
     public static function keys(): array
     {
@@ -35,5 +48,19 @@ final class JobCatalog
         }
 
         return $handler;
+    }
+
+    /** @return list<string> */
+    public static function executionCapabilitiesFor(string $jobKey): array
+    {
+        // Assert catalog membership first, rather than treating an absent map
+        // entry as a harmless unprivileged job.
+        self::handlerFor($jobKey);
+        $capabilities = self::EXECUTION_CAPABILITIES[$jobKey] ?? null;
+        if ($capabilities === null) {
+            throw BusinessRejection::forCode('integrations.job_capabilities_missing', sprintf('job %s has no execution capability declaration', $jobKey));
+        }
+
+        return $capabilities;
     }
 }

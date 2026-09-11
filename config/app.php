@@ -56,6 +56,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Employee API rate limit
+    |--------------------------------------------------------------------------
+    |
+    | The interactive API is session-authenticated, so its allowance is
+    | enforced per authenticated account rather than per shared office IP.
+    | It remains deliberately bounded even if an environment value is
+    | malformed; AppServiceProvider clamps it to the safe 1–600 range.
+    |
+    */
+
+    'employee_api_rate_limit_per_minute' => (int) env('EMPLOYEE_API_RATE_LIMIT_PER_MINUTE', 120),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

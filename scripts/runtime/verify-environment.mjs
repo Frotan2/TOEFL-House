@@ -1,9 +1,11 @@
 /**
  * Runtime environment contract check.
  *
- * Machine-checkable enforcement of the supported runtime contract. The locked
- * exact versions come from docs/RUNTIME_ENVIRONMENT_LOCK.md; keeping the
- * verifier on ranges would allow unverified patch/minor drift to pass CI.
+ * Machine-checkable enforcement of the supported runtime ranges recorded in
+ * docs/RUNTIME_ENVIRONMENT_LOCK.md. CI and platform launchers may use a
+ * concrete patch-version reference, but the verifier deliberately validates
+ * the approved compatibility range so a reproducible supported host is not
+ * rejected merely because it uses a different verified patch release.
  *
  * Run: npm run verify:environment
  */
@@ -28,16 +30,25 @@ const parse = (v) => {
   return m ? { major: +m[1], minor: +(m[2] ?? 0), patch: +(m[3] ?? 0), raw: m[0] } : null;
 };
 
-function exact(version, expected) {
-  return version?.raw === expected;
+function compare(left, right) {
+  for (const part of ['major', 'minor', 'patch']) {
+    if (left[part] !== right[part]) return left[part] < right[part] ? -1 : 1;
+  }
+
+  return 0;
+}
+
+function withinRange(version, lock) {
+  return version !== null && compare(version, lock.min) >= 0 && compare(version, lock.max) < 0;
 }
 
 const LOCK = {
-  php: { exact: '8.4.25', min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
-  composer: { exact: '2.10.3', min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
-  node: { exact: '22.22.3', min: { major: 22, minor: 0, patch: 0 }, max: { major: 23, minor: 0, patch: 0 } },
-  npm: { exact: '10.9.8', min: { major: 10, minor: 0, patch: 0 }, max: { major: 11, minor: 0, patch: 0 } },
-  postgres: { exact: '18.4', min: { major: 18, minor: 0, patch: 0 }, max: { major: 19, minor: 0, patch: 0 } },
+  php: { range: '>=8.2 <8.5', min: { major: 8, minor: 2, patch: 0 }, max: { major: 8, minor: 5, patch: 0 } },
+  composer: { range: '>=2.5 <3', min: { major: 2, minor: 5, patch: 0 }, max: { major: 3, minor: 0, patch: 0 } },
+  node: { range: '>=22.0 <23.0', min: { major: 22, minor: 0, patch: 0 }, max: { major: 23, minor: 0, patch: 0 } },
+  npm: { range: '>=10.0 <11.0', min: { major: 10, minor: 0, patch: 0 }, max: { major: 11, minor: 0, patch: 0 } },
+  postgres: { range: '>=18.0 <19.0', min: { major: 18, minor: 0, patch: 0 }, max: { major: 19, minor: 0, patch: 0 } },
+  laravel: { range: '>=12.67 <13.0', min: { major: 12, minor: 67, patch: 0 }, max: { major: 13, minor: 0, patch: 0 } },
 };
 
 const REQUIRED_EXTENSIONS = [
@@ -48,8 +59,7 @@ const REQUIRED_EXTENSIONS = [
 
 const phpRaw = run('php', ['-r', 'echo PHP_VERSION;']);
 const php = parse(phpRaw);
-const phpSupported = php !== null && php.major === 8 && php.minor >= 2 && php.minor < 5;
-record('PHP exact locked version', exact(php, LOCK.php.exact), `${phpRaw ?? 'php not found'} (supported=${phpSupported})`);
+record('PHP within supported range', withinRange(php, LOCK.php), `${phpRaw ?? 'php not found'} (required ${LOCK.php.range})`);
 
 const extRaw = run('php', ['-r', 'echo implode(",", get_loaded_extensions());']);
 const loaded = new Set((extRaw ?? '').toLowerCase().split(',').map((e) => e.trim()));
@@ -65,20 +75,19 @@ record('Active database contract is PostgreSQL', dbConnection === 'pgsql', `DB_C
 
 const composerRaw = run('composer', ['--version', '--no-ansi']);
 const composer = parse(composerRaw);
-record('Composer exact locked version', exact(composer, LOCK.composer.exact), `${composerRaw?.split('\n')[0] ?? 'composer not found'} (supported >=2.5 <3)`);
+record('Composer within supported range', withinRange(composer, LOCK.composer), `${composerRaw?.split('\n')[0] ?? 'composer not found'} (required ${LOCK.composer.range})`);
 
 const node = parse(process.version);
-record('Node exact locked version', exact(node, LOCK.node.exact), `${process.version} (supported >=22 <23)`);
+record('Node within supported range', withinRange(node, LOCK.node), `${process.version} (required ${LOCK.node.range})`);
 
 const npmRaw = run('npm', ['--version']);
 const npm = parse(npmRaw);
-record('npm exact locked version', exact(npm, LOCK.npm.exact), `${npmRaw ?? 'npm not found'} (supported >=10 <11)`);
+record('npm within supported range', withinRange(npm, LOCK.npm), `${npmRaw ?? 'npm not found'} (required ${LOCK.npm.range})`);
 
 const laravel = run('php', ['-r',
   'require "vendor/autoload.php"; echo \\Illuminate\\Foundation\\Application::VERSION;']);
 const lv = parse(laravel);
-const laravelOk = lv !== null && lv.major === 12 && (lv.minor > 67 || (lv.minor === 67 && lv.patch >= 0));
-record('Laravel 12.67+ (13 is prohibited)', laravelOk, laravel ?? 'vendor/ not installed');
+record('Laravel within supported range', withinRange(lv, LOCK.laravel), `${laravel ?? 'vendor/ not installed'} (required ${LOCK.laravel.range}; 13 is prohibited)`);
 
 const pgRaw = run('php', ['-r', `
   $h = getenv('DB_HOST') ?: '127.0.0.1';
@@ -92,13 +101,12 @@ const pgRaw = run('php', ['-r', `
   } catch (Throwable $e) { echo 'UNREACHABLE'; }
 `]);
 const pg = parse(pgRaw);
-const pgExact = pg !== null && (pg.raw === LOCK.postgres.exact || pg.raw.startsWith(`${LOCK.postgres.exact}.`));
-record('PostgreSQL exact locked version', pgExact, pgRaw === 'UNREACHABLE' ? 'could not connect (set DB_HOST/DB_PORT/...)' : (pgRaw ?? 'unknown'));
+record('PostgreSQL within supported range', withinRange(pg, LOCK.postgres), pgRaw === 'UNREACHABLE' ? 'could not connect (set DB_HOST/DB_PORT/...)' : `${pgRaw ?? 'unknown'} (required ${LOCK.postgres.range})`);
 
 const failed = results.filter((r) => !r.pass).length;
 console.log(`\nENVIRONMENT LOCK: ${results.length - failed}/${results.length} satisfied`);
 if (failed > 0) {
-  console.error('\nThe runtime has drifted from the supported environment contract.');
-  console.error('Fix the environment or update the lock documents together with a complete verification run.');
+  console.error('\nThe runtime is outside the supported environment contract.');
+  console.error('Fix the environment or update the lock documents and verification evidence together.');
 }
 process.exit(failed === 0 ? 0 : 1);

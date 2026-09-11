@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { AppShell, PageStatus } from './ui';
-import { createApiClient, type ApiClient } from './core/api';
+import type { ApiClient } from './core/api';
 import './app.css';
 import './product-theme.css';
 
@@ -159,11 +158,4 @@ function filter(items: RecordMap[], query: string) {
   const term = query.trim().toLowerCase();
   if (!term) return items;
   return items.filter((item) => Object.values(item).some((value) => typeof value === 'string' && value.toLowerCase().includes(term)));
-}
-
-const root = document.getElementById('react-console');
-if (root) {
-  const csrfToken = root.getAttribute('data-csrf-token') ?? '';
-  const api = createApiClient({ apiBase: root.getAttribute('data-api-base') ?? '/api/v1', csrfToken });
-  createRoot(root).render(<LibraryApp {...api} csrfToken={csrfToken} />);
 }

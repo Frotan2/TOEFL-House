@@ -10,10 +10,11 @@ the exact value to supply is called out as a `TODO`.
 
 | Component | Requirement | Verified with |
 |---|---|---|
-| PHP | `>=8.2 <8.5` (CLI + FPM) with `pdo_pgsql`/`pgsql`, `mbstring`, `openssl`, `bcmath`, `intl`, `xml` | 8.4.14 |
+| PHP | `>=8.2 <8.5` (CLI + FPM) with `pdo_pgsql`/`pgsql`, `mbstring`, `openssl`, `bcmath`, `intl`, `xml` | 8.4.14 local / 8.4.25 CI |
+| Composer | `>=2.5 <3` | 2.9.2 local / 2.10.3 CI |
 | PostgreSQL | `>=18.0 <19.0` with `pgcrypto` and `btree_gist` available | 18.4 |
 | Node.js | `>=22.0 <23.0` (`package.json` engines) | 22.22.3 |
-| npm | `>=10.0` (`package.json` engines, enforced with `--engine-strict`) | 10.9.8 |
+| npm | `>=10.0 <11.0` (`package.json` engines, enforced with `--engine-strict`) | 10.9.8 |
 | Web server | nginx (TLS termination) + PHP-FPM | nginx 1.x / php-fpm |
 | OS | Any Linux that ships the above (Debian/Ubuntu reference) | — |
 
@@ -21,8 +22,9 @@ The employee console is a React/TypeScript application bundled by Vite; the
 module pages remain transitional Blade screens. Production therefore requires
 Node.js/npm during release build, but no Node process remains at runtime. There
 is **no** Redis or message broker. The core request path uses PHP-FPM; the
-Integrations job/relay path is not enabled by this synchronous deployment and
-requires an explicit operator/scheduler deployment before use — see §9/§10.
+separate Integrations relay is enabled only after an operator provisions its
+durable authorized scheduler identity and one supported timer/cron supervisor
+as described in §9/§10.
 
 ## 2. Required environment variables
 
@@ -39,10 +41,11 @@ APP_KEY=<non-empty>
 Required values (from `.env.example`): `APP_NAME`, `APP_KEY`
 (`php artisan key:generate`), `APP_URL`, `LOG_CHANNEL`/`LOG_LEVEL`,
 `SESSION_DRIVER=database`, `SESSION_SECURE_COOKIE=true`, `SESSION_SAME_SITE`,
-`CACHE_STORE=database` (the login rate limiter must be durable across FPM
-workers), `QUEUE_CONNECTION=sync`, and the `DB_*` PostgreSQL connection.
-Secrets (`APP_KEY`, `DB_PASSWORD`) are set only in the live `.env`, never
-committed.
+`CACHE_STORE=database` (the login and employee-API rate limiters must be
+durable across FPM workers), `EMPLOYEE_API_RATE_LIMIT_PER_MINUTE=120`
+(per-account allowance; keep it within 1–600), `QUEUE_CONNECTION=sync`, and
+the `DB_*` PostgreSQL connection. Secrets (`APP_KEY`, `DB_PASSWORD`) are set
+only in the live `.env`, never committed.
 
 ## 3. PostgreSQL configuration
 
@@ -54,8 +57,8 @@ CREATE DATABASE toefl_house;
 ```
 
 Point `DB_*` in the `.env` at it. The application requires PostgreSQL extensions `pgcrypto` and `btree_gist`. The
-deployment preflight verifies PostgreSQL 18.4, checks that both extensions are
-available, and refuses to continue when an uninstalled extension cannot be
+deployment preflight verifies the supported PostgreSQL 18.x range, checks that
+both extensions are available, and refuses to continue when an uninstalled extension cannot be
 provisioned by the deployment role. Keep the
 database on the same host (or a trusted private network); `DB_SSLMODE=require`, `verify-ca`, or `verify-full` if it is remote; the
 deployment script rejects weaker remote settings. Timezone: the app uses
@@ -80,11 +83,13 @@ reachable over HTTP.
 ### First installation (greenfield)
 
 `deploy/deploy.sh` is the release-switch procedure; it migrates but
-deliberately never seeds. On a **brand-new** installation, after the first
-successful deployment (migrations applied, health green) run the guarded
-first-run bootstrap exactly once to create the bootstrap organization, the
-genesis campus + branch that every branch-mandated intake requires, and the
-owner account:
+deliberately never seeds. By default it checks out the canonical
+`https://github.com/Frotan2/TOEFL-House.git` repository; set `REPO_URL` only
+when the host is intentionally deployed from a reviewed mirror or private fork.
+On a **brand-new** installation, after the first successful deployment
+(migrations applied, health green) run the guarded first-run bootstrap exactly
+once to create the bootstrap organization, the genesis campus + branch that
+every branch-mandated intake requires, and the owner account:
 
 ```bash
 BOOTSTRAP_OWNER_NAME="<full legal name>" \
@@ -158,7 +163,7 @@ refuses to build when the manifest and lockfile disagree.
 goes live, so a failing migration aborts the deployment. If a later health check
 fails after the schema advanced, the script does not perform an unsafe application-only rollback. Migrations are **forward-only and never destructive** as part of
 normal deployment — the app never drops or rewrites business tables in a
-deploy (see `database/migrations`, currently 185 migrations).
+deploy (see `database/migrations`, currently 202 migrations).
 
 ## 8. Generating caches
 
@@ -178,34 +183,214 @@ a cached config is a snapshot and must not be stale.)
 
 **Not required for the core request path.** `QUEUE_CONNECTION=sync`; the
 application dispatches no Laravel queue jobs. There is no `queue:work` process
-to start or supervise. The Integrations module has a separate durable
-`JobRun`/`ProcessJobRun` model and the outbox relay has explicit leases and
-idempotent consumers, but those paths are not enabled by this deployment.
+to start or supervise. The Integrations module instead uses durable
+`JobRun`/`ProcessJobRun` records and short-lived scheduled commands (§10), while
+the outbox relay owns explicit leases and idempotent consumer receipts.
 
 ## 10. Scheduler and integration relay
 
-The current checkout has no registered `routes/console.php` command,
-framework scheduler entry, cron unit, or process supervisor for
-`EnqueueJobRun`, `ProcessJobRun`, `ProcessDeliveries`, or `outbox.relay`.
-This is an explicit pre-production/runtime gap, not a claim that the relay is
-operational. Before enabling it, provision a durable verified employee actor
-with the required integration capabilities, add an explicit command/schedule
-entry, supervise retries, and verify the lease/consumer behavior. Do not use a
-synthetic actor or silently infer a scheduler identity. Runtime verification
-is deferred by the architecture review restriction.
+The checkout registers `integrations:tick` with Laravel's scheduler every
+minute. The tick validates the configured operator and all enabled durable
+schedules before it evaluates the two allowlisted jobs:
+
+- `outbox.relay` — consumes committed domain events into receipt-backed
+  notification/work-item projections;
+- `integrations.retry_sweep` — processes due outbound delivery retries.
+
+`integrations:run` evaluates one durable `job_schedules` row before creating a
+`JobRun`; `integrations:tick` does the same for the complete catalog. A disabled
+schedule is skipped and its validated cron expression must be due. Each due job
+records and processes one idempotent occurrence. The minute registration is
+therefore only a polling cadence; `schedule_expr`, enabled state, leases, retry
+backoff, and consumer receipts remain the durable runtime contract.
+
+### Enable the relay safely
+
+1. Provision a **durable verified employee** to operate the scheduler. Its
+   authority must include both `integrations.jobs` (schedule/run management)
+   and `integrations.process` (event relay and outbound delivery processing).
+   Record that person's immutable UUID; never use a synthetic "system" actor,
+   an unverified person, or a shared password.
+2. Put that UUID in the persistent `$DEPLOY_ROOT/.env` before the next deploy:
+
+   ```dotenv
+   INTEGRATIONS_SCHEDULER_RUN_BY=<durable-person-uuid>
+   ```
+
+   `deploy/deploy.sh` copies this file and builds the release config cache. If
+   the value is changed outside a deployment, rebuild the current release's
+   cache as the deployment user:
+
+   ```bash
+   cd /var/www/toefl-house/current
+   php artisan config:clear
+   php artisan config:cache
+   ```
+
+3. A greenfield `FirstRunBootstrapSeeder` already creates the two core
+   `job_schedules` rows. On an existing initialized installation, register any
+   absent rows once under the configured actor (the command leaves existing,
+   including deliberately disabled, rows unchanged):
+
+   ```bash
+   cd /var/www/toefl-house/current
+   php artisan integrations:install-core-schedules
+   ```
+
+4. Install **one** supervisor. The supported Linux reference is the shipped
+   systemd timer. Its reference values are `DEPLOY_ROOT=/var/www/toefl-house`,
+   `User=www-data`, `Group=www-data`, and `/usr/bin/php`; review and replace all
+   of them in both unit files when the host differs, then install and enable:
+
+   ```bash
+   sudo install -m 0644 deploy/systemd/toefl-house-scheduler.service /etc/systemd/system/
+   sudo install -m 0644 deploy/systemd/toefl-house-scheduler.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now toefl-house-scheduler.timer
+   systemctl list-timers toefl-house-scheduler.timer
+   ```
+
+   The service invokes `current/deploy/schedule.sh`, so every invocation follows
+   the atomic release symlink and uses the active release's cached configuration.
+   The wrapper runs `integrations:tick` directly rather than `schedule:run` so a
+   rejected identity, missing schedule, or invalid enabled cron expression is a
+   non-zero systemd/cron result instead of a swallowed child-command failure. It
+   is intentionally short-lived; do **not** also start `schedule:work` or a
+   Laravel queue worker.
+
+   Where systemd is unavailable, use a single `/etc/cron.d` entry instead (the
+   sixth field is the Unix user; ensure the log directory is writable by it):
+
+   ```cron
+   * * * * * www-data DEPLOY_ROOT=/var/www/toefl-house PHP_BIN=/usr/bin/php /var/www/toefl-house/current/deploy/schedule.sh >>/var/log/toefl-house/scheduler.log 2>&1
+   ```
+
+5. Verify execution immediately, before calling the deployment complete. Run
+   the wrapper as the configured service user, inspect its JSON tick results,
+   and verify the authorized health snapshot:
+
+   ```bash
+   sudo -u www-data env DEPLOY_ROOT=/var/www/toefl-house PHP_BIN=/usr/bin/php \
+     /var/www/toefl-house/current/deploy/schedule.sh
+   sudo -u www-data /usr/bin/php /var/www/toefl-house/current/artisan integrations:health
+   journalctl -u toefl-house-scheduler.service --since "10 minutes ago" --no-pager
+   ```
+
+An unset, unknown, or under-authorized `INTEGRATIONS_SCHEDULER_RUN_BY` fails
+closed before a work occurrence is enqueued. Treat a failed timer invocation as
+an operational incident; do not work around it by granting a fabricated actor
+or writing `job_runs` directly.
 
 ## 11. HTTPS / web server
 
 TLS is terminated at nginx (`deploy/nginx/toefl-house.conf`):
 
 - HTTP → HTTPS 301 redirect.
-- `ssl_protocols TLSv1.2 TLSv1.3`; replace the certificate paths with your
-  CA-issued (e.g. Let's Encrypt) files — a `TODO` in the file.
+- `ssl_protocols TLSv1.2 TLSv1.3`; the managed-edge renderer supplies the
+  reviewed hostname and CA-issued certificate paths before enabling the site
+  (the Let’s Encrypt bootstrap/renewal procedure is below).
 - `root …/current/public` — **only** `public/` is served.
 - Security headers (HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY`,
   `Referrer-Policy`, `Permissions-Policy`) set at the edge; the app sets the
   same headers (`app/Http/Middleware/SecurityHeaders.php`).
 - `SESSION_SECURE_COOKIE=true` makes the session cookie HTTPS-only.
+- `client_max_body_size 1m` rejects oversized request bodies at nginx with
+  `413` before PHP buffers them. Current commands carry bounded form/JSON data
+  and artifact references, not binary uploads; do not raise this as a generic
+  workaround. A future upload surface must define its own validation, storage,
+  and aligned edge/PHP limits.
+- Every `/api/v1` route uses the durable `employee-api` limiter: the default is
+  120 requests per minute per authenticated account (not shared IP), with a
+  JSON `429`, `Retry-After`, and rate-limit headers when exhausted. Adjust the
+  reviewed `EMPLOYEE_API_RATE_LIMIT_PER_MINUTE` setting only within 1–600.
+
+### ACME certificate issuance and renewal
+
+The full site deliberately serves **only** `/.well-known/acme-challenge/` on
+port 80; every other HTTP URI redirects to HTTPS. The exception is static-only
+(`try_files … =404`), takes precedence over the dotfile deny with `^~`, and uses
+the persistent `$DEPLOY_ROOT/acme-challenge` directory rather than `current/`.
+Certificate state and renewal tokens therefore do not modify an immutable
+release or vanish when `current` changes.
+
+The committed nginx files are **templates**, not a generic hostname that may
+silently reach production. When this deployment manages `NGINX_CONF_DEST`, pass
+these host facts to the deployment process (never in the application `.env`):
+
+```bash
+sudo env \
+  DEPLOY_ROOT=/var/www/toefl-house \
+  NGINX_CONF_DEST=/etc/nginx/conf.d/toefl-house.conf \
+  NGINX_SERVER_NAME=school.example \
+  ./deploy/deploy.sh <git-ref>
+```
+
+For a CA/layout other than Certbot's standard `/etc/letsencrypt/live/<name>/`
+lineage, add **both** explicit certificate paths to that same `sudo env`
+command:
+
+```bash
+sudo env \
+  DEPLOY_ROOT=/var/www/toefl-house \
+  NGINX_CONF_DEST=/etc/nginx/conf.d/toefl-house.conf \
+  NGINX_SERVER_NAME=school.example \
+  NGINX_TLS_CERTIFICATE=/etc/ssl/certs/school.example.fullchain.pem \
+  NGINX_TLS_CERTIFICATE_KEY=/etc/ssl/private/school.example.key \
+  ./deploy/deploy.sh <git-ref>
+```
+
+`deploy/deploy.sh` first preflights the target release's template after checkout
+and before it builds, backs up, migrates, or moves `current`; its guarded edge
+install later renders again into a protected temporary file before `nginx -t`.
+It never writes unresolved tokens to the edge. `NGINX_SERVER_NAME` is one
+hostname (no whitespace, wildcard, or nginx syntax), and all rendered paths are
+constrained to safe absolute paths. This also preserves nginx's own `$host`,
+`$uri`, and FastCGI variables, which a broad `envsubst` pass would corrupt. The
+default certificate paths are Certbot's
+standard lineage for `NGINX_SERVER_NAME`; provide both optional path variables
+only when the host uses another CA/layout.
+
+For a new Let's Encrypt host, create its persistent webroot and install the
+one-time HTTP-only bootstrap template from the checkout you intend to deploy.
+The bootstrap serves no application routes and returns `404` outside the narrow
+challenge path, so it solves the first-certificate chicken-and-egg problem
+without opening the application over plain HTTP:
+
+```bash
+sudo install -d -m 0755 /var/www/toefl-house/acme-challenge
+DEPLOY_ROOT=/var/www/toefl-house NGINX_SERVER_NAME=school.example \
+  ./deploy/render-nginx-config.sh deploy/nginx/toefl-house-acme-bootstrap.conf \
+  >/tmp/toefl-house-acme-bootstrap.conf
+sudo install -m 0644 /tmp/toefl-house-acme-bootstrap.conf /etc/nginx/conf.d/toefl-house.conf
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot certonly --webroot -w /var/www/toefl-house/acme-challenge -d school.example
+```
+
+Then run the ordinary deployment with the same `DEPLOY_ROOT`,
+`NGINX_CONF_DEST`, and `NGINX_SERVER_NAME`; its guarded edge install replaces
+the bootstrap with the full TLS site only after the certificate exists and
+`nginx -t` accepts it. Adapt every displayed path together when `DEPLOY_ROOT`
+is not `/var/www/toefl-house`.
+
+Install the shipped deploy hook once so nginx reloads **only** after Certbot
+actually renews a certificate. It runs `nginx -t` first, prefers a `systemctl`
+reload, and uses nginx's checked reload signal if the host has no working
+systemd service manager. Test both renewal and reload. The installed Certbot
+timer/cron remains a host responsibility; verify it is enabled after package
+upgrades:
+
+```bash
+sudo install -D -m 0755 deploy/certbot/reload-nginx.sh \
+  /etc/letsencrypt/renewal-hooks/deploy/10-toefl-house-nginx-reload
+sudo certbot renew --dry-run --run-deploy-hooks
+systemctl list-timers 'certbot*'
+```
+
+A temporary token under the exact challenge URI must return `200`; a missing
+token must return `404`. Neither arbitrary `/.well-known` nor other dotfile
+paths may become public. If TLS is terminated by a managed load balancer,
+leave this local certificate procedure disabled and manage issuance, renewal,
+and reload at that authoritative edge.
 
 PHP-FPM pool: `deploy/php-fpm.conf` (dynamic `pm`, slowlog, security
 `limit_extensions`). Opcache policy is a separate conf.d fragment,
@@ -221,10 +406,10 @@ asserts the two strings are identical, because two sources of truth drift and th
 weaker one silently wins on whichever path serves the response.
 
 **The web server's copy has to be installed, not just written.** `deploy.sh`
-copies `deploy/nginx/toefl-house.conf` from the activated release to
-`$NGINX_CONF_DEST` and reloads, refusing the change if `nginx -t` rejects it and
-putting the previous file back if the reload does not take. Before that step
-existed the script only reloaded whatever the host already had, so a header added
+renders `deploy/nginx/toefl-house.conf` from the activated release and atomically
+installs that result at `$NGINX_CONF_DEST`, refusing the change if `nginx -t`
+rejects it and putting the previous file back if the reload does not take. Before
+that step existed the script only reloaded whatever the host already had, so a header added
 in a release reached PHP responses and never reached static files, 404s or 5xx
 pages — the paths nginx serves without touching PHP. If the edge is managed
 outside this repository, leave `NGINX_CONF_DEST` unset; the deploy then says so
@@ -335,7 +520,7 @@ scripted or trusted, so the script handles database existence itself.
 successfully in a recovery drill.** The final drill run (2026-09-08, UTC
 19:51:11) backed up the production-shaped database, dropped it entirely with
 `DROP DATABASE ... WITH (FORCE)` — 169 tables (168 application tables plus one
-drill marker table), 346 rows, 185 migrations — and restored it with
+drill marker table), 346 rows, 185 migrations at that dated drill point — and restored it with
 `deploy/restore.sh --latest --confirm`: exit 0, restore 0.88 s, verification
 0.10 s, content digest identical to the pre-loss fingerprint
 (`7055417d9a2f…`, md5 over the ordered row text of every non-empty table), the
@@ -476,6 +661,14 @@ The `emergency` channel intentionally keeps the release-local path: it is Monolo
 last resort when the configured one fails, so it must not live on the storage that
 just failed.
 
+**Scheduler log.** The supported systemd timer writes each short-lived scheduler
+invocation to the journal; inspect `systemctl status toefl-house-scheduler.timer`,
+`systemctl status toefl-house-scheduler.service`, and
+`journalctl -u toefl-house-scheduler.service`. Alert from the host monitor when
+the timer has not fired or the service fails. The cron alternative in §10 writes
+to `/var/log/toefl-house/scheduler.log`; rotate and monitor that file outside the
+release tree.
+
 **Nothing else is emitted.** There is no metrics endpoint, no alert channel, and no
 pager path in this repository, and `config/integrations.php` carries no transports.
 The available observability surface is therefore: `/health` (JSON, per-dependency),
@@ -582,17 +775,40 @@ measured, and no load generator is part of the toolchain.
 
 ## Verification gate (run after any change)
 
-Before declaring a deployment healthy, the full gate must be green:
+Before declaring a deployment healthy, the full gate must be green against the
+exact commit being released:
 
-```
-php artisan migrate:fresh --seed:off   # disposable clean-schema verification
-npm ci --no-audit --no-fund --engine-strict && npm run build
-vendor/bin/phpunit                     # full feature suite
-vendor/bin/phpstan analyse             # static analysis
-vendor/bin/pint --test                 # formatting
-# then, on the live host:
+```bash
+# Disposable verification database only — never the live DB. The release
+# switch itself uses `php artisan migrate --force`, never migrate:fresh.
+DB_DATABASE=toefl_house_verify php artisan migrate:fresh --force
+DB_DATABASE=toefl_house_verify php artisan db:seed --class=StandardFinanceChartSeeder --force
+DB_DATABASE=toefl_house_verify npm run verify:invariants
+DB_DATABASE=toefl_house_verify npm run verify:concurrency
+
+npm ci --no-audit --no-fund --engine-strict
+npm run verify:environment
+composer validate --strict && composer check-platform-reqs
+vendor/bin/pint --test
+vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+vendor/bin/phpunit --no-coverage
+npm run typecheck && npm run build && npm run test:frontend
+npm run test:runtime-safety
+# Run npm run verify:browser where its Chromium prerequisite is available.
+
+# Then, on the live host after the reviewed deployment procedure:
 curl -fsS https://<host>/health        # expect 200 {"status":"ok",...}
 ```
 
-A deployment is production-ready only when these pass against the exact
-commit being released.
+The PostgreSQL probe commands write short-lived verification fixtures and refuse
+non-disposable database names unless an operator sets the reviewed rehearsal
+escape hatch described in `docs/RUNTIME-RELEASE.md`. Configure the disposable
+verification database with a **dedicated verifier role**, not the live application
+role: it must be able to `SET LOCAL session_replication_role = 'replica'` (a
+superuser or explicit `GRANT SET ON PARAMETER session_replication_role`) and have
+the preflighted fixture-table rights. `verify:invariants` additionally requires
+permission for `ALTER TABLE ... DISABLE TRIGGER USER` on its named target tables.
+The commands fail before fixture writes if this role is insufficient. Do not run
+them concurrently with migration or PHPUnit processes. A deployment is
+production-ready only when these gates pass and their evidence applies to the
+exact commit being released.

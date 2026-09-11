@@ -19,6 +19,6 @@ final class IntegrationRetrySweepJobContractTest extends TestCase
         $this->assertStringContainsString('$batch = (int) ($context[\'batch\'] ?? self::DEFAULT_BATCH);', $source);
         $this->assertStringContainsString('$batch = max(1, min(self::MAX_BATCH, $batch));', $source);
         $this->assertStringContainsString('->limit($batch)', $source);
-        $this->assertStringContainsString("new Actor($runBy, 'Integration Sweep')", $source);
+        $this->assertStringContainsString('new Actor($runBy, \'Integration Sweep\')', $source);
     }
 }

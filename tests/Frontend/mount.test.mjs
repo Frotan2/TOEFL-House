@@ -26,11 +26,32 @@ const CONSOLES = [
   { name: 'payroll', entry: 'resources/js/payroll.tsx', mountId: 'payroll-console' },
   { name: 'hr', entry: 'resources/js/hr.tsx', mountId: 'hr-console' },
   {
+    name: 'app-library',
+    entry: 'resources/js/app.tsx',
+    mountId: 'react-console',
+    url: 'https://app.test/library',
+    markup: '<div id="react-console" data-view="library" data-csrf-token="test-token" data-api-base="/api/v1"></div>',
+  },
+  {
+    name: 'app-documents',
+    entry: 'resources/js/app.tsx',
+    mountId: 'react-console',
+    url: 'https://app.test/documents',
+    markup: '<div id="react-console" data-view="documents" data-csrf-token="test-token" data-api-base="/api/v1"></div>',
+  },
+  {
     name: 'app-front-office',
     entry: 'resources/js/app.tsx',
     mountId: 'react-console',
     url: 'https://app.test/crm?view=front-office',
     markup: '<div id="react-console" data-view="crm" data-students-view="directory" data-student-id="" data-csrf-token="test-token" data-api-base="/api/v1"></div>',
+  },
+  {
+    name: 'app-reporting',
+    entry: 'resources/js/app.tsx',
+    mountId: 'react-console',
+    url: 'https://app.test/workspace?view=reporting',
+    markup: '<div id="react-console" data-view="reporting" data-csrf-token="test-token" data-api-base="/api/v1"></div>',
   },
 ];
 

@@ -7,6 +7,7 @@ namespace App\Modules\Crm\Commands;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Crm\Domain\CrmAccess;
+use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorFollowup;
 use App\Modules\Identity\Models\UserAccount;
 use App\Support\Authorization\Actor;
@@ -16,9 +17,10 @@ use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Advance a scheduled follow-up to done/cancelled. Follow-up content is fixed
- * at creation; assignment changes are a reassignment (new lifecycle state),
- * never a content rewrite.
+ * Advance a scheduled follow-up to done/cancelled. Visitor provenance is the
+ * locking authority shared with conversion/interaction commands, so visitor
+ * state is locked before the follow-up row to keep competing CRM workflows on
+ * one lock order and avoid conversion/follow-up deadlocks.
  */
 final class ManageVisitorFollowup
 {
@@ -51,12 +53,24 @@ final class ManageVisitorFollowup
         try {
             return $this->idempotency->execute('crm.followup.transition', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($actor, $followup, $toStatus): array {
+                    /** @var VisitorFollowup $snapshot */
+                    $snapshot = VisitorFollowup::query()->whereKey($followup->id)->firstOrFail();
+
+                    /** @var Visitor $visitor */
+                    $visitor = Visitor::query()->whereKey($snapshot->visitor_id)->lockForUpdate()->firstOrFail();
+
+                    // Match conversion and interaction lock order: visitor first,
+                    // then dependent CRM records. This prevents a conversion
+                    // transaction waiting on a follow-up while a follow-up
+                    // transaction waits on the same visitor.
                     /** @var VisitorFollowup $locked */
-                    $locked = VisitorFollowup::query()->whereKey($followup->id)->lockForUpdate()->firstOrFail();
-                    $visitor = $locked->visitor;
-                    $this->access->require($actor, self::CAPABILITY, $visitor?->origin_branch_id, 'crm.followup_denied');
-                    if ($visitor === null || ! $visitor->isOpen()) {
+                    $locked = VisitorFollowup::query()->whereKey($snapshot->id)->lockForUpdate()->firstOrFail();
+                    $this->access->require($actor, self::CAPABILITY, $visitor->origin_branch_id, 'crm.followup_denied');
+                    if (! $visitor->isOpen()) {
                         throw BusinessRejection::forCode('crm.followup_closed_visitor', 'a follow-up cannot be changed after its visitor reaches a terminal state');
+                    }
+                    if ($locked->visitor_id !== $visitor->id) {
+                        throw BusinessRejection::forCode('crm.followup_visitor_mismatch', 'the follow-up target changed and no longer matches its visitor');
                     }
                     if ($locked->status !== VisitorFollowup::STATUS_OPEN) {
                         throw BusinessRejection::forCode('crm.followup_invalid_transition', sprintf('a %s follow-up cannot transition to %s', $locked->status, $toStatus));

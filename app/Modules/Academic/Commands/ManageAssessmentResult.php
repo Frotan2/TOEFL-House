@@ -267,10 +267,24 @@ final class ManageAssessmentResult
 
                     AssessmentResultLifecycle::requireTransition($locked->lifecycle_state, AssessmentResultLifecycle::STATE_CORRECTED);
 
+                    // Approve the staged correction before creating the
+                    // replacement result. The entire aggregate remains in one
+                    // transaction, so either both facts commit or neither does.
+                    $lockedCorrection->forceFill([
+                        'lifecycle_state' => ResultCorrection::STATE_APPROVED,
+                        'approved_by' => $approver->actorId,
+                    ])->save();
+
                     $locked->forceFill(['lifecycle_state' => AssessmentResultLifecycle::STATE_CORRECTED]);
                     $locked->save();
 
-                    $corrected = AssessmentResult::query()->create([
+                    // AssessmentResult deliberately permits mass assignment only
+                    // for the initial scored evidence. A correction is trusted
+                    // workflow output, so preserve its complete sign-off chain
+                    // explicitly rather than silently dropping the protected
+                    // moderation, approval, and release attributes.
+                    $corrected = new AssessmentResult;
+                    $corrected->forceFill([
                         'id' => RandomIdentifier::new(),
                         'attempt_id' => $locked->attempt_id,
                         'score' => $lockedCorrection->score,
@@ -278,14 +292,19 @@ final class ManageAssessmentResult
                         'corrects_id' => $locked->id,
                         'correction_reason' => $lockedCorrection->reason,
                         'scored_by' => $lockedCorrection->proposed_by,
-                    ]);
-
-                    $lockedCorrection->forceFill([
-                        'lifecycle_state' => ResultCorrection::STATE_APPROVED,
+                        'moderated_by' => $locked->moderated_by,
                         'approved_by' => $approver->actorId,
-                    ])->save();
-                    $event = $this->audit->record($approver->actorId, 'academic.result.correction.approve', 'assessment_result', $corrected->id, ['score' => $locked->score], [
+                        'released_by' => $approver->actorId,
+                    ]);
+                    $corrected->save();
+
+                    $event = $this->audit->record($approver->actorId, 'academic.result.correction.approve', 'assessment_result', $corrected->id, [
+                        'score' => $locked->score,
+                        'lifecycle_state' => $locked->getOriginal('lifecycle_state'),
+                    ], [
                         'corrects_id' => $locked->id, 'score' => $lockedCorrection->score, 'correction_id' => $lockedCorrection->id,
+                        'approved_by' => $approver->actorId, 'released_by' => $approver->actorId,
+                        'moderated_by' => $locked->moderated_by,
                         ...$this->branchProvenance(RecordBranch::resultBranch($corrected)),
                     ]);
 

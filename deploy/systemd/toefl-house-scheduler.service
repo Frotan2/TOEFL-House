@@ -1,0 +1,26 @@
+[Unit]
+Description=The TOEFL House Laravel scheduler
+Documentation=https://github.com/Frotan2/TOEFL-House/blob/main/docs/operations/production-deployment.md
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/www/toefl-house/current/artisan
+
+[Service]
+Type=oneshot
+# Keep this identity aligned with the PHP-FPM/web user that owns storage.
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/toefl-house/current
+Environment=DEPLOY_ROOT=/var/www/toefl-house
+Environment=PHP_BIN=/usr/bin/php
+ExecStart=/var/www/toefl-house/current/deploy/schedule.sh
+TimeoutStartSec=10min
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/www/toefl-house
+
+[Install]
+WantedBy=multi-user.target

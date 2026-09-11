@@ -78,10 +78,10 @@ function HrApp() {
     window.setTimeout(() => document.getElementById(`hr-tab-${next.id}`)?.focus(), 0);
   };
 
-  if (loading && !data) return <><AppShell current="teachers" csrfToken={csrfToken} /><PageStatus>Loading authorized People and HR records…</PageStatus></>;
-  if (!data) return <><AppShell current="teachers" csrfToken={csrfToken} /><main id="workspace-main" className="workspace"><div className="alert" role="alert">{error ?? 'People and HR data is unavailable.'}</div></main></>;
+  if (loading && !data) return <><AppShell current="hr" csrfToken={csrfToken} /><PageStatus>Loading authorized People and HR records…</PageStatus></>;
+  if (!data) return <><AppShell current="hr" csrfToken={csrfToken} /><main id="workspace-main" className="workspace"><div className="alert" role="alert">{error ?? 'People and HR data is unavailable.'}</div></main></>;
 
-  return <><AppShell current="teachers" csrfToken={csrfToken} /><main id="workspace-main" className="workspace" aria-labelledby="hr-title">
+  return <><AppShell current="hr" csrfToken={csrfToken} /><main id="workspace-main" className="workspace" aria-labelledby="hr-title">
     <header className="workspace-header"><div><p className="eyebrow">People & HR · employment authority</p><h1 id="hr-title">People facts, employment lifecycle.</h1><p className="lede">Identity, employment, contracts and leave are shown from HR-owned records. Payroll and Finance remain separate monetary authorities.</p></div><div className="detail-header-actions"><a className="button secondary" href="/teachers">Teacher capabilities</a><button className="button secondary" type="button" onClick={load} disabled={loading}>Refresh</button></div></header>
     {error && <div className="alert" role="alert">{error}</div>}{message && <div className="notice" role="status">{message}</div>}
     <section className="summary-grid" aria-label="People and HR summary"><div className="panel"><span className="metric">{data.people.length}</span><span className="metric-label">Verified people in scope</span></div><div className="panel"><span className="metric">{data.employments.length}</span><span className="metric-label">Employment records</span></div><div className="panel"><span className="metric">{data.contracts.length}</span><span className="metric-label">HR contracts</span></div><div className="panel"><span className="metric">{data.leaves.length}</span><span className="metric-label">Leave records</span></div></section>

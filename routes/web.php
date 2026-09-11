@@ -350,7 +350,9 @@ Route::middleware('employee')->group(function (): void {
 
     // Documents & Evidence
     Route::prefix('documents')->name('documents.')->group(function (): void {
-        Route::get('/', [DocumentsController::class, 'index'])->name('index');
+        // The React workspace is the canonical Documents read surface. The
+        // legacy POST adapters remain only for existing form integrations.
+        Route::view('/', 'workspace', ['view' => 'documents'])->name('index');
         Route::post('classifications', [DocumentsController::class, 'defineClassification'])->name('classification.define');
         Route::post('retention-rules', [DocumentsController::class, 'defineRetentionRule'])->name('retention.rule');
         Route::post('', [DocumentsController::class, 'registerDocument'])->name('register');

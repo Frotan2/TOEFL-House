@@ -12,6 +12,8 @@ use App\Support\Errors\BusinessRejection;
 /** Scheduled relay adapter; durable scheduling remains owned by Integrations. */
 final class DomainEventRelayJob implements JobHandler
 {
+    public const CAPABILITY = DomainEventRelay::CAPABILITY;
+
     public function __construct(private readonly DomainEventRelay $relay) {}
 
     /**

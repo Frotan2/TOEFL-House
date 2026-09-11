@@ -257,6 +257,74 @@ final class VisitorCrmFeatureTest extends TestCase
         }
     }
 
+    public function test_automation_rechecks_assignee_authority_at_the_triggering_visitor_branch(): void
+    {
+        $automationAdmin = $this->actorWithStructureCapabilities('crm-automation-admin', ['crm.automation']);
+        $crmStaff = $this->actorWithStructureCapabilities('crm-automation-staff', ['crm.visitor', 'crm.followup']);
+        $otherBranch = Branch::query()->create([
+            'id' => RandomIdentifier::new(),
+            'name' => 'CRM Automation Other Branch '.substr(md5((string) random_int(1, PHP_INT_MAX)), 0, 8),
+            'lifecycle_state' => 'active',
+        ]);
+        $this->attachBranchToBootstrapOrganization($otherBranch->id);
+        $outOfScopeAssignee = $this->personWithAuthority('crm-automation-other-branch', []);
+        $this->grantScopeAuthority($outOfScopeAssignee->id, ['crm.followup'], 'branch', $otherBranch->id);
+
+        $capture = app(CaptureVisitor::class)->capture(
+            $crmStaff,
+            null,
+            'Scoped Automation Lead',
+            null,
+            'scoped-automation@example.com',
+            'email',
+            'online',
+            null,
+            null,
+            null,
+            null,
+            null,
+            'capture-scoped-automation',
+        );
+        app(DefineVisitorAutomationRule::class)->define(
+            $automationAdmin,
+            'auto-followup-scope-boundary',
+            'Scope-bound automation follow-up',
+            'interaction_outcome',
+            'followup_required',
+            'schedule_followup',
+            ['assignee' => $outOfScopeAssignee->id, 'title' => 'Scope-bound follow-up', 'due_in_days' => 1],
+            true,
+            'rule-scope-boundary',
+        );
+
+        // Definition can establish only the verified identity because a global
+        // rule has no target visitor branch. Once the concrete visitor is
+        // known, the canonical follow-up command must reject an assignee whose
+        // authority is only in another branch, and the interaction rolls back.
+        try {
+            app(CaptureVisitorInteraction::class)->capture(
+                $crmStaff,
+                Visitor::query()->findOrFail($capture['visitor_id']),
+                'outbound',
+                'call',
+                'followup_required',
+                'scope check for scheduled follow-up',
+                CarbonImmutable::now(),
+                null,
+                null,
+                null,
+                null,
+                'interaction-scope-boundary',
+            );
+            $this->fail('automation must not assign a visitor follow-up outside the visitor branch');
+        } catch (AuthorizationDenied $denial) {
+            $this->assertSame('crm.assignee_not_authorized', $denial->errorCode());
+        }
+
+        $this->assertSame(0, VisitorFollowup::query()->where('visitor_id', $capture['visitor_id'])->count());
+        $this->assertSame(0, DB::table('visitor_interactions')->where('visitor_id', $capture['visitor_id'])->count());
+    }
+
     public function test_followups_complete_and_cancel_lifecycle(): void
     {
         $crmStaff = $this->actorWithStructureCapabilities('crm-staff-2', ['crm.visitor', 'crm.followup']);

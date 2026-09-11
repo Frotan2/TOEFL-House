@@ -22,26 +22,42 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: static function (): void {
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/reporting-api.php'));
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/hr-api.php'));
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/payroll-api.php'));
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/identity-api.php'));
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/access-api.php'));
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/organization-api.php'));
             Route::prefix('api/v1')
-                ->middleware(['api', 'employee'])
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/resources-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
+                ->group(base_path('routes/documents-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
+                ->group(base_path('routes/privacy-api.php'));
+            Route::prefix('api/v1')
+                ->middleware(['api', 'employee', 'throttle:employee-api'])
+                ->group(base_path('routes/audit-api.php'));
+
+            // Canonical React governance read surfaces. Legacy controller
+            // routes redirect here so Blade cannot become a second read model.
+            Route::middleware('employee')->group(function (): void {
+                Route::view('/governance/privacy', 'workspace', ['view' => 'privacy'])->name('governance.privacy');
+                Route::view('/governance/audit', 'workspace', ['view' => 'audit'])->name('governance.audit');
+            });
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

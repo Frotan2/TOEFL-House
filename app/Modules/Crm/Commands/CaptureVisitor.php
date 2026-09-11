@@ -23,10 +23,10 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Capture a visitor/lead. The lead may be anonymous (person_id NULL) or
- * identity-attached; it always records at least one contact channel so the
- * anti-duplicate controls can bind to reality. Branch provenance is captured
- * only when known — it is never fabricated, and once set it is immutable.
+ * Capture a visitor/lead. Anonymous leads are first-class, but their branch
+ * provenance is never left unknown: when the front-office caller does not
+ * choose a branch, the canonical identity's home branch is used. This keeps
+ * the write path aligned with the record authorization boundary.
  */
 final class CaptureVisitor
 {
@@ -55,10 +55,19 @@ final class CaptureVisitor
         ?string $notes,
         string $idempotencyKey,
     ): array {
+        $originBranchId = trim((string) ($originBranchId ?? ''));
+        if ($originBranchId === '') {
+            $homeBranchId = Person::query()->whereKey($actor->actorId)->value('home_branch_id');
+            $originBranchId = trim((string) ($homeBranchId ?? ''));
+            if ($originBranchId === '') {
+                throw BusinessRejection::forCode('crm.visitor_provenance_required', 'a CRM capture requires a resolvable actor home branch or an explicit origin branch');
+            }
+        }
+
         $payload = hash('sha256', implode('|', [
             'crm.visitor.capture', $personId ?? '', trim($fullName), $phone ?? '', strtolower(trim($email ?? '')),
-            $preferredChannel, $visitorType, $sourceId ?? '', $campaignId ?? '', $originBranchId ?? '',
-            $interest ?? '', $actor->actorId,
+            $preferredChannel, $visitorType, $sourceId ?? '', $campaignId ?? '', $originBranchId,
+            $interest ?? '', $notes ?? '', $actor->actorId,
         ]));
 
         try {
@@ -96,8 +105,6 @@ final class CaptureVisitor
 
                     $resolvedSource = $this->resolveSource($sourceId);
                     $resolvedCampaign = $this->resolveCampaign($campaignId, $resolvedSource?->id);
-                    // A campaign attributes its source when the capture did not
-                    // name one explicitly — attribution is never left ambiguous.
                     if ($resolvedSource === null && $resolvedCampaign !== null && $resolvedCampaign->source_id !== null) {
                         $resolvedSource = $this->resolveSource($resolvedCampaign->source_id);
                     }
@@ -131,12 +138,10 @@ final class CaptureVisitor
                         'interest' => $interest !== '' ? $interest : null,
                         'notes' => $notes !== '' ? $notes : null,
                         'assigned_to' => $actor->actorId,
-                        'origin_branch_id' => $originBranchId !== '' ? $originBranchId : null,
+                        'origin_branch_id' => $originBranchId,
                         'created_by' => $actor->actorId,
                     ]);
 
-                    // A database trigger owns the event clock so callers
-                    // cannot select a reporting cohort through created_at.
                     /** @var Visitor $visitor */
                     $visitor = Visitor::query()->whereKey($visitor->id)->firstOrFail();
                     $provenance = $this->visitorProvenance($visitor->origin_branch_id);

@@ -77,7 +77,11 @@ final class ManagePlacementProfile
                         if ($visitor === null) {
                             throw BusinessRejection::forCode('placement.visitor_unknown', 'the referenced CRM visitor does not exist');
                         }
-                        if ($visitor->person_id === null || $visitor->person_id !== $personId) {
+                        // Fixed-width identifier columns are blank-padded by
+                        // PostgreSQL. Compare their logical values so a valid
+                        // linked lead is not rejected solely for storage
+                        // formatting.
+                        if ($visitor->person_id === null || trim((string) $visitor->person_id) !== trim($personId)) {
                             throw BusinessRejection::forCode('placement.visitor_person_mismatch', 'the placement profile visitor must belong to the profile person');
                         }
                         if ($visitor->origin_branch_id !== null && $visitor->origin_branch_id !== $branchId) {

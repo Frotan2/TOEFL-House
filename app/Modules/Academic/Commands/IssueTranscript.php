@@ -58,79 +58,90 @@ final class IssueTranscript
         $payload = hash('sha256', implode('|', ['academic.transcript.issue', $studentId, $programVersionId, $issuer->actorId]));
 
         try {
-            return $this->idempotency->execute('academic.transcript.issue', $idempotencyKey, $payload,
-                fn (): array => DB::transaction(function () use ($issuer, $studentId, $programVersionId, $idempotencyKey): array {
-                    $this->access->require($issuer, self::CAPABILITY_ISSUE, RecordBranch::studentBranchForId($studentId), 'academic.transcript_denied');
+            // IdempotentExecution begins its transaction before invoking the
+            // command closure. Set the session default first so the very first
+            // statement of that transaction captures one repeatable snapshot.
+            DB::statement('SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ');
 
-                    /** @var Student $student */
-                    $student = Student::query()->findOrFail($studentId);
-                    ProgramVersion::query()->findOrFail($programVersionId);
+            try {
+                return $this->idempotency->execute('academic.transcript.issue', $idempotencyKey, $payload,
+                    fn (): array => DB::transaction(function () use ($issuer, $studentId, $programVersionId, $idempotencyKey): array {
+                        $this->access->require($issuer, self::CAPABILITY_ISSUE, RecordBranch::studentBranchForId($studentId), 'academic.transcript_denied');
 
-                    $classificationId = DocumentClassification::query()
-                        ->where('category', self::DOCUMENT_CATEGORY)
-                        ->value('id');
-                    if (! is_string($classificationId) || $classificationId === '') {
-                        throw BusinessRejection::forCode('academic.transcript_classification_missing', 'issuance requires the registrar to define the academic.transcript document classification first');
-                    }
+                        /** @var Student $student */
+                        $student = Student::query()->findOrFail($studentId);
+                        ProgramVersion::query()->findOrFail($programVersionId);
 
-                    $transcriptId = RandomIdentifier::new();
-                    $issuedAt = CarbonImmutable::now()->toIso8601String();
-                    $content = $this->composer->compose((string) $student->id, $programVersionId);
-                    $frozen = array_merge([
-                        'schema' => self::SCHEMA_VERSION,
-                        'transcript_id' => $transcriptId,
-                        'issued_by' => $issuer->actorId,
-                        'issued_at' => $issuedAt,
-                    ], $content);
-                    $canonical = CanonicalJson::encode($frozen);
-                    $contentHash = hash('sha256', $canonical);
+                        $classificationId = DocumentClassification::query()
+                            ->where('category', self::DOCUMENT_CATEGORY)
+                            ->value('id');
+                        if (! is_string($classificationId) || $classificationId === '') {
+                            throw BusinessRejection::forCode('academic.transcript_classification_missing', 'issuance requires the registrar to define the academic.transcript document classification first');
+                        }
 
-                    $title = sprintf(
-                        'Transcript %s · %s · %s',
-                        (string) ($content['student']['student_code'] ?? $student->id),
-                        (string) ($content['program']['program_name'] ?? $programVersionId),
-                        substr($issuedAt, 0, 10),
-                    );
-                    $storageRef = 'transcripts:'.$transcriptId;
-                    $registered = $this->registerDocument->register(
-                        $issuer,
-                        (string) $student->person_id,
-                        $classificationId,
-                        $title,
-                        $contentHash,
-                        $storageRef,
-                        $idempotencyKey.':document',
-                    );
-                    $document = Document::query()->findOrFail($registered['document_id']);
-                    $this->transitionDocument->submit($issuer, $document, $contentHash, $storageRef, $idempotencyKey.':submit');
+                        $transcriptId = RandomIdentifier::new();
+                        $issuedAt = CarbonImmutable::now()->toIso8601String();
+                        $content = $this->composer->compose((string) $student->id, $programVersionId);
+                        $frozen = array_merge([
+                            'schema' => self::SCHEMA_VERSION,
+                            'transcript_id' => $transcriptId,
+                            'issued_by' => $issuer->actorId,
+                            'issued_at' => $issuedAt,
+                        ], $content);
+                        $canonical = CanonicalJson::encode($frozen);
+                        $contentHash = hash('sha256', $canonical);
 
-                    $transcript = Transcript::query()->create([
-                        'id' => $transcriptId,
-                        'student_id' => $student->id,
-                        'program_version_id' => $programVersionId,
-                        'payload' => $frozen,
-                        'content_hash' => $contentHash,
-                        'document_id' => $registered['document_id'],
-                        'issued_by' => $issuer->actorId,
-                        'issued_at' => $issuedAt,
-                    ]);
-                    $provenance = $this->transcriptProvenance($transcript);
-                    $event = $this->audit->record($issuer->actorId, 'academic.transcript.issue', 'transcript', $transcript->id, null, [
-                        'student_id' => $student->id,
-                        'program_version_id' => $programVersionId,
-                        'document_id' => $registered['document_id'],
-                        'content_hash' => $contentHash,
-                        ...$provenance,
-                    ]);
+                        $title = sprintf(
+                            'Transcript %s · %s · %s',
+                            (string) ($content['student']['student_code'] ?? $student->id),
+                            (string) ($content['program']['program_name'] ?? $programVersionId),
+                            substr($issuedAt, 0, 10),
+                        );
+                        $storageRef = 'transcripts:'.$transcriptId;
+                        $registered = $this->registerDocument->register(
+                            $issuer,
+                            (string) $student->person_id,
+                            $classificationId,
+                            $title,
+                            $contentHash,
+                            $storageRef,
+                            $idempotencyKey.':document',
+                        );
+                        $document = Document::query()->findOrFail($registered['document_id']);
+                        $this->transitionDocument->submit($issuer, $document, $contentHash, $storageRef, $idempotencyKey.':submit');
 
-                    return [
-                        'transcript_id' => $transcript->id,
-                        'document_id' => $registered['document_id'],
-                        'content_hash' => $contentHash,
-                        'correlation_id' => $event->correlation_id,
-                    ];
-                }),
-            );
+                        $transcript = Transcript::query()->create([
+                            'id' => $transcriptId,
+                            'student_id' => $student->id,
+                            'program_version_id' => $programVersionId,
+                            'payload' => $frozen,
+                            'content_hash' => $contentHash,
+                            'document_id' => $registered['document_id'],
+                            'issued_by' => $issuer->actorId,
+                            'issued_at' => $issuedAt,
+                        ]);
+                        $provenance = $this->transcriptProvenance($transcript);
+                        $event = $this->audit->record($issuer->actorId, 'academic.transcript.issue', 'transcript', $transcript->id, null, [
+                            'student_id' => $student->id,
+                            'program_version_id' => $programVersionId,
+                            'document_id' => $registered['document_id'],
+                            'content_hash' => $contentHash,
+                            ...$provenance,
+                        ]);
+
+                        return [
+                            'transcript_id' => $transcript->id,
+                            'document_id' => $registered['document_id'],
+                            'content_hash' => $contentHash,
+                            'correlation_id' => $event->correlation_id,
+                        ];
+                    }),
+                );
+            } finally {
+                // Do not leak a stronger isolation default to a reused
+                // application connection after this request completes.
+                DB::statement('SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED');
+            }
         } catch (AuthorizationDenied $denial) {
             $this->attemptedOperation->deniedByActor($denial, $issuer, 'academic.transcript.issue', 'transcript', $studentId);
         }
