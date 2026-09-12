@@ -2,17 +2,14 @@
 
 **STATUS: HISTORICAL — NOT NORMATIVE**
 
-This directory preserves the project's evolution without leaving historical files as competing current authorities. Historical source documents from foundation, architecture, implementation, environment, governance and design were consolidated into four evidence volumes.
+The live repository does not carry large duplicated snapshots of its own history. Git commits, tags and pull-request history are the authoritative historical record.
+
+This directory exists only for small, durable historical evidence that cannot be recovered conveniently from the current control plane.
 
 ## Current authority
 
-Use `../README.md` and the canonical documents at the docs root first. Historical material is consulted only for provenance, architectural evolution, prior failures, migration context, or decision reconstruction.
+Use `../README.md` and the canonical documents at the docs root first. Historical material never overrides current architecture, runtime status, requirements or release evidence.
 
-## Volumes
+## Retention rule
 
-- `01-foundation-history.md` — discovery, requirements, domain modeling and early governance.
-- `02-architecture-history.md` — architecture proposals, ADRs, convergence reviews and decisions.
-- `03-implementation-history.md` — implementation contracts, work packages, checkpoints and certification evidence.
-- `04-operations-governance-history.md` — environment, governance and design-era records.
-
-Historical facts have not been silently rewritten; source paths are retained inside each volume.
+Do not add a new historical snapshot here merely to record a completed engineering task. Record the task in Git history and update the single canonical document that owns the current subject. Add a file here only when it contains durable provenance that cannot be reconstructed from repository history.
