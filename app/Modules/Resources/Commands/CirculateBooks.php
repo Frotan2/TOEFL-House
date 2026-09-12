@@ -16,8 +16,10 @@ use App\Support\Authorization\PersonBranchScope;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
+use App\Support\Errors\ConcurrencyConflict;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -50,14 +52,20 @@ final class CirculateBooks
                         throw BusinessRejection::forCode('resources.copy_code_exists', 'this copy code already exists');
                     }
 
-                    $copy = BookCopy::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'organization_id' => $scope->organizationId,
-                        'originating_branch_id' => $scope->branchId,
-                        'code' => $code,
-                        'title' => $title,
-                        'acquired_on' => $acquiredOn,
-                    ]);
+                    try {
+                        $copy = BookCopy::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'organization_id' => $scope->organizationId,
+                            'originating_branch_id' => $scope->branchId,
+                            'code' => $code,
+                            'title' => $title,
+                            'acquired_on' => $acquiredOn,
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // The code pre-check and this insert are separated by a
+                        // real race window; the unique index is the authority.
+                        throw ConcurrencyConflict::forCode('resources.copy_code.concurrent', 'a concurrent session already registered this copy code');
+                    }
                     $event = $this->audit->record($actor->actorId, 'resources.books.add', 'book_copy', $copy->id, null, [
                         'code' => $code, 'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,
                     ]);
@@ -97,15 +105,21 @@ final class CirculateBooks
                         throw BusinessRejection::forCode('resources.copy_lost', 'a lost copy is permanently out of circulation');
                     }
 
-                    $issuance = BookIssuance::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'copy_id' => $lockedCopy->id,
-                        'borrower_person_id' => $borrowerPersonId,
-                        'issued_on' => $issuedOn,
-                        'due_on' => $dueOn,
-                        'lifecycle_state' => ResourceLifecycle::ISSUANCE_ISSUED,
-                        'issued_by' => $actor->actorId,
-                    ]);
+                    try {
+                        $issuance = BookIssuance::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'copy_id' => $lockedCopy->id,
+                            'borrower_person_id' => $borrowerPersonId,
+                            'issued_on' => $issuedOn,
+                            'due_on' => $dueOn,
+                            'lifecycle_state' => ResourceLifecycle::ISSUANCE_ISSUED,
+                            'issued_by' => $actor->actorId,
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Defense in depth behind the copy row lock: the partial
+                        // unique index remains the authority on one open issuance.
+                        throw ConcurrencyConflict::forCode('resources.issuance_open.concurrent', 'a concurrent session already opened an issuance for this copy');
+                    }
                     $event = $this->audit->record($actor->actorId, 'resources.books.issue', 'book_issuance', $issuance->id, null, [
                         'copy_id' => $lockedCopy->id, 'borrower' => $borrowerPersonId,
                         'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,

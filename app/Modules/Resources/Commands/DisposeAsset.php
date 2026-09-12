@@ -16,8 +16,10 @@ use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
+use App\Support\Errors\ConcurrencyConflict;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -72,14 +74,20 @@ final class DisposeAsset
                         throw BusinessRejection::forCode('resources.disposal_pending', 'this asset already has a disposal request in progress');
                     }
 
-                    $request = AssetDisposalRequest::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'asset_id' => $locked->id,
-                        'method' => $method,
-                        'reason' => $reason,
-                        'lifecycle_state' => 'requested',
-                        'requested_by' => $requester->actorId,
-                    ]);
+                    try {
+                        $request = AssetDisposalRequest::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'asset_id' => $locked->id,
+                            'method' => $method,
+                            'reason' => $reason,
+                            'lifecycle_state' => 'requested',
+                            'requested_by' => $requester->actorId,
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Defense in depth behind the asset row lock: the partial
+                        // unique index remains the authority on one active request.
+                        throw ConcurrencyConflict::forCode('resources.disposal_active.concurrent', 'a concurrent session already opened a disposal request for this asset');
+                    }
                     $event = $this->audit->record($requester->actorId, 'resources.disposal.request', 'asset_disposal_request', $request->id, null, [
                         'asset_id' => $locked->id, 'method' => $method,
                         'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,
