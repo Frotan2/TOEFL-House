@@ -125,6 +125,9 @@ confirm it fails. Verified examples:
 | Disable both capacity guards in `MaintainClass` | **3 canonical tests failed** |
 | Disable `EnrollmentConstraints::assertCapacity` | **1 canonical test failed** |
 | Make `AccessResolution::decide()` always allow | **4 canonical tests failed** |
+| Remove the self-approval denial in `DisposeAsset::approve()` | **1 canonical test errored** — the database's independent-approver guard still refuses the signature |
+| Remove the lost-copy denial in `CirculateBooks::issue()` | **1 canonical test failed** |
+| Remove the completion-evidence denial in `MaintainWorkOrder::complete()` | **1 canonical test failed** |
 | Unregister `/api/v1/payroll/workspace` | **2 API contract tests failed**, offending path named |
 | Drop the `accounts_code_unique` index | **`verify:invariants` 6/6 → 5/6** |
 | Reintroduce `DatabaseMigrations` | **3 strategy-lock tests failed** |
