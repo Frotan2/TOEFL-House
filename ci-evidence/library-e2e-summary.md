@@ -1,13 +1,4 @@
-## Library browser E2E failure
-
-```
-Error: notice "Book issued." never appeared; mutations=[{"username":"e2e-library-librarian","method":"POST","path":"/api/v1/resources/books"}] state={"url":"/library","notice":"Book copy registered.","alert":null,"dialogs":[{"kind":"prompt","message":"Due date (YYYY-MM-DD)","default":"2026-09-12","returned":"null"},{"kind":"confirm","message":"Issue Browser E2E volume 1789239756272 to Authority Fixture e2e-library-approver-1?","returned":false}],"busy":false,"text":"Skip to main content T TOEFL House ACADEMIC OPERATIONS PLATFORM Authorized workspace Navigate ⌘/Ctrl K My work Administration Sign out NAVIGATE WORK Home Reception Desk Students & Admissions Academic Operations Placement People & Faculty PEOPLE HR CRM & Follow-up OPERATIONS Finance & Funding Payroll Library & Resources Communication Reports & Dashboards Documents & Evidence GOVERNANCE Organization Identity Access Governance Privacy & Consent Audit & History CONTROL Command Center My work queue A"}
-Error: notice "Book issued." never appeared; mutations=[{"username":"e2e-library-librarian","method":"POST","path":"/api/v1/resources/books"}] state={"url":"/library","notice":"Book copy registered.","alert":null,"dialogs":[{"kind":"prompt","message":"Due date (YYYY-MM-DD)","default":"2026-09-12","returned":"null"},{"kind":"confirm","message":"Issue Browser E2E volume 1789239756272 to Authority Fixture e2e-library-approver-1?","returned":false}],"busy":false,"text":"Skip to main content T TOEFL House ACADEMIC OPERATIONS PLATFORM Authorized workspace Navigate ⌘/Ctrl K My work Administration Sign out NAVIGATE WORK Home Reception Desk Students & Admissions Academic Operations Placement People & Faculty PEOPLE HR CRM & Follow-up OPERATIONS Finance & Funding Payroll Library & Resources Communication Reports & Dashboards Documents & Evidence GOVERNANCE Organization Identity Access Governance Privacy & Consent Audit & History CONTROL Command Center My work queue A"}
-    at waitForNotice (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:279:13)
-    at async file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:426:3
-```
-
-Records completed: 4
+### Library browser E2E: 24/24 passed
 
 | Record | Result | Detail |
 |---|---|---|
@@ -15,5 +6,23 @@ Records completed: 4
 | Library browser session is authenticated | PASS |  |
 | Library workspace renders authorized facts | PASS |  |
 | Book copy is registered through the canonical API | PASS |  |
-
-Console errors: none
+| Book issuance round-trips through the circulation ledger | PASS |  |
+| Issue dialogs default from the server calendar and name the record | PASS |  |
+| Book return closes the issuance in the ledger | PASS |  |
+| Asset is registered with immutable provenance | PASS |  |
+| Custody assignment and release round-trip | PASS |  |
+| Staged disposal request is created from the asset row | PASS |  |
+| The requesting session cannot approve its own disposal | PASS |  |
+| Requester withdrawal is terminal and frees the asset | PASS |  |
+| A corrected disposal request can be raised after withdrawal | PASS |  |
+| Work order request is created through the canonical API | PASS |  |
+| The requesting session cannot approve its own work order | PASS |  |
+| The first signature keeps the request unapproved and withdrawable | PASS |  |
+| Independent work-order approval transitions the order | PASS |  |
+| The second distinct signature approves the request for execution | PASS |  |
+| The requesting session executes the fully approved disposal | PASS |  |
+| Work order completes with evidence through the UI | PASS |  |
+| Every observed Resources mutation is a canonical POST route | PASS |  |
+| e2e-library-librarian session has no console/network errors | PASS |  |
+| e2e-library-approver-1 session has no console/network errors | PASS |  |
+| e2e-library-approver-2 session has no console/network errors | PASS |  |

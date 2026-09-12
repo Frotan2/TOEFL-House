@@ -10,20 +10,46 @@ PASS  Library browser session is authenticated
 PASS  Library workspace renders authorized facts
       metrics=["0","0","0","0","0","0"]
 PASS  Book copy is registered through the canonical API
-      E2E-BOOK-1789239756272
+      E2E-BOOK-1789240468360
+PASS  Book issuance round-trips through the circulation ledger
+      chip=Issued
+PASS  Issue dialogs default from the server calendar and name the record
+      [{"kind":"prompt","message":"Due date (YYYY-MM-DD)","default":"2026-09-12","returned":"2026-09-12"},{"kind":"confirm","message":"Issue Browser E2E volume 1789240468360 to Authority Fixture e2e-library-approver-1?","returned":true}]
+PASS  Book return closes the issuance in the ledger
+      chip=Returned
+PASS  Asset is registered with immutable provenance
+      E2E-ASSET-1789240468360
+PASS  Custody assignment and release round-trip
+      assigned then released
+PASS  Staged disposal request is created from the asset row
+      chip=Requested
+PASS  The requesting session cannot approve its own disposal
+      status=403 path=/api/v1/resources/disposals/dafc7260-b55c-48ff-9188-7452b6d3d304/approve
+PASS  Requester withdrawal is terminal and frees the asset
+      withdrawn row buttons=[]
+PASS  A corrected disposal request can be raised after withdrawal
+      chip=Requested
+PASS  Work order request is created through the canonical API
+      Browser E2E HVAC 1789240468360
+PASS  The requesting session cannot approve its own work order
+      status=403 path=/api/v1/resources/work-orders/dbcb4214-d675-4f58-ab3d-048f19d0bfdf/approve
+PASS  The first signature keeps the request unapproved and withdrawable
+      row="5e8147fe-6d5a-4e4f-8882-d6ca3d8d81c7 a8eb6974-07a5-4c0f-9d29-2ff235058dad Scrap Requested ApproveWithdraw" buttons=["Approve","Withdraw"]
+PASS  Independent work-order approval transitions the order
+      chip=Approved
+PASS  The second distinct signature approves the request for execution
+      buttons=["Execute"]
+PASS  The requesting session executes the fully approved disposal
+      request=Completed asset=Disposed
+PASS  Work order completes with evidence through the UI
+      chip=Completed
+PASS  Every observed Resources mutation is a canonical POST route
+      18 mutations observed; unexpected=[]
+PASS  e2e-library-librarian session has no console/network errors
+      console=0  network=0  dialogLeaks=0 
+PASS  e2e-library-approver-1 session has no console/network errors
+      console=0  network=0  dialogLeaks=0 
+PASS  e2e-library-approver-2 session has no console/network errors
+      console=0  network=0  dialogLeaks=0 
 
-LIBRARY BROWSER E2E FAILURE DIAGNOSTICS
-Error: notice "Book issued." never appeared; mutations=[{"username":"e2e-library-librarian","method":"POST","path":"/api/v1/resources/books"}] state={"url":"/library","notice":"Book copy registered.","alert":null,"dialogs":[{"kind":"prompt","message":"Due date (YYYY-MM-DD)","default":"2026-09-12","returned":"null"},{"kind":"confirm","message":"Issue Browser E2E volume 1789239756272 to Authority Fixture e2e-library-approver-1?","returned":false}],"busy":false,"text":"Skip to main content T TOEFL House ACADEMIC OPERATIONS PLATFORM Authorized workspace Navigate ⌘/Ctrl K My work Administration Sign out NAVIGATE WORK Home Reception Desk Students & Admissions Academic Operations Placement People & Faculty PEOPLE HR CRM & Follow-up OPERATIONS Finance & Funding Payroll Library & Resources Communication Reports & Dashboards Documents & Evidence GOVERNANCE Organization Identity Access Governance Privacy & Consent Audit & History CONTROL Command Center My work queue A"}
-    at waitForNotice (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:279:13)
-    at async file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:426:3
-Page snapshot: {"url":"http://127.0.0.1:8999/library","notice":"Book copy registered.","alert":null,"pageText":"Skip to main content T TOEFL House ACADEMIC OPERATIONS PLATFORM Authorized workspace Navigate ⌘/Ctrl K My work Administration Sign out NAVIGATE WORK Home Reception Desk Students & Admissions Academic Operations Placement People & Faculty PEOPLE HR CRM & Follow-up OPERATIONS Finance & Funding Payroll Library & Resources Communication Reports & Dashboards Documents & Evidence GOVERNANCE Organization Identity Access Governance Privacy & Consent Audit & History CONTROL Command Center My work queue Administration OPERATIONS · LIBRARY & RESOURCES Books, assets, custody, and facilities. One workspace for the resource lifecycle. Server commands remain the authority for scope, state transitions, evidence and audit. Refresh facts Book copy registered. 1Book copies 0Open loans 0Assets 0Open custody 0Pending disposal 0Work orders Authority boundary Branch visibility, lifecycle legality, custody rules, staged disposal approvals and book circulation constraints are enforced by the server. Overview Books Assets Work Search resources LIBRARY CIRCULATION Book copies and current custody Resources API · scope server-enforced Register book copy Copy codeTitleAcquired onOwning branch Select a branch… Authority Bootstrap Branch Register copy Circulation actor Choose the borrower explicitly. The server still decides whether the person is eligible and within scope. Borrower Select a borrower… Authority Fixture e2e-library-approver-1 Authority Fixture e2e-library-approver-2 Authority Fixture e2e-library-borrower Authority Fixture e2e-library-librarian COPY TITLE BRANCH STATE ACTION E2E-BOOK-1789239756272 Browser E2E volume 1789239756272 Authority Bootstrap Branch Recorded Issue ASSET REGISTER Assets, custody and staged disposal Immutable provenance · evidence-backed disposal Register asset CodeNameCategoryLocationAcquired onOwning branch Select a branch… Authority Bootstrap Branch Register asset Custody actor Choose the custodian explicitly. The server enforces authority, branch scope and custody state. Custodian Select a custodian… Authority Fixture e2e-library-approver-1 Authority Fixture e2e-library-approver-2 Authority Fixture e2e-library-borrower Authority Fixture e2e-library-librarian No assets match the current filter. FACILITIES Work orders with evidence Request → approve → start → complete/cancel Request facilities work Branch Select a branch… Authority Bootstrap Branch Facility Description Request work No work orders match the current filter. CIRCULATION REGISTER Loans and returns Due dates and loss evidence remain server-owned facts. No circulation records match the current filter. DISPOSAL CONTROL Approval and execution queue Request → staged approval → execute · withdraw while unapproved Disposal approval requires distinct approval sessions on the server. Execution is available only after the server reports an approved request. The requesting session may withdraw a request until it is fully approved; withdrawal is terminal and frees the asset. No disposal re"}
-Console errors (0): none
-node:internal/modules/run_main:123
-    triggerUncaughtException(
-    ^
-
-Error: notice "Book issued." never appeared; mutations=[{"username":"e2e-library-librarian","method":"POST","path":"/api/v1/resources/books"}] state={"url":"/library","notice":"Book copy registered.","alert":null,"dialogs":[{"kind":"prompt","message":"Due date (YYYY-MM-DD)","default":"2026-09-12","returned":"null"},{"kind":"confirm","message":"Issue Browser E2E volume 1789239756272 to Authority Fixture e2e-library-approver-1?","returned":false}],"busy":false,"text":"Skip to main content T TOEFL House ACADEMIC OPERATIONS PLATFORM Authorized workspace Navigate ⌘/Ctrl K My work Administration Sign out NAVIGATE WORK Home Reception Desk Students & Admissions Academic Operations Placement People & Faculty PEOPLE HR CRM & Follow-up OPERATIONS Finance & Funding Payroll Library & Resources Communication Reports & Dashboards Documents & Evidence GOVERNANCE Organization Identity Access Governance Privacy & Consent Audit & History CONTROL Command Center My work queue A"}
-    at waitForNotice (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:279:13)
-    at async file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:426:3
-
-Node.js v22.22.3
+LIBRARY BROWSER E2E RESULT: 24/24 passed
