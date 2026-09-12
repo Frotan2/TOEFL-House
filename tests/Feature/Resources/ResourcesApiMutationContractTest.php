@@ -146,6 +146,24 @@ final class ResourcesApiMutationContractTest extends TestCase
             ->assertStatus(201)
             ->assertJson(['status' => 'requested']);
 
+        // Staged approval: the first independent signature records but keeps
+        // the request 'requested', and the response must say so honestly.
+        $secondRequestId = AssetDisposalRequest::query()->where('asset_id', $assetId)->where('lifecycle_state', 'requested')->firstOrFail()->id;
+        $this->post('/login', ['username' => 'employee-api-approver', 'password' => 'employee-password-1'])->assertRedirect();
+        $this->postJson("/api/v1/resources/disposals/{$secondRequestId}/approve", [], ['Idempotency-Key' => 'api-disposal-approve-1'])
+            ->assertStatus(200)
+            ->assertJson(['status' => 'requested']);
+
+        // The second distinct approver completes the staged approval.
+        $this->login('api-approver-two', ['resources.dispose_approve']);
+        $this->post('/login', ['username' => 'employee-api-approver-two', 'password' => 'employee-password-1'])->assertRedirect();
+        $this->postJson("/api/v1/resources/disposals/{$secondRequestId}/approve", [], ['Idempotency-Key' => 'api-disposal-approve-2'])
+            ->assertStatus(200)
+            ->assertJson(['status' => 'approved']);
+        $this->assertDatabaseHas('asset_disposal_requests', ['id' => $secondRequestId, 'lifecycle_state' => 'approved']);
+
+        $this->post('/login', ['username' => 'employee-api-manager', 'password' => 'employee-password-1'])->assertRedirect();
+
         // Facilities work: request, independent approval, start, completion with evidence.
         $this->postJson('/api/v1/resources/work-orders', [
             'facility_note' => 'Library HVAC', 'description' => 'Replace filter', 'branch_id' => $this->bootstrapBranchId,
