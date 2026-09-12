@@ -29,13 +29,20 @@ const EXPECTED_CONSTRAINTS = new Map([
   ['enrollments_class_id_foreign', 'f'],
   ['classes_capacity_check', 'c'],
   ['journal_lines_journal_id_foreign', 'f'],
+  ['asset_disposal_request_withdrawal_check', 'c'],
+  ['asset_disposal_request_independent_approvers_check', 'c'],
 ]);
 
 // This production boundary is intentionally a unique *index* rather than an
 // ALTER TABLE unique constraint. PostgreSQL reports its name in `error.constraint`
 // all the same, so catalogue and assert it explicitly instead of pretending it is
 // a pg_constraint row.
-const EXPECTED_UNIQUE_INDEXES = ['accounts_code_unique'];
+const EXPECTED_UNIQUE_INDEXES = [
+  'accounts_code_unique',
+  'book_issuances_one_open_per_copy',
+  'custodies_one_open_per_asset',
+  'asset_disposal_requests_one_active_per_asset',
+];
 
 const conn = async () => {
   const client = new pg.Client(CFG);
@@ -143,6 +150,10 @@ async function mustReject(name, probe) {
     studentAdmission: randomUUID(),
     enrollment: randomUUID(),
     verifiedPerson: randomUUID(),
+    libraryCopy: randomUUID(),
+    libraryAsset: randomUUID(),
+    libraryIssuance: randomUUID(),
+    disposalRequest: randomUUID(),
   };
   let rejection;
 
@@ -168,6 +179,55 @@ async function mustReject(name, probe) {
   console.log(`PASS  ${name}\n      ${describeError(rejection)}; target=${target}`);
 }
 
+/**
+ * Transaction-scoped library topology scaffold. Rows are created under the
+ * replica role so birth/history guards stay out of the way of fixtures; the
+ * target invalid write always runs with normal trigger behaviour restored.
+ */
+async function libraryScaffold(client, ids) {
+  const organizationId = randomUUID();
+  const campusId = randomUUID();
+  const branchId = randomUUID();
+
+  await client.query("SET LOCAL session_replication_role = 'replica'");
+  await client.query(
+    "INSERT INTO organizations (id, name, lifecycle_state) VALUES ($1, 'Runtime invariant organization', 'active')",
+    [organizationId],
+  );
+  await client.query(
+    "INSERT INTO campuses (id, organization_id, name, lifecycle_state) VALUES ($1, $2, 'Runtime invariant campus', 'active')",
+    [campusId, organizationId],
+  );
+  await client.query(
+    "INSERT INTO branches (id, name, lifecycle_state) VALUES ($1, 'Runtime invariant branch', 'active')",
+    [branchId],
+  );
+  await client.query(
+    'INSERT INTO campus_assignments (id, branch_id, campus_id, effective_from, transfer_correlation_id) VALUES ($1, $2, $3, CURRENT_DATE, $4)',
+    [randomUUID(), branchId, campusId, randomUUID()],
+  );
+  await client.query(
+    "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'Runtime invariant library person', '1980-01-01', 'unverified', $2)",
+    [ids.person, branchId],
+  );
+  await client.query("SET LOCAL session_replication_role = 'origin'");
+
+  return { organizationId, branchId };
+}
+
+async function libraryAssetScaffold(client, ids) {
+  const topology = await libraryScaffold(client, ids);
+  await client.query(
+    `
+      INSERT INTO assets (id, code, name, category, location, acquired_on, lifecycle_state, organization_id, originating_branch_id)
+      VALUES ($1, $2, 'Runtime invariant asset', 'equipment', 'Room 1', CURRENT_DATE, 'in_service', $3, $4)
+    `,
+    [ids.libraryAsset, `RUNTIME-INV-${ids.libraryAsset}`, topology.organizationId, topology.branchId],
+  );
+
+  return topology;
+}
+
 try {
   assertDisposableVerificationTarget(CFG.database);
   await assertPrivilegedFixtureAccess(conn, 'Database invariant verification', {
@@ -179,8 +239,17 @@ try {
       { table: 'classes', privileges: ['INSERT'] },
       { table: 'journal_lines', privileges: ['INSERT'] },
       { table: 'accounts', privileges: ['INSERT'] },
+      { table: 'organizations', privileges: ['INSERT'] },
+      { table: 'campuses', privileges: ['INSERT'] },
+      { table: 'branches', privileges: ['INSERT'] },
+      { table: 'campus_assignments', privileges: ['INSERT'] },
+      { table: 'book_copies', privileges: ['INSERT'] },
+      { table: 'book_issuances', privileges: ['INSERT', 'UPDATE'] },
+      { table: 'assets', privileges: ['INSERT'] },
+      { table: 'custodies', privileges: ['INSERT'] },
+      { table: 'asset_disposal_requests', privileges: ['INSERT', 'UPDATE'] },
     ],
-    userTriggerControlTables: ['payments', 'enrollments', 'classes', 'journal_lines'],
+    userTriggerControlTables: ['payments', 'enrollments', 'classes', 'journal_lines', 'asset_disposal_requests'],
   });
   await assertExpectedSchema();
 
@@ -284,7 +353,106 @@ try {
     params: (ids) => [ids.accountDuplicate, `runtime-account-${ids.account}`],
   });
 
-  console.log('Database invariants: 6/6 named production-schema boundaries rejected invalid writes.');
+  await mustReject('one open library issuance per copy', {
+    expected: { code: '23505', constraint: 'book_issuances_one_open_per_copy' },
+    setup: async (client, ids) => {
+      const topology = await libraryScaffold(client, ids);
+      await client.query(
+        "INSERT INTO book_copies (id, code, title, acquired_on, organization_id, originating_branch_id) VALUES ($1, $2, 'Runtime invariant volume', CURRENT_DATE, $3, $4)",
+        [ids.libraryCopy, `RUNTIME-INV-${ids.libraryCopy}`, topology.organizationId, topology.branchId],
+      );
+      await client.query(
+        "INSERT INTO book_issuances (id, copy_id, borrower_person_id, issued_on, due_on, lifecycle_state, issued_by) VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '30 days', 'issued', $4)",
+        [ids.libraryIssuance, ids.libraryCopy, ids.person, randomUUID()],
+      );
+    },
+    sql: `
+      INSERT INTO book_issuances (id, copy_id, borrower_person_id, issued_on, due_on, lifecycle_state, issued_by)
+      VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '30 days', 'issued', $4)
+    `,
+    params: (ids) => [randomUUID(), ids.libraryCopy, ids.person, randomUUID()],
+  });
+
+  await mustReject('terminal issuance history is immutable', {
+    expected: { code: '23514', messageIncludes: 'retained history' },
+    setup: async (client, ids) => {
+      const topology = await libraryScaffold(client, ids);
+      await client.query(
+        "INSERT INTO book_copies (id, code, title, acquired_on, organization_id, originating_branch_id) VALUES ($1, $2, 'Runtime invariant returned volume', CURRENT_DATE, $3, $4)",
+        [ids.libraryCopy, `RUNTIME-INV-${ids.libraryCopy}`, topology.organizationId, topology.branchId],
+      );
+      await client.query("SET LOCAL session_replication_role = 'replica'");
+      await client.query(
+        "INSERT INTO book_issuances (id, copy_id, borrower_person_id, issued_on, due_on, returned_on, lifecycle_state, issued_by) VALUES ($1, $2, $3, CURRENT_DATE - 10, CURRENT_DATE + 20, CURRENT_DATE - 1, 'returned', $4)",
+        [ids.libraryIssuance, ids.libraryCopy, ids.person, randomUUID()],
+      );
+      await client.query("SET LOCAL session_replication_role = 'origin'");
+    },
+    sql: 'UPDATE book_issuances SET issued_on = CURRENT_DATE - 30 WHERE id = $1',
+    params: (ids) => [ids.libraryIssuance],
+  });
+
+  await mustReject('one open custody per asset', {
+    expected: { code: '23505', constraint: 'custodies_one_open_per_asset' },
+    setup: async (client, ids) => {
+      await libraryAssetScaffold(client, ids);
+      await client.query(
+        'INSERT INTO custodies (id, asset_id, custodian_person_id, assigned_on, assigned_by) VALUES ($1, $2, $3, CURRENT_DATE, $4)',
+        [randomUUID(), ids.libraryAsset, ids.person, randomUUID()],
+      );
+    },
+    sql: 'INSERT INTO custodies (id, asset_id, custodian_person_id, assigned_on, assigned_by) VALUES ($1, $2, $3, CURRENT_DATE, $4)',
+    params: (ids) => [randomUUID(), ids.libraryAsset, ids.person, randomUUID()],
+  });
+
+  await mustReject('one active disposal request per asset', {
+    expected: { code: '23505', constraint: 'asset_disposal_requests_one_active_per_asset' },
+    setup: async (client, ids) => {
+      await libraryAssetScaffold(client, ids);
+      await client.query(
+        "INSERT INTO asset_disposal_requests (id, asset_id, method, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'scrap', 'runtime invariant request', 'requested', $3, NOW(), NOW())",
+        [ids.disposalRequest, ids.libraryAsset, ids.person],
+      );
+    },
+    sql: "INSERT INTO asset_disposal_requests (id, asset_id, method, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'sale', 'runtime invariant second request', 'requested', $3, NOW(), NOW())",
+    params: (ids) => [randomUUID(), ids.libraryAsset, randomUUID()],
+  });
+
+  await mustReject('disposal withdrawal records the requesting session', {
+    expected: { code: '23514', constraint: 'asset_disposal_request_withdrawal_check' },
+    setup: async (client, ids) => {
+      await libraryAssetScaffold(client, ids);
+      await client.query("SET LOCAL session_replication_role = 'replica'");
+      await client.query(
+        "INSERT INTO asset_disposal_requests (id, asset_id, method, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'donation', 'runtime invariant withdrawal request', 'requested', $3, NOW(), NOW())",
+        [ids.disposalRequest, ids.libraryAsset, ids.person],
+      );
+      await client.query("SET LOCAL session_replication_role = 'origin'");
+      // The withdrawal CHECK is the target; keep the workflow guard from
+      // masking the named constraint under test.
+      await client.query('ALTER TABLE asset_disposal_requests DISABLE TRIGGER USER');
+    },
+    sql: "UPDATE asset_disposal_requests SET lifecycle_state = 'withdrawn', withdrawn_by = $1, updated_at = NOW() WHERE id = $2",
+    params: (ids) => [randomUUID(), ids.disposalRequest],
+  });
+
+  await mustReject('disposal approvers stay independent of the requester', {
+    expected: { code: '23514', constraint: 'asset_disposal_request_independent_approvers_check' },
+    setup: async (client, ids) => {
+      await libraryAssetScaffold(client, ids);
+      await client.query("SET LOCAL session_replication_role = 'replica'");
+      await client.query(
+        "INSERT INTO asset_disposal_requests (id, asset_id, method, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'sale', 'runtime invariant independence request', 'requested', $3, NOW(), NOW())",
+        [ids.disposalRequest, ids.libraryAsset, ids.person],
+      );
+      await client.query("SET LOCAL session_replication_role = 'origin'");
+      await client.query('ALTER TABLE asset_disposal_requests DISABLE TRIGGER USER');
+    },
+    sql: 'UPDATE asset_disposal_requests SET approver_two_id = $1, updated_at = NOW() WHERE id = $2',
+    params: (ids) => [ids.person, ids.disposalRequest],
+  });
+
+  console.log('Database invariants: 12/12 named production-schema boundaries rejected invalid writes.');
 } catch (error) {
   console.error(`Database invariant verification failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
