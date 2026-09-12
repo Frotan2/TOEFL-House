@@ -18,6 +18,14 @@ test('Documents & Evidence is mounted by the canonical React console', () => {
   assert.match(documents, /AppShell current="documents"/);
   assert.match(documents, /\/documents/);
   assert.match(documents, /available_actions/);
+  // The component renders the server's state-legal matrix verbatim: it must
+  // consume the activate/expire/archive flags and never re-derive lifecycle
+  // legality from document.lifecycle_state.
+  assert.match(documents, /available_actions\.activate/);
+  assert.match(documents, /available_actions\.expire/);
+  assert.match(documents, /available_actions\.archive/);
+  assert.doesNotMatch(documents, /available_actions\.\w+ && document\.lifecycle_state/);
+  assert.doesNotMatch(documents, /\['draft', 'rejected'\]\.includes\(document\.lifecycle_state\)/);
   assert.match(documents, /\/history/);
   assert.doesNotMatch(documents, /from ['"]react-dom\/client['"]/);
   assert.doesNotMatch(documents, /\bcreateRoot\s*\(/);
@@ -55,6 +63,8 @@ test('Documents read projection is server-scoped, minimal, and command-owned', (
   assert.match(controller, /defineClassification.*null/s);
   assert.match(controller, /DocumentHistoryQuery::class/);
   assert.match(controller, /Per-record affordances prevent a capability in branch A/);
+  assert.match(controller, /rowAffordances/);
+  assert.match(controller, /DocumentLifecycle::allowsTransition/);
   assert.match(controller, /Storage references, content fingerprints, and verification/);
   assert.doesNotMatch(controller, /use App\\Modules\\Documents\\Models\\DocumentVersion/);
   assert.match(webRoutes, /Route::view\('\/', 'workspace', \['view' => 'documents'\]\)->name\('index'\)/);
@@ -77,7 +87,7 @@ function workspaceFixture() {
     classification_id: 'class-1',
     title,
     lifecycle_state: state,
-    available_actions: { submit: false, verify: false, retention: false, ...actions },
+    available_actions: { submit: false, verify: false, activate: false, expire: false, archive: false, retention: false, ...actions },
     created_at: '2026-09-01T08:00:00.000Z',
     updated_at: '2026-09-02T08:00:00.000Z',
   });
@@ -93,9 +103,9 @@ function workspaceFixture() {
         doc('doc-draft', 'draft', { submit: true }, 'Draft evidence'),
         doc('doc-submitted', 'submitted', { verify: true }, 'Submitted evidence'),
         doc('doc-rejected', 'rejected', { submit: true }, 'Rejected evidence'),
-        doc('doc-verified', 'verified', { verify: true }, 'Verified evidence'),
-        doc('doc-active', 'active', { verify: true, retention: true }, 'Active evidence'),
-        doc('doc-expired', 'expired', { verify: true }, 'Expired evidence'),
+        doc('doc-verified', 'verified', { activate: true }, 'Verified evidence'),
+        doc('doc-active', 'active', { expire: true, archive: true, retention: true }, 'Active evidence'),
+        doc('doc-expired', 'expired', { archive: true }, 'Expired evidence'),
         doc('doc-archived', 'archived', {}, 'Archived evidence'),
         doc('doc-locked', 'draft', {}, 'Locked draft'),
       ],

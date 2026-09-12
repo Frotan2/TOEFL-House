@@ -10,6 +10,7 @@ use App\Modules\Documents\Commands\DecideRetention;
 use App\Modules\Documents\Commands\DefineDocumentClassification;
 use App\Modules\Documents\Commands\RegisterDocument;
 use App\Modules\Documents\Commands\TransitionDocument;
+use App\Modules\Documents\Domain\DocumentLifecycle;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Documents\Models\DocumentClassification;
 use App\Modules\Documents\Models\RetentionDecision;
@@ -139,13 +140,19 @@ final class DocumentsApiController extends Controller
                     'title' => (string) $document->title,
                     'lifecycle_state' => (string) $document->lifecycle_state,
                     // Per-record affordances prevent a capability in branch A
-                    // from appearing as a usable action for a record in branch B.
-                    // They remain UX hints; each command checks again when run.
-                    'available_actions' => [
-                        'submit' => $branchId !== null && in_array($branchId, $registrationBranches, true),
-                        'verify' => $branchId !== null && in_array($branchId, $verificationBranches, true),
-                        'retention' => $branchId !== null && in_array($branchId, $retentionBranches, true),
-                    ],
+                    // from appearing as a usable action for a record in branch B,
+                    // and are additionally gated by the one DocumentLifecycle
+                    // transition table the commands enforce: the projection is a
+                    // state-legal action matrix, never a capability echo. The
+                    // browser renders these flags verbatim and re-derives no
+                    // lifecycle rules; each command still re-resolves authority
+                    // and the transition when it runs.
+                    'available_actions' => self::rowAffordances(
+                        (string) $document->lifecycle_state,
+                        $branchId !== null && in_array($branchId, $registrationBranches, true),
+                        $branchId !== null && in_array($branchId, $verificationBranches, true),
+                        $branchId !== null && in_array($branchId, $retentionBranches, true),
+                    ),
                     'created_at' => $document->created_at?->toISOString(),
                     'updated_at' => $document->updated_at?->toISOString(),
                 ];
@@ -309,6 +316,29 @@ final class DocumentsApiController extends Controller
             Document::query()->findOrFail($documentId),
             $this->idempotencyKey('documents.retention.decide'),
         )]);
+    }
+
+    /**
+     * Row affordances = granted scope ∧ lifecycle legality, both derived from
+     * the same DocumentLifecycle transition table the commands enforce. A
+     * draft never offers verify, a rejected document never offers a verdict,
+     * and an archived record offers no mutation at all — regardless of which
+     * capabilities the caller holds. Retention stays scope-gated only: the
+     * DecideRetention command itself owns its rule and archive-transition
+     * guards, and a retain decision is legal in every non-terminal moment.
+     *
+     * @return array{submit: bool, verify: bool, activate: bool, expire: bool, archive: bool, retention: bool}
+     */
+    private static function rowAffordances(string $state, bool $registrationScope, bool $verificationScope, bool $retentionScope): array
+    {
+        return [
+            'submit' => $registrationScope && DocumentLifecycle::allowsTransition($state, DocumentLifecycle::STATE_SUBMITTED),
+            'verify' => $verificationScope && DocumentLifecycle::allowsTransition($state, DocumentLifecycle::STATE_VERIFIED),
+            'activate' => $verificationScope && DocumentLifecycle::allowsTransition($state, DocumentLifecycle::STATE_ACTIVE),
+            'expire' => $verificationScope && DocumentLifecycle::allowsTransition($state, DocumentLifecycle::STATE_EXPIRED),
+            'archive' => $verificationScope && DocumentLifecycle::allowsTransition($state, DocumentLifecycle::STATE_ARCHIVED),
+            'retention' => $retentionScope,
+        ];
     }
 
     private static function identifier(mixed $value): string
