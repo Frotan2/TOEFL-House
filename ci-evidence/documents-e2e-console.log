@@ -1,0 +1,16 @@
+
+> verify:browser:documents
+> node scripts/runtime/documents-browser-e2e.mjs
+
+documents browser E2E actors provisioned on DB 'toefl_house_e2e'
+PASS  Health endpoint is reachable
+      HTTP 200
+DOCUMENTS BROWSER E2E FAILED
+TimeoutError: Waiting for selector `#app-toolbar` failed
+    at CSSQueryHandler.waitFor (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/common/QueryHandler.js:211:46)
+    at async CdpFrame.waitForSelector (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:546:21)
+    at async CdpPage.waitForSelector (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1477:20)
+    at async session (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:197:5)
+    at async file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:333:19
+
+DOCUMENTS BROWSER E2E: 1/1 checks passed
