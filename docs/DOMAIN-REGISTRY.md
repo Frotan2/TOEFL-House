@@ -52,7 +52,7 @@ The selected domain has converged in source inspection. Confirmed implementation
 - circulation issue/return/loss;
 - assets and custody;
 - facilities work lifecycle;
-- staged disposal request → approval → execution;
+- staged disposal request → approval → execution, with requester-only withdrawal while the request is unapproved (withdrawal is terminal and frees the asset for a corrected request);
 - explicit consequential actor selection;
 - evidence capture;
 - irreversible-action confirmation;

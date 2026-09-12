@@ -165,6 +165,13 @@ final class LibraryController extends Controller
         return redirect()->route('library.index')->with('success', 'Disposal signature recorded.');
     }
 
+    public function withdrawDisposal(Request $request, string $requestId): RedirectResponse
+    {
+        app(DisposeAsset::class)->withdraw($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $this->idempotencyKey('resources.disposal.withdraw'));
+
+        return redirect()->route('library.index')->with('success', 'Disposal request withdrawn.');
+    }
+
     public function executeDisposal(Request $request, string $requestId): RedirectResponse
     {
         $input = $request->validate(['disposed_on' => ['required', 'date']]);

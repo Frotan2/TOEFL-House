@@ -9,7 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Staged asset disposal request (000115): born 'requested', signed by two
  * distinct approver sessions in their own sessions, and executed by the
- * requesting session once approved. Immutable history — see the 000115 guard.
+ * requesting session once approved. The requesting session may withdraw the
+ * request while it is still 'requested' (000209); 'withdrawn' is terminal.
+ * Immutable history — see the 000115/000209 guards.
  *
  * @property string $id
  * @property string $asset_id
@@ -21,6 +23,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $approver_two_id
  * @property string|null $executed_by
  * @property string|null $disposal_id
+ * @property string|null $withdrawn_by
  */
 final class AssetDisposalRequest extends Model
 {
@@ -30,6 +33,6 @@ final class AssetDisposalRequest extends Model
 
     protected $fillable = [
         'id', 'asset_id', 'method', 'reason', 'lifecycle_state', 'requested_by',
-        'approver_one_id', 'approver_two_id', 'executed_by', 'disposal_id',
+        'approver_one_id', 'approver_two_id', 'executed_by', 'disposal_id', 'withdrawn_by',
     ];
 }

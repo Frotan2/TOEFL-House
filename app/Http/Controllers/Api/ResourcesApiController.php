@@ -168,6 +168,13 @@ final class ResourcesApiController extends Controller
         return response()->json(['status' => 'approved']);
     }
 
+    public function withdrawDisposal(string $requestId): JsonResponse
+    {
+        app(DisposeAsset::class)->withdraw($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $this->idempotencyKey('resources.disposal.withdraw'));
+
+        return response()->json(['status' => 'withdrawn']);
+    }
+
     public function executeDisposal(Request $request, string $requestId): JsonResponse
     {
         $input = $request->validate(['disposed_on' => ['required', 'date']]);
