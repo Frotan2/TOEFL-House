@@ -129,6 +129,31 @@ try {
     const context = await browser.createBrowserContext();
     contexts.push(context);
     const page = await context.newPage();
+    /**
+     * Deterministic dialogs: window.prompt/window.confirm are scripted
+     * in-page from an explicit queue and logged with their exact messages
+     * and defaults. CDP dialog plumbing in headless Chromium is not
+     * load-bearing for this journey (and a silently dismissed prompt would
+     * make the React handler return without any observable trace), while
+     * the log doubles as evidence that defaults come from the server
+     * calendar and confirms name the right record.
+     */
+    await page.evaluateOnNewDocument(() => {
+      window.__dialogQueue = [];
+      window.__dialogLog = [];
+      window.prompt = (message, defaultValue) => {
+        const response = window.__dialogQueue.shift();
+        const value = response === undefined ? (defaultValue ?? '') : String(response);
+        window.__dialogLog.push({ kind: 'prompt', message: String(message).slice(0, 120), default: defaultValue === undefined ? null : String(defaultValue), returned: value });
+        return value;
+      };
+      window.confirm = (message) => {
+        const response = window.__dialogQueue.shift();
+        const ok = response === undefined ? true : Boolean(response);
+        window.__dialogLog.push({ kind: 'confirm', message: String(message).slice(0, 160), returned: ok });
+        return ok;
+      };
+    });
     await page.setViewport({ width: 1440, height: 1100, deviceScaleFactor: 1 });
     page.setDefaultNavigationTimeout(30_000);
     page.setDefaultTimeout(15_000);
@@ -136,7 +161,6 @@ try {
     const consoleErrors = [];
     const failedRequests = [];
     const observedDenials = [];
-    const dialogQueue = [];
     let deliberateDenialWindow = 0;
 
     page.on('console', (message) => {
@@ -164,9 +188,11 @@ try {
         failedRequests.push(`${username}: ${response.status()} ${path.slice(0, 180)}`);
       }
     });
+    const dialogLeaks = [];
     page.on('dialog', async (dialog) => {
-      const response = dialogQueue.shift();
-      await (response === undefined ? dialog.accept() : dialog.accept(response)).catch(() => {});
+      // With the in-page stubs active a real dialog is itself a finding.
+      dialogLeaks.push(`${dialog.type()}: ${dialog.message().slice(0, 120)}`);
+      await dialog.accept().catch(() => {});
     });
 
     await page.goto(`${BASE}/library`, { waitUntil: 'networkidle2' });
@@ -194,8 +220,9 @@ try {
       observedDenials,
       /** Script the upcoming window.prompt/window.confirm answers in order. */
       expectDialogs(...responses) {
-        dialogQueue.push(...responses);
+        return page.evaluate((items) => window.__dialogQueue.push(...items), responses);
       },
+      dialogLeaks,
       /** Runs a negative request whose 403 response + console noise are expected. */
       async expectingDenial(work) {
         deliberateDenialWindow += 1;
@@ -211,9 +238,10 @@ try {
 
   function checkSession(sessionRecord) {
     record(`${sessionRecord.username} session has no console/network errors`,
-      sessionRecord.consoleErrors.length === 0 && sessionRecord.failedRequests.length === 0,
+      sessionRecord.consoleErrors.length === 0 && sessionRecord.failedRequests.length === 0 && sessionRecord.dialogLeaks.length === 0,
       `console=${sessionRecord.consoleErrors.length} ${sessionRecord.consoleErrors.slice(0, 2).join(' | ')}`
-      + ` network=${sessionRecord.failedRequests.length} ${sessionRecord.failedRequests.slice(0, 2).join(' | ')}`);
+      + ` network=${sessionRecord.failedRequests.length} ${sessionRecord.failedRequests.slice(0, 2).join(' | ')}`
+      + ` dialogLeaks=${sessionRecord.dialogLeaks.length} ${sessionRecord.dialogLeaks.slice(0, 2).join(' | ')}`);
     allConsoleErrors.push(...sessionRecord.consoleErrors);
   }
 
@@ -227,14 +255,39 @@ try {
     await page.waitForFunction(() => document.querySelector('#library-main .toolbar') !== null
       && !(document.body.innerText || '').includes('Loading authorized'), { timeout: 20_000 });
   };
+  /** Everything needed to explain a timed-out expectation without CI logs. */
+  const pageState = async (page) => {
+    try {
+      return await page.evaluate(() => ({
+        url: window.location.pathname,
+        notice: document.querySelector('.notice')?.textContent || null,
+        alert: document.querySelector('.alert')?.textContent || null,
+        dialogs: (window.__dialogLog || []).slice(-6),
+        busy: (document.body.innerText || '').includes('Loading authorized'),
+        text: (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 500),
+      }));
+    } catch {
+      return 'page state unavailable';
+    }
+  };
   const waitForNotice = async (page, expected) => {
-    await page.waitForFunction((needle) => (document.querySelector('.notice')?.textContent || '').includes(needle),
-      { timeout: 20_000 }, expected);
+    try {
+      await page.waitForFunction((needle) => (document.querySelector('.notice')?.textContent || '').includes(needle),
+        { timeout: 20_000 }, expected);
+    } catch {
+      const state = await pageState(page);
+      throw new Error(`notice "${expected}" never appeared; mutations=${JSON.stringify(resourceMutations.slice(-3))} state=${JSON.stringify(state)}`);
+    }
     await waitIdle(page);
   };
   const waitForAlert = async (page, expected) => {
-    await page.waitForFunction((needle) => (document.querySelector('.alert')?.textContent || '').includes(needle),
-      { timeout: 20_000 }, expected);
+    try {
+      await page.waitForFunction((needle) => (document.querySelector('.alert')?.textContent || '').includes(needle),
+        { timeout: 20_000 }, expected);
+    } catch {
+      const state = await pageState(page);
+      throw new Error(`alert "${expected}" never appeared; state=${JSON.stringify(state)}`);
+    }
   };
   /** Sets a React-controlled input inside the form whose submit button matches. */
   const setFormInput = async (page, submitText, labelText, value) => {
@@ -309,7 +362,8 @@ try {
         return false;
       }, { timeout: 20_000 }, { rowNeedle: rowText, buttonNeedle: buttonText, heading: sectionHeading });
     } catch {
-      throw new Error(`Enabled button "${buttonText}" in row "${rowText}"${sectionHeading ? ` of "${sectionHeading}"` : ''} never appeared`);
+      const state = await pageState(page);
+      throw new Error(`Enabled button "${buttonText}" in row "${rowText}"${sectionHeading ? ` of "${sectionHeading}"` : ''} never appeared; state=${JSON.stringify(state)}`);
     }
   };
   /** Polls a row-shape detail out of a section-scoped table row. */
@@ -367,13 +421,18 @@ try {
   record('Book copy is registered through the canonical API', true, BOOK_CODE);
 
   await selectFirstOption(page, 'Borrower');
-  librarian.expectDialogs(undefined, undefined); // due-date prompt (server default) + confirm
+  await librarian.expectDialogs(undefined, undefined); // due-date prompt (server default) + confirm
   await clickRowButton(page, BOOK_CODE, 'Issue');
   await waitForNotice(page, 'Book issued.');
   await waitForRow(page, 'Issued');
   record('Book issuance round-trips through the circulation ledger', true, 'chip=Issued');
+  const issueDialogs = await page.evaluate(() => (window.__dialogLog || []).slice(-2));
+  record('Issue dialogs default from the server calendar and name the record',
+    issueDialogs[0]?.kind === 'prompt' && issueDialogs[0]?.default === today
+      && issueDialogs[1]?.kind === 'confirm' && (issueDialogs[1]?.message || '').includes('Issue'),
+    JSON.stringify(issueDialogs));
 
-  librarian.expectDialogs(undefined, undefined); // return-date prompt + confirm
+  await librarian.expectDialogs(undefined, undefined); // return-date prompt + confirm
   await clickRowButton(page, 'Issued', 'Return');
   await waitForNotice(page, 'Book returned.');
   await waitForRow(page, 'Returned');
@@ -392,16 +451,16 @@ try {
   record('Asset is registered with immutable provenance', true, ASSET_CODE);
 
   await selectFirstOption(page, 'Custodian');
-  librarian.expectDialogs(undefined, undefined); // assignment-date prompt + confirm
+  await librarian.expectDialogs(undefined, undefined); // assignment-date prompt + confirm
   await clickRowButton(page, ASSET_CODE, 'Assign custody');
   await waitForNotice(page, 'Custody assigned.');
-  librarian.expectDialogs(undefined, undefined); // release-date prompt + confirm
+  await librarian.expectDialogs(undefined, undefined); // release-date prompt + confirm
   await clickRowButton(page, ASSET_CODE, 'Release');
   await waitForNotice(page, 'Custody released.');
   record('Custody assignment and release round-trip', true, 'assigned then released');
 
   // --- staged disposal: request, provoked denial, withdrawal, re-request
-  librarian.expectDialogs(undefined, 'Browser E2E decommission', undefined); // method prompt (default scrap), reason prompt, confirm
+  await librarian.expectDialogs(undefined, 'Browser E2E decommission', undefined); // method prompt (default scrap), reason prompt, confirm
   await clickRowButton(page, ASSET_CODE, 'Request disposal');
   await waitForNotice(page, 'Disposal request created.');
   await waitForRow(page, 'Requested', 'Approval and execution queue');
@@ -409,7 +468,7 @@ try {
 
   const denialsBeforeSelfApproval = librarian.observedDenials.length;
   await librarian.expectingDenial(async () => {
-    librarian.expectDialogs(undefined); // confirm
+    await librarian.expectDialogs(undefined); // confirm
     await clickRowButton(page, 'Requested', 'Approve', 'Approval and execution queue');
     await waitForAlert(page, 'no active authority grants resources.dispose_approve');
   });
@@ -419,7 +478,7 @@ try {
     `status=${selfApprovalDenial?.status} path=${selfApprovalDenial?.path}`);
   await waitForRow(page, 'Requested', 'Approval and execution queue');
 
-  librarian.expectDialogs(undefined); // irreversible confirm
+  await librarian.expectDialogs(undefined); // irreversible confirm
   await clickRowButton(page, 'Requested', 'Withdraw', 'Approval and execution queue');
   await waitForNotice(page, 'Disposal request withdrawn.');
   const withdrawnRow = await rowDetail(page, 'Withdrawn', 'Approval and execution queue');
@@ -427,7 +486,7 @@ try {
     withdrawnRow.buttons.length === 0,
     `withdrawn row buttons=${JSON.stringify(withdrawnRow.buttons)}`);
 
-  librarian.expectDialogs(undefined, 'Browser E2E corrected method', undefined);
+  await librarian.expectDialogs(undefined, 'Browser E2E corrected method', undefined);
   await clickRowButton(page, ASSET_CODE, 'Request disposal');
   await waitForNotice(page, 'Disposal request created.');
   await waitForRow(page, 'Requested', 'Approval and execution queue');
@@ -444,7 +503,7 @@ try {
 
   const denialsBeforeWorkApproval = librarian.observedDenials.length;
   await librarian.expectingDenial(async () => {
-    librarian.expectDialogs(undefined);
+    await librarian.expectDialogs(undefined);
     await clickRowButton(page, FACILITY, 'Approve', 'Work orders with evidence');
     await waitForAlert(page, 'no active authority grants facilities.work_approve');
   });
@@ -457,7 +516,7 @@ try {
   // Approver one: first disposal signature + independent work approval.
   // ------------------------------------------------------------------
   const approverOne = await session('e2e-library-approver-1');
-  approverOne.expectDialogs(undefined);
+  await approverOne.expectDialogs(undefined);
   await clickRowButton(approverOne.page, 'Requested', 'Approve', 'Approval and execution queue');
   await waitForNotice(approverOne.page, 'Disposal approval recorded.');
   const afterFirstSignature = await rowDetail(approverOne.page, 'Requested', 'Approval and execution queue');
@@ -465,7 +524,7 @@ try {
     afterFirstSignature.buttons.includes('Withdraw') && !afterFirstSignature.buttons.includes('Execute'),
     `row="${afterFirstSignature.text.slice(0, 120)}" buttons=${JSON.stringify(afterFirstSignature.buttons)}`);
 
-  approverOne.expectDialogs(undefined);
+  await approverOne.expectDialogs(undefined);
   await clickRowButton(approverOne.page, FACILITY, 'Approve', 'Work orders with evidence');
   await waitForNotice(approverOne.page, 'Work order approved.');
   await waitForRow(approverOne.page, 'Approved', 'Work orders with evidence');
@@ -475,7 +534,7 @@ try {
   // Approver two: second disposal signature.
   // ------------------------------------------------------------------
   const approverTwo = await session('e2e-library-approver-2');
-  approverTwo.expectDialogs(undefined);
+  await approverTwo.expectDialogs(undefined);
   await clickRowButton(approverTwo.page, 'Requested', 'Approve', 'Approval and execution queue');
   await waitForNotice(approverTwo.page, 'Disposal approval recorded.');
   const afterSecondSignature = await rowDetail(approverTwo.page, 'Approved', 'Approval and execution queue');
@@ -490,18 +549,18 @@ try {
   await page.goto(`${BASE}/library`, { waitUntil: 'networkidle2' });
   await waitIdle(page);
 
-  librarian.expectDialogs(undefined, undefined); // disposal-date prompt + irreversible confirm
+  await librarian.expectDialogs(undefined, undefined); // disposal-date prompt + irreversible confirm
   await clickRowButton(page, 'Approved', 'Execute', 'Approval and execution queue');
   await waitForNotice(page, 'Disposal executed and recorded.');
   await waitForRow(page, 'Completed', 'Approval and execution queue');
   await waitForRow(page, 'Disposed');
   record('The requesting session executes the fully approved disposal', true, 'request=Completed asset=Disposed');
 
-  librarian.expectDialogs(undefined); // start confirm
+  await librarian.expectDialogs(undefined); // start confirm
   await clickRowButton(page, FACILITY, 'Start', 'Work orders with evidence');
   await waitForNotice(page, 'Work order started.');
   await waitForRow(page, 'In Progress', 'Work orders with evidence');
-  librarian.expectDialogs('evidence/browser/hvac-1', undefined); // evidence prompt + confirm
+  await librarian.expectDialogs('evidence/browser/hvac-1', undefined); // evidence prompt + confirm
   await clickRowButton(page, FACILITY, 'Complete', 'Work orders with evidence');
   await waitForNotice(page, 'Work order completed with evidence.');
   await waitForRow(page, 'Completed', 'Work orders with evidence');
@@ -522,7 +581,7 @@ try {
   console.error('\nLIBRARY BROWSER E2E FAILURE DIAGNOSTICS');
   console.error(error instanceof Error ? error.stack ?? `${error.name}: ${error.message}` : String(error));
   for (const context of contexts) {
-    for (const page of context.pages()) {
+    for (const page of await context.pages()) {
       try {
         const snapshot = await page.evaluate(() => ({
           url: window.location.href,
