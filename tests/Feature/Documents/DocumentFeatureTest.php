@@ -13,7 +13,9 @@ use App\Modules\Documents\Queries\DocumentHistoryQuery;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
+use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
@@ -110,6 +112,35 @@ final class DocumentFeatureTest extends TestCase
 
         $this->expectException(QueryException::class);
         DB::statement("UPDATE document_verifications SET result = 'fail' WHERE document_id = ?", [$document->id]);
+    }
+
+    public function test_a_version_carries_exactly_one_verdict_even_against_raw_sql(): void
+    {
+        $registrar = $this->documentsOfficer('doc-registrar-9');
+        $verifier = $this->documentsOfficer('doc-verifier-9');
+        $document = $this->registerDocument($registrar, 'doc-key-30');
+        app(TransitionDocument::class)->submit($registrar, $document, 'hash-y', 'storage/y', 'doc-key-31');
+        $verdict = app(TransitionDocument::class)->verify($verifier, $document, true, 'valid', 'doc-key-32');
+        $versionNo = (int) $verdict['version_no'];
+
+        $this->assertSame(1, DB::table('document_verifications')
+            ->where('document_id', $document->id)->where('version_no', $versionNo)->count());
+
+        // The command layer cannot produce a second verdict for the same
+        // version (the state moved off submitted); an out-of-band writer
+        // must hit the named uniqueness boundary instead of silently
+        // storing a contradictory verdict alongside the recorded one.
+        $this->expectException(UniqueConstraintViolationException::class);
+        DB::table('document_verifications')->insert([
+            'id' => RandomIdentifier::new(),
+            'document_id' => $document->id,
+            'version_no' => $versionNo,
+            'verifier_person_id' => $verifier->actorId,
+            'result' => 'fail',
+            'reason' => 'contradictory out-of-band verdict',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     public function test_unprivileged_registrar_is_denied_and_audited(): void
