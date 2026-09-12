@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\ProgressionDecision;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Students\Domain\StudentStatusRegistry;
 use App\Modules\Students\Models\GuardianRelationship;
 use App\Modules\Students\Models\Student;
@@ -13,7 +14,6 @@ use App\Modules\Students\Models\StudentStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * The authoritative, read-only student learner lifecycle file. It composes

@@ -9,6 +9,7 @@ use App\Modules\Access\Commands\TransitionPositionAssignment;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Contract;
 use App\Modules\Hr\Models\Employment;
@@ -25,7 +26,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Employment lifecycle: verified person -> candidate -> active, with leave,
@@ -49,7 +49,7 @@ final class MaintainEmployment
         private readonly AttemptedOperation $attemptedOperation,
         private readonly TransitionPositionAssignment $assignments,
         private readonly MaintainTeacherAssignment $teacherAssignments,
-    
+
     ) {}
 
     /** @return array{employment_id: string, correlation_id: string} */

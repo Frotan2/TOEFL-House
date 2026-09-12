@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\AcademicAppeal;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Admissions\Models\AdmissionDecision;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Communication\Queries\NotificationQuery;
 use App\Modules\Crm\Models\VisitorFollowup;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
@@ -20,8 +21,6 @@ use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
-use Carbon\CarbonImmutable;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Rebuildable employee workspace composition.

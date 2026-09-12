@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Finance\Queries;
 
 use App\Modules\Academic\Models\Enrollment;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Finance\Domain\FinancialGateEvidence;
 use App\Modules\Finance\Models\FinancialCoverageCommitment;
 use App\Modules\Finance\Models\Obligation;
 use App\Support\Errors\BusinessRejection;
 use App\Support\MoneyAmount;
-use Illuminate\Support\Carbon;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Finance-authoritative enrollment gate assessment.
@@ -30,7 +29,7 @@ final class FinancialGateQuery
 
         private readonly FinancialBalanceQuery $balances,
         private readonly FinancialCoverageCommitmentQuery $coverageCommitments,
-    
+
     ) {}
 
     /** @return array<string, mixed> */

@@ -9,6 +9,7 @@ use App\Modules\Access\Models\Delegation;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Organization\Models\Branch;
@@ -16,7 +17,6 @@ use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\CampusAssignment;
 use App\Modules\Organization\Models\Department;
 use Carbon\CarbonImmutable;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-side branch visibility (WP-ACAD-SCOPE): the set of branches an actor
@@ -31,7 +31,7 @@ final class ActorBranches
 {
     public function __construct(
         private readonly CalendarAuthority $calendar,
-private readonly ?CarbonImmutable $effectiveTime = null
+        private readonly ?CarbonImmutable $effectiveTime = null
     ) {}
 
     /** @return list<string> sorted unique branch ids */

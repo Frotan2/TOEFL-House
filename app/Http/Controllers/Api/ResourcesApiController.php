@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Resources\Commands\CirculateBooks;
@@ -18,11 +19,9 @@ use App\Modules\Resources\Models\BookCopy;
 use App\Modules\Resources\Models\BookIssuance;
 use App\Modules\Resources\Models\Custody;
 use App\Modules\Resources\Models\WorkOrder;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical JSON workspace for Library & Resources.

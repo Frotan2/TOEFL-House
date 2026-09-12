@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Organization\Models;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Domain\StructureUnit;
 use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Branch; its campus attribution over time lives in campus assignments.

@@ -297,8 +297,6 @@ final class StructureChangeDefinition
      * governors yet, so — exactly as for its creation — organization-root
      * platform authority governs it (null scope). Everything else resolves
      * through the unit's own structural scope.
-     *
-     * @return StructureScope|null
      */
     public static function authorityScope(StructureUnit&Model $unit, bool $allowInactive): ?StructureScope
     {
@@ -324,7 +322,7 @@ final class StructureChangeDefinition
             StructureChangeRequest::TYPE_CREATE_CAMPUS => [new StructureScope((string) $this->organizationId)],
             StructureChangeRequest::TYPE_CREATE_BRANCH => self::campusScope((string) $this->parentScopeId),
             StructureChangeRequest::TYPE_CREATE_DEPARTMENT => [
-                (new ResolvesStructureScope())->forDepartment(
+                (new ResolvesStructureScope)->forDepartment(
                     (string) $this->parentScopeType,
                     (string) $this->parentScopeId,
                 ),

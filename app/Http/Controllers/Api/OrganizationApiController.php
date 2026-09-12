@@ -13,7 +13,6 @@ use App\Modules\Organization\Domain\OrganizationLifecycle;
 use App\Modules\Organization\Domain\StructureChangeDefinition;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
-use Illuminate\Support\Facades\DB;
 use App\Modules\Organization\Models\Department;
 use App\Modules\Organization\Models\Organization;
 use App\Modules\Organization\Models\StructureChangeRequest;
@@ -24,6 +23,7 @@ use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**

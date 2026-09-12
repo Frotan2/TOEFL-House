@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Finance\Domain;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Finance\Models\EnrollmentInstallmentPlan;
 use App\Modules\Finance\Models\FinancialCoverageCommitment;
 use App\Modules\Finance\Models\FinancialCredit;
@@ -14,8 +15,6 @@ use App\Modules\Finance\Queries\FinancialCoverageCommitmentQuery;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use App\Support\MoneyAmount;
-use Illuminate\Support\Carbon;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Materializes an approved enrollment-gate source into immutable, exact
@@ -34,7 +33,7 @@ final class FinancialCoverageCommitmentAllocator
 
         private readonly FinancialBalanceQuery $balances,
         private readonly FinancialCoverageCommitmentQuery $commitments,
-    
+
     ) {}
 
     /** @return list<array{commitment_id: string, obligation_id: string, amount: numeric-string}> */

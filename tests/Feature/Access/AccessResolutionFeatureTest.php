@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Access;
 
-use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Access\AccessResolution;
 use App\Modules\Access\Models\AccessPolicy;
 use App\Modules\Access\Models\Delegation;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;

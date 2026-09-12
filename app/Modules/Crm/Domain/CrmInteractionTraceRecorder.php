@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Academic\Placement\Models\PlacementAttempt;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Audit\Models\AuditEvent;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Communication\Models\Message;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorInteraction;
@@ -18,7 +19,6 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Cross-module CRM timeline recorder. The AUTHORIZING workflow is always the
@@ -38,7 +38,7 @@ final class CrmInteractionTraceRecorder
 
         private readonly AuditRecorder $audit,
         private readonly CrmInteractionLineage $lineage,
-    
+
     ) {}
 
     public function visitorIdForPerson(string $personId): ?string

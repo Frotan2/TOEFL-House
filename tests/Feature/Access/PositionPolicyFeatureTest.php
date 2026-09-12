@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Access;
 
-use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Access\AccessResolution;
 use App\Modules\Access\Commands\AssignPosition;
 use App\Modules\Access\Commands\DefineAccessPolicy;
@@ -13,6 +12,7 @@ use App\Modules\Access\Models\AccessPolicy;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;

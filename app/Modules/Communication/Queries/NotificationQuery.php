@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Communication\Queries;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Communication\Models\NotificationRecipientState;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Organization;
@@ -11,9 +12,7 @@ use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Modules\Calendar\CalendarAuthority;
 
 /** Recipient-scoped notification projection; per-recipient state is canonical. */
 final class NotificationQuery

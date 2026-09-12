@@ -10,7 +10,6 @@ use App\Modules\Organization\Models\CampusAssignment;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\QueryException;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\OperatesStructure;
 use Tests\TestCase;

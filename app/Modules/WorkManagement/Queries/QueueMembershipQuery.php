@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\WorkManagement\Queries;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\WorkManagement\Models\QueueMembership;
 use App\Support\Authorization\Actor;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Modules\Calendar\CalendarAuthority;
 
 /** Queue membership is explicit and time-bounded; absent membership denies claim. */
 final class QueueMembershipQuery

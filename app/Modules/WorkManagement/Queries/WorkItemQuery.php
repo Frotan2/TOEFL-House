@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\WorkManagement\Queries;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Organization\Models\Branch;
@@ -13,9 +14,7 @@ use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\ActorBranches;
 use App\Support\Authorization\StructureScope;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Modules\Calendar\CalendarAuthority;
 
 /** Fail-closed operational projection; discovery never authorizes source commands. */
 final class WorkItemQuery

@@ -6,9 +6,8 @@ namespace App\Support\Authorization;
 
 use App\Modules\Access\Models\AccessPolicy;
 use App\Modules\Access\Models\Position;
-use App\Support\Errors\AuthorizationDenied;
-use Carbon\CarbonImmutable;
 use App\Modules\Calendar\CalendarAuthority;
+use App\Support\Errors\AuthorizationDenied;
 
 /**
  * Canonical guard for conferring a position's effective authority. Possessing
@@ -21,7 +20,7 @@ final class PositionConferability
 {
     public function __construct(
         private readonly CalendarAuthority $calendar,
-private readonly AccessDecision $access
+        private readonly AccessDecision $access
     ) {}
 
     public function require(Actor $actor, Position $position, StructureScope $scope): void

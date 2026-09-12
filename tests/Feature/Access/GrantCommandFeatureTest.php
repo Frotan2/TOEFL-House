@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Access;
 
-use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Access\AccessResolution;
 use App\Modules\Access\Commands\GrantScopePermission;
 use App\Modules\Access\Commands\RevokeScopePermission;
 use App\Modules\Access\Models\OrgWideGrantRequest;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;

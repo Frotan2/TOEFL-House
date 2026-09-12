@@ -8,8 +8,8 @@ use App\Modules\Academic\Models\AcademicRoom;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\ClassSection;
 use App\Modules\Academic\Models\ClassSession;
-use Carbon\CarbonImmutable;
 use App\Modules\Calendar\CalendarAuthority;
+use Carbon\CarbonImmutable;
 
 /**
  * Read-only timetable projection. The room timetable is the canonical

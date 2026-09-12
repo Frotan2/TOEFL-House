@@ -56,7 +56,7 @@ final class StructureBrowserProvisioner
     /** @return array<string, array{username: string, person_id: string}> */
     public function run(): array
     {
-        if (!UserAccount::query()->where('username', 'e2e-structure-gm')->exists()) {
+        if (! UserAccount::query()->where('username', 'e2e-structure-gm')->exists()) {
             // Four distinct, non-Owner operators on the bootstrap organization.
             $this->generalManager('gm-1');
             $this->structureManager('*', 'mgr-1');
@@ -205,5 +205,5 @@ final class StructureBrowserProvisioner
     }
 }
 
-$manifest = (new StructureBrowserProvisioner())->run();
+$manifest = (new StructureBrowserProvisioner)->run();
 echo json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";

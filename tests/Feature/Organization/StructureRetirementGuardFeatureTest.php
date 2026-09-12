@@ -10,6 +10,7 @@ use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
+use App\Modules\Organization\Models\Department;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentStatus;
 use App\Support\Errors\BusinessRejection;
@@ -29,9 +30,9 @@ use Tests\TestCase;
 final class StructureRetirementGuardFeatureTest extends TestCase
 {
     use BuildsActors;
-    use OperatesStructure;
     use BuildsStudents;
     use BuildsTeachers;
+    use OperatesStructure;
 
     public function test_close_is_enforced_bottom_up_then_succeeds(): void
     {
@@ -46,8 +47,8 @@ final class StructureRetirementGuardFeatureTest extends TestCase
             'Guard Department',
             RandomIdentifier::new(),
         );
-        /** @var \App\Modules\Organization\Models\Department $department */
-        $department = \App\Modules\Organization\Models\Department::query()->findOrFail($createdDepartment['id']);
+        /** @var Department $department */
+        $department = Department::query()->findOrFail($createdDepartment['id']);
         $this->transitionCommand()->activate($department, $this->structureDecisionForGlobalActors(), RandomIdentifier::new());
 
         $closeOrganization = fn () => $this->transitionCommand()->close($organization->fresh(), $this->structureDecisionForGlobalActors(), RandomIdentifier::new());

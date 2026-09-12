@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Privacy\Queries;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\Disclosure;
 use Carbon\CarbonImmutable;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-only privacy view of one subject as of a day: effective consents

@@ -6,6 +6,7 @@ namespace App\Modules\Crm\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Domain\CrmAccess;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorFollowup;
@@ -15,7 +16,6 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Advance a scheduled follow-up to done/cancelled. Visitor provenance is the
@@ -34,7 +34,7 @@ final class ManageVisitorFollowup
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /** @return array{followup_id: string, status: string, correlation_id: string} */

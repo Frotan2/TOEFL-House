@@ -6,9 +6,12 @@ namespace Tests\Feature\Organization;
 
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Organization\Models\Campus;
+use App\Modules\Organization\Models\Organization;
 use App\Modules\Organization\Models\StructureChangeRequest;
 use App\Support\Identifiers\RandomIdentifier;
+use Illuminate\Cache\RateLimiter;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Testing\TestResponse;
 use Tests\Concerns\BuildsActors;
 use Tests\Concerns\OperatesStructure;
 use Tests\TestCase;
@@ -238,7 +241,7 @@ final class StructureChangeApiFeatureTest extends TestCase
         // with NO grants for the bootstrap governance actors on its scope.
         $decision = $this->structureDecisionForGlobalActors();
         $created = $this->createCommand()->createOrganization($decision, 'Sibling Org', RandomIdentifier::new());
-        $sibling = \App\Modules\Organization\Models\Organization::query()->findOrFail($created['id']);
+        $sibling = Organization::query()->findOrFail($created['id']);
         $this->transitionCommand()->activate($sibling->fresh(), $decision, RandomIdentifier::new());
 
         foreach ([
@@ -296,7 +299,7 @@ final class StructureChangeApiFeatureTest extends TestCase
     }
 
     /** Posts a proposal with a fresh client-generated idempotency key. */
-    private function propose(array $body): \Illuminate\Testing\TestResponse
+    private function propose(array $body): TestResponse
     {
         return $this->postJson('/api/v1/organization/changes', $body, ['Idempotency-Key' => RandomIdentifier::new()]);
     }
@@ -355,7 +358,7 @@ final class StructureChangeApiFeatureTest extends TestCase
         // test legitimately re-uses the same accounts many times within a
         // minute. The per-account brute-force limiter protects production;
         // reset its window between simulated sessions instead of weakening it.
-        $limiter = app(\Illuminate\Cache\RateLimiter::class);
+        $limiter = app(RateLimiter::class);
         // ThrottleRequests hashes the named-limiter key: md5(name . limitKey),
         // where the login limit key is "login|ip|username".
         foreach (['127.0.0.1', '::1', ''] as $ip) {

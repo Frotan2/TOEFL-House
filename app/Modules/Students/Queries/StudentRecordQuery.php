@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Students\Queries;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Students\Models\GuardianRelationship;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentHoldEvent;
 use App\Modules\Students\Models\StudentStatus;
 use Carbon\CarbonImmutable;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Read-only student record: the effective status as of a day (history

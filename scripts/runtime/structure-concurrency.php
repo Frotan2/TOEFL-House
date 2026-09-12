@@ -30,6 +30,7 @@
 declare(strict_types=1);
 
 use App\Modules\Access\Domain\AccessLifecycle;
+use App\Modules\Access\Models\ScopeGrant;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Commands\GovernStructureChange;
 use App\Modules\Organization\Models\Branch;
@@ -38,11 +39,11 @@ use App\Modules\Organization\Models\CampusAssignment;
 use App\Modules\Organization\Models\Department;
 use App\Modules\Organization\Models\Organization;
 use App\Modules\Organization\Models\StructureChangeRequest;
-use App\Modules\Access\Models\ScopeGrant;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\DomainError;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\DB;
 
 require __DIR__.'/../../vendor/autoload.php';
@@ -66,7 +67,7 @@ verify($app);
 // Orchestrator
 // ---------------------------------------------------------------------------
 
-function verify(Illuminate\Foundation\Application $app): void
+function verify(Application $app): void
 {
     $results = [];
     $record = function (string $name, bool $pass, string $detail) use (&$results): void {
@@ -168,7 +169,7 @@ function verify(Illuminate\Foundation\Application $app): void
 
     runSqlInvariants($record, $preparedC['id']);
 
-    $failed = count(array_filter($results, static fn (array $r): bool => !$r['pass']));
+    $failed = count(array_filter($results, static fn (array $r): bool => ! $r['pass']));
     echo "\n".($failed === 0 ? 'ALL STRUCTURE CONCURRENCY & INVARIANT CHECKS PASSED' : "{$failed} CHECK(S) FAILED")."\n";
     exit($failed === 0 ? 0 : 1);
 }
@@ -181,7 +182,7 @@ function verify(Illuminate\Foundation\Application $app): void
  * @param  list<list<string>>  $invocations
  * @return list<array<string, mixed>>
  */
-function runRace(array $invocations, Illuminate\Foundation\Application $app): array
+function runRace(array $invocations, Application $app): array
 {
     $dir = rtrim(sys_get_temp_dir(), '/').'/structure-race-'.bin2hex(random_bytes(6));
     mkdir($dir, 0700, true);
@@ -199,7 +200,7 @@ function runRace(array $invocations, Illuminate\Foundation\Application $app): ar
 
     $deadline = microtime(true) + 30;
     foreach ($processes as $process) {
-        while (!file_exists($process['ready']) && microtime(true) < $deadline) {
+        while (! file_exists($process['ready']) && microtime(true) < $deadline) {
             usleep(25_000);
         }
     }
@@ -230,7 +231,7 @@ function runWorker(string $mode, array $argv): void
 
     touch($ready);
     $deadline = microtime(true) + 30;
-    while (!file_exists($go) && microtime(true) < $deadline) {
+    while (! file_exists($go) && microtime(true) < $deadline) {
         usleep(10_000);
     }
 
@@ -248,13 +249,14 @@ function runWorker(string $mode, array $argv): void
         if ($mode === 'propose-worker') {
             $result = $govern->propose($worker, 'create_department', $args['payload'], $args['key']);
             $out(['ok' => true, 'state' => $result['lifecycle_state'] ?? null]);
+
             return;
         }
 
         $request = StructureChangeRequest::query()->findOrFail($args['request']);
         $result = $govern->approve($worker, $request, $args['key']);
         $out(['ok' => true, 'state' => $result['lifecycle_state'] ?? null]);
-    } catch (\Throwable $exception) {
+    } catch (Throwable $exception) {
         $code = $exception instanceof DomainError ? $exception->errorCode() : null;
         $out(['ok' => false, 'errorCode' => $code, 'message' => $exception->getMessage()]);
     }
@@ -265,7 +267,7 @@ function runWorker(string $mode, array $argv): void
 // ---------------------------------------------------------------------------
 
 /**
- * @param callable(string,bool,string):void $record
+ * @param  callable(string,bool,string):void  $record
  */
 function runSqlInvariants(callable $record, string $executedRequestId): void
 {
@@ -275,10 +277,10 @@ function runSqlInvariants(callable $record, string $executedRequestId): void
             $probe();
             DB::rollBack();
             $record($label, false, 'expected rejection but the write succeeded');
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             DB::rollBack();
-            $sqlStateCode = $exception instanceof \PDOException ? ($exception->errorInfo[0] ?? null) : null;
-            $pdo = $exception->getPrevious() instanceof \PDOException ? ($exception->getPrevious()->errorInfo[0] ?? null) : null;
+            $sqlStateCode = $exception instanceof PDOException ? ($exception->errorInfo[0] ?? null) : null;
+            $pdo = $exception->getPrevious() instanceof PDOException ? ($exception->getPrevious()->errorInfo[0] ?? null) : null;
             $messageOk = $messageFragment === null || str_contains($exception->getMessage(), $messageFragment);
             $stateOk = $sqlState === null || in_array($sqlState, [$sqlStateCode, $pdo], true);
             $record($label, $messageOk && $stateOk,
@@ -331,7 +333,7 @@ function runSqlInvariants(callable $record, string $executedRequestId): void
     // 3. A request cannot be born executed; signatures and result are earned.
     $expectFailure(
         'a structure change request is born proposed',
-        static function () use ($baseRow, $now): void {
+        static function () use ($baseRow): void {
             $row = $baseRow('inv:born:'.RandomIdentifier::new());
             $row['lifecycle_state'] = 'executed';
             $row['owner_one_id'] = RandomIdentifier::new();
@@ -369,16 +371,16 @@ function actor(string $id, string $name): Actor
 /** Minimum complete operational structure, identical in shape to test fixtures. */
 function seedOperationalFixture(): void
 {
-    if (!Organization::query()->whereKey(BOOTSTRAP_ORG)->exists()) {
+    if (! Organization::query()->whereKey(BOOTSTRAP_ORG)->exists()) {
         Organization::query()->create(['id' => BOOTSTRAP_ORG, 'name' => 'Concurrency Verification Org', 'lifecycle_state' => 'active']);
     }
-    if (!Campus::query()->whereKey(BOOTSTRAP_CAMPUS)->exists()) {
+    if (! Campus::query()->whereKey(BOOTSTRAP_CAMPUS)->exists()) {
         Campus::query()->create(['id' => BOOTSTRAP_CAMPUS, 'organization_id' => BOOTSTRAP_ORG, 'name' => 'Concurrency Verification Campus', 'lifecycle_state' => 'active']);
     }
-    if (!Branch::query()->whereKey(BOOTSTRAP_BRANCH)->exists()) {
+    if (! Branch::query()->whereKey(BOOTSTRAP_BRANCH)->exists()) {
         Branch::query()->create(['id' => BOOTSTRAP_BRANCH, 'name' => 'Concurrency Verification Branch', 'lifecycle_state' => 'active']);
     }
-    if (!CampusAssignment::query()->where('branch_id', BOOTSTRAP_BRANCH)->whereNull('effective_to')->exists()) {
+    if (! CampusAssignment::query()->where('branch_id', BOOTSTRAP_BRANCH)->whereNull('effective_to')->exists()) {
         CampusAssignment::query()->create([
             'id' => RandomIdentifier::new(),
             'branch_id' => BOOTSTRAP_BRANCH,

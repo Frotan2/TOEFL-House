@@ -13,6 +13,7 @@ use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\GraduationDecision;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Documents\Commands\RegisterDocument;
 use App\Modules\Documents\Commands\TransitionDocument;
 use App\Modules\Documents\Models\Document;
@@ -26,9 +27,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use App\Support\Signing\CanonicalJson;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Graduation eligibility and certification: propose with the requirements
@@ -64,7 +63,7 @@ final class DecideGraduation
         private readonly FinancialGateQuery $financialGate,
         private readonly RegisterDocument $registerDocument,
         private readonly TransitionDocument $transitionDocument,
-    
+
     ) {}
 
     /** @return array{decision_id: string, correlation_id: string} */

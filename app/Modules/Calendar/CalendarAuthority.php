@@ -132,6 +132,7 @@ final class CalendarAuthority
         if ($date->toDateString() !== $ymd) {
             throw ValidationError::forCode('calendar.invalid_gregorian_date', sprintf('invalid Gregorian date %s', $ymd));
         }
+
         return $date;
     }
 
@@ -139,6 +140,7 @@ final class CalendarAuthority
     {
         try {
             $this->parseGregorianDate($ymd);
+
             return true;
         } catch (\Throwable) {
             return false;
@@ -154,6 +156,7 @@ final class CalendarAuthority
         [$y, $m, $d] = array_map('intval', explode('-', $ymd));
         $sh = new SolarHijriDate($y, $m, $d);
         $this->validateSolarHijri($sh, $versionId);
+
         return $sh;
     }
 
@@ -162,6 +165,7 @@ final class CalendarAuthority
     public function toShamsi(CarbonImmutable|string $gregorian, ?string $versionId = null): SolarHijriDate
     {
         $date = $gregorian instanceof CarbonImmutable ? $gregorian : $this->parseGregorianDate($gregorian, $versionId);
+
         return $this->forward($date, $versionId);
     }
 
@@ -178,6 +182,7 @@ final class CalendarAuthority
     public function formatGregorian(CarbonImmutable|string $date): string
     {
         $carbon = $date instanceof CarbonImmutable ? $date : $this->parseGregorianDate($date);
+
         return $this->civilDate($carbon)->toDateString();
     }
 
@@ -192,6 +197,7 @@ final class CalendarAuthority
         $versionId = $versionId ?? self::DEFAULT_VERSION_ID;
         $carbon = $gregorian instanceof CarbonImmutable ? $gregorian : $this->parseGregorianDate($gregorian, $versionId);
         $sh = $this->forward($carbon, $versionId);
+
         return [
             'gregorian' => $this->formatGregorian($carbon),
             'shamsi' => $this->formatShamsi($sh),
@@ -211,6 +217,7 @@ final class CalendarAuthority
         $versionId = $versionId ?? self::DEFAULT_VERSION_ID;
         $gregorian = $this->today($versionId);
         $sh = $this->forward($gregorian, $versionId);
+
         return [
             'gregorian' => $this->formatGregorian($gregorian),
             'shamsi' => $this->formatShamsi($sh),
@@ -234,6 +241,7 @@ final class CalendarAuthority
     public function shamsiYearPeriod(int $year, ?string $versionId = null): array
     {
         $boundaries = $this->yearBoundaries($year, $versionId);
+
         return [
             'starts_on' => $boundaries->effectiveFrom->toDateString(),
             'ends_on' => $boundaries->effectiveTo ? $boundaries->effectiveTo->subDay()->toDateString() : '',
@@ -247,6 +255,7 @@ final class CalendarAuthority
     {
         $info = $this->monthInfo($year, $month, $versionId);
         $boundaries = $this->monthBoundaries($year, $month, $versionId);
+
         return [
             'starts_on' => $info->firstDayGregorian->toDateString(),
             'ends_on' => $info->lastDayGregorian()->toDateString(),
@@ -261,6 +270,7 @@ final class CalendarAuthority
     public function isKabulMidnight(CarbonImmutable $instant): bool
     {
         $kabul = $instant->utc()->addMinutes(self::KABUL_AFT_UTC_OFFSET_MINUTES);
+
         return $kabul->format('H:i:s') === '00:00:00';
     }
 
@@ -269,6 +279,7 @@ final class CalendarAuthority
         $kabul = $utcInstant->utc()->addMinutes(self::KABUL_AFT_UTC_OFFSET_MINUTES);
         $utcDay = $utcInstant->toDateString();
         $kabulDay = $kabul->toDateString();
+
         return $utcDay !== $kabulDay;
     }
 

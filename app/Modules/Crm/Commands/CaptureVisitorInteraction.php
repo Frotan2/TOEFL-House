@@ -7,6 +7,7 @@ namespace App\Modules\Crm\Commands;
 use App\Modules\Academic\Models\AssessmentAttempt;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Communication\Models\Message;
 use App\Modules\Crm\Domain\CrmAccess;
 use App\Modules\Crm\Domain\CrmInteractionLineage;
@@ -23,7 +24,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Append an immutable contact/engagement fact and run in-transaction
@@ -44,7 +44,7 @@ final class CaptureVisitorInteraction
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionLineage $lineage,
         private readonly CreateVisitorFollowup $followups,
-    
+
     ) {}
 
     /** @return array{interaction_id: string, scheduled_followup_id: ?string, correlation_id: string} */

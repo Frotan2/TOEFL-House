@@ -15,6 +15,7 @@ use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\ResultCorrection;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Domain\CrmInteractionTraceRecorder;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Domain\StudentOperationalEligibility;
@@ -25,7 +26,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Evidence and result chain: submit the raw attempt (immutable once
@@ -54,7 +54,7 @@ final class ManageAssessmentResult
         private readonly CrmInteractionTraceRecorder $crmTrace,
         private readonly StudentOperationalEligibility $studentEligibility,
         private readonly TeacherAuthority $teacherAuthority,
-    
+
     ) {}
 
     /** @return array{attempt_id: string, correlation_id: string} */

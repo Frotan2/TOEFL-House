@@ -13,13 +13,13 @@ use App\Modules\Academic\Models\TeacherAssignmentSkill;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\TeacherQualification;
 use App\Modules\Academic\Models\TeacherWorkloadLimit;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Hr\Models\Leave;
 use App\Modules\Identity\Models\Person;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical Teacher workspace transport. It returns server-derived profile,

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Access;
 
-use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Access\AccessResolution;
 use App\Modules\Access\Commands\DelegateAuthority;
 use App\Modules\Access\Commands\RevokeDelegation;
 use App\Modules\Access\Models\Delegation;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;

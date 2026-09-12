@@ -6,6 +6,7 @@ namespace App\Modules\Communication\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Communication\Domain\MessageLifecycle;
 use App\Modules\Communication\Models\Message;
 use App\Modules\Crm\Domain\CrmInteractionTraceRecorder;
@@ -20,9 +21,7 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Communication: a message is queued post-commit only under an ACTIVE
@@ -42,7 +41,7 @@ final class SendMessage
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionTraceRecorder $crmTrace,
-    
+
     ) {}
 
     /** @return array{message_id: string, correlation_id: string} */

@@ -9,13 +9,13 @@ use App\Modules\Academic\Models\Certificate;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Queries\TranscriptQuery;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Payroll\Models\PayrollPeriod;
 use App\Modules\Payroll\Models\PayrollResult;
 use App\Modules\Students\Models\Student;
 use Illuminate\View\View;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Printing — a first-class capability. Produces operational documents
