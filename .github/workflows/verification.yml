@@ -224,3 +224,8 @@ jobs:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
         run: npm run verify:browser
+      - name: Run Library browser E2E
+        env:
+          BASE_URL: http://127.0.0.1:8999
+          CHROMIUM_PATH: /usr/bin/chromium
+        run: npm run verify:browser:library
