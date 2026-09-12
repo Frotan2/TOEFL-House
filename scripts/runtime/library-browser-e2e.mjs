@@ -32,6 +32,7 @@
  * convention already used by the structure journey.
  */
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -49,17 +50,40 @@ const record = (name, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}\n      ${detail}`);
 };
 
+/**
+ * CI log downloads may be unavailable to an operator, so every failure also
+ * lands in the workflow step summary, which is readable on the run page.
+ */
+function writeStepSummary(markdown) {
+  const target = process.env.GITHUB_STEP_SUMMARY;
+  if (!target) return;
+  try {
+    fs.appendFileSync(target, `${markdown}\n`);
+  } catch {
+    // The summary is best-effort evidence; never mask the original failure.
+  }
+}
+
 /** Every observed Resources mutation MUST be a POST on a canonical route. */
 const LIBRARY_MUTATION = /^\/api\/v1\/resources\/(books(\/[0-9a-f-]+\/issue)?|issuances\/[0-9a-f-]+\/(return|loss)|assets(\/[0-9a-f-]+\/(custody(\/release)?|disposal))?|disposals\/[0-9a-f-]+\/(approve|withdraw|execute)|work-orders(\/[0-9a-f-]+\/(approve|start|complete|cancel))?)$/;
 const resourceMutations = [];
 
 // Provision (idempotently) the journey actors through the same canonical
 // access model the feature suite uses.
-const provisionOutput = execFileSync(phpBin, ['scripts/runtime/library-browser-provision.php'], {
-  cwd: repoRoot,
-  env: { ...process.env, DB_DATABASE: process.env.DB_DATABASE || 'toefl_house_dev' },
-  encoding: 'utf8',
-});
+let provisionOutput;
+try {
+  provisionOutput = execFileSync(phpBin, ['scripts/runtime/library-browser-provision.php'], {
+    cwd: repoRoot,
+    env: { ...process.env, DB_DATABASE: process.env.DB_DATABASE || 'toefl_house_dev' },
+    encoding: 'utf8',
+  });
+} catch (error) {
+  console.error('LIBRARY BROWSER E2E PROVISIONING FAILED');
+  console.error(`status=${error.status ?? 'n/a'} stdout=${(error.stdout ?? '').slice(-2_000)}`);
+  console.error(`stderr=${(error.stderr ?? '').slice(-2_000)}`);
+  writeStepSummary(`## Library browser E2E\n\n**Provisioning failed** (exit ${error.status ?? 'n/a'})\n\n\`\`\`\n${(error.stderr ?? error.stdout ?? String(error)).slice(-3_000)}\n\`\`\`\n`);
+  process.exit(1);
+}
 console.log(provisionOutput.split('\n').filter((line) => line.includes('library browser E2E')).join('\n'));
 
 const stamp = `${Date.now()}`;
@@ -146,9 +170,10 @@ try {
     }
     await page.goto(`${BASE}/library`, { waitUntil: 'networkidle2' });
     if (page.url().includes('/login')) throw new Error(`${username}: library E2E login failed`);
-    await page.waitForSelector('#library-title');
+    await page.waitForSelector('#library-title', { timeout: 20_000 });
     // The toolbar renders only after the workspace contract resolved.
-    await page.waitForFunction(() => document.querySelector('#library-main .toolbar') !== null, { timeout: 20_000 });
+    await page.waitForFunction(() => document.querySelector('#library-main .toolbar') !== null
+      && !(document.body.innerText || '').includes('Loading authorized'), { timeout: 20_000 });
 
     return {
       context,
@@ -182,9 +207,20 @@ try {
     allConsoleErrors.push(...sessionRecord.consoleErrors);
   }
 
+  /**
+   * After every successful command the workspace re-fetches its facts, and
+   * library.tsx unmounts the whole console while loading. Interacting during
+   * that window finds nothing, so every notice is followed by an idle wait:
+   * the toolbar exists again and no loading banner is on screen.
+   */
+  const waitIdle = async (page) => {
+    await page.waitForFunction(() => document.querySelector('#library-main .toolbar') !== null
+      && !(document.body.innerText || '').includes('Loading authorized'), { timeout: 20_000 });
+  };
   const waitForNotice = async (page, expected) => {
     await page.waitForFunction((needle) => (document.querySelector('.notice')?.textContent || '').includes(needle),
       { timeout: 20_000 }, expected);
+    await waitIdle(page);
   };
   const waitForAlert = async (page, expected) => {
     await page.waitForFunction((needle) => (document.querySelector('.alert')?.textContent || '').includes(needle),
@@ -239,23 +275,48 @@ try {
     }, text);
     if (!submitted) throw new Error(`Form with submit button containing "${text}" was not found`);
   };
-  /** Clicks a button inside the table row containing rowText, optionally section-scoped by its heading. */
+  /**
+   * Clicks a button inside the table row containing rowText, optionally
+   * section-scoped by its heading. The click happens INSIDE the polled
+   * predicate so a workspace re-render between polls cannot make the
+   * interaction miss: the first poll that sees an enabled button clicks it.
+   */
   const clickRowButton = async (page, rowText, buttonText, sectionHeading = null) => {
-    const clicked = await page.evaluate(({ rowNeedle, buttonNeedle, heading }) => {
-      const sections = heading
-        ? [...document.querySelectorAll('section')].filter((node) => (node.querySelector('h2')?.textContent || '').includes(heading))
-        : [document];
-      for (const scope of sections) {
-        const row = [...scope.querySelectorAll('tbody tr')].find((node) => (node.innerText || '').includes(rowNeedle));
-        if (!row) continue;
-        const button = [...row.querySelectorAll('button')].find((node) => (node.textContent || '').trim().includes(buttonNeedle));
-        if (!button || button.disabled) return false;
-        button.click();
-        return true;
-      }
-      return false;
-    }, { rowNeedle: rowText, buttonNeedle: buttonText, heading: sectionHeading });
-    if (!clicked) throw new Error(`Enabled button "${buttonText}" in row "${rowText}"${sectionHeading ? ` of "${sectionHeading}"` : ''} was not found`);
+    try {
+      await page.waitForFunction(({ rowNeedle, buttonNeedle, heading }) => {
+        const sections = heading
+          ? [...document.querySelectorAll('section')].filter((node) => (node.querySelector('h2')?.textContent || '').includes(heading))
+          : [document];
+        for (const scope of sections) {
+          const row = [...scope.querySelectorAll('tbody tr')].find((node) => (node.innerText || '').includes(rowNeedle));
+          if (!row) continue;
+          const button = [...row.querySelectorAll('button')].find((node) => (node.textContent || '').trim().includes(buttonNeedle));
+          if (button && !button.disabled) {
+            button.click();
+            return true;
+          }
+        }
+        return false;
+      }, { timeout: 20_000 }, { rowNeedle: rowText, buttonNeedle: buttonText, heading: sectionHeading });
+    } catch {
+      throw new Error(`Enabled button "${buttonText}" in row "${rowText}"${sectionHeading ? ` of "${sectionHeading}"` : ''} never appeared`);
+    }
+  };
+  /** Polls a row-shape detail out of a section-scoped table row. */
+  const rowDetail = async (page, rowText, sectionHeading) => {
+    await page.waitForFunction(({ rowNeedle, heading }) => {
+      const section = [...document.querySelectorAll('section')].find((node) => (node.querySelector('h2')?.textContent || '').includes(heading));
+      return [...(section?.querySelectorAll('tbody tr') ?? [])].some((node) => (node.innerText || '').includes(rowNeedle));
+    }, { timeout: 20_000 }, { rowNeedle: rowText, heading: sectionHeading });
+
+    return page.evaluate(({ rowNeedle, heading }) => {
+      const section = [...document.querySelectorAll('section')].find((node) => (node.querySelector('h2')?.textContent || '').includes(heading));
+      const row = [...section.querySelectorAll('tbody tr')].find((node) => (node.innerText || '').includes(rowNeedle));
+      return {
+        text: (row.innerText || '').replace(/\s+/g, ' '),
+        buttons: [...row.querySelectorAll('button')].map((button) => (button.textContent || '').trim()),
+      };
+    }, { rowNeedle: rowText, heading: sectionHeading });
   };
   const waitForRow = async (page, rowText, sectionHeading = null) => {
     await page.waitForFunction(({ rowNeedle, heading }) => {
@@ -351,14 +412,10 @@ try {
   librarian.expectDialogs(undefined); // irreversible confirm
   await clickRowButton(page, 'Requested', 'Withdraw', 'Approval and execution queue');
   await waitForNotice(page, 'Disposal request withdrawn.');
-  const withdrawnRow = await page.evaluate(() => {
-    const section = [...document.querySelectorAll('section')].find((node) => (node.querySelector('h2')?.textContent || '').includes('Approval and execution queue'));
-    const row = [...section.querySelectorAll('tbody tr')].find((node) => (node.innerText || '').includes('Withdrawn'));
-    return row ? { buttons: [...row.querySelectorAll('button')].map((button) => (button.textContent || '').trim()) } : null;
-  });
+  const withdrawnRow = await rowDetail(page, 'Withdrawn', 'Approval and execution queue');
   record('Requester withdrawal is terminal and frees the asset',
-    withdrawnRow !== null && withdrawnRow.buttons.length === 0,
-    `withdrawn row buttons=${JSON.stringify(withdrawnRow?.buttons)}`);
+    withdrawnRow.buttons.length === 0,
+    `withdrawn row buttons=${JSON.stringify(withdrawnRow.buttons)}`);
 
   librarian.expectDialogs(undefined, 'Browser E2E corrected method', undefined);
   await clickRowButton(page, ASSET_CODE, 'Request disposal');
@@ -393,14 +450,10 @@ try {
   approverOne.expectDialogs(undefined);
   await clickRowButton(approverOne.page, 'Requested', 'Approve', 'Approval and execution queue');
   await waitForNotice(approverOne.page, 'Disposal approval recorded.');
-  const afterFirstSignature = await approverOne.page.evaluate(() => {
-    const section = [...document.querySelectorAll('section')].find((node) => (node.querySelector('h2')?.textContent || '').includes('Approval and execution queue'));
-    const row = [...section.querySelectorAll('tbody tr')].find((node) => (node.innerText || '').includes('Requested'));
-    return row ? { text: (row.innerText || '').replace(/\s+/g, ' '), buttons: [...row.querySelectorAll('button')].map((button) => (button.textContent || '').trim()) } : null;
-  });
+  const afterFirstSignature = await rowDetail(approverOne.page, 'Requested', 'Approval and execution queue');
   record('The first signature keeps the request unapproved and withdrawable',
-    afterFirstSignature !== null && afterFirstSignature.buttons.includes('Withdraw') && !afterFirstSignature.buttons.includes('Execute'),
-    `row="${afterFirstSignature?.text?.slice(0, 120)}" buttons=${JSON.stringify(afterFirstSignature?.buttons)}`);
+    afterFirstSignature.buttons.includes('Withdraw') && !afterFirstSignature.buttons.includes('Execute'),
+    `row="${afterFirstSignature.text.slice(0, 120)}" buttons=${JSON.stringify(afterFirstSignature.buttons)}`);
 
   approverOne.expectDialogs(undefined);
   await clickRowButton(approverOne.page, FACILITY, 'Approve', 'Work orders with evidence');
@@ -415,21 +468,17 @@ try {
   approverTwo.expectDialogs(undefined);
   await clickRowButton(approverTwo.page, 'Requested', 'Approve', 'Approval and execution queue');
   await waitForNotice(approverTwo.page, 'Disposal approval recorded.');
-  const afterSecondSignature = await approverTwo.page.evaluate(() => {
-    const section = [...document.querySelectorAll('section')].find((node) => (node.querySelector('h2')?.textContent || '').includes('Approval and execution queue'));
-    const row = [...section.querySelectorAll('tbody tr')].find((node) => (node.innerText || '').includes('Approved'));
-    return row ? { buttons: [...row.querySelectorAll('button')].map((button) => (button.textContent || '').trim()) } : null;
-  });
+  const afterSecondSignature = await rowDetail(approverTwo.page, 'Approved', 'Approval and execution queue');
   record('The second distinct signature approves the request for execution',
-    afterSecondSignature !== null && afterSecondSignature.buttons.includes('Execute') && !afterSecondSignature.buttons.includes('Withdraw'),
-    `buttons=${JSON.stringify(afterSecondSignature?.buttons)}`);
+    afterSecondSignature.buttons.includes('Execute') && !afterSecondSignature.buttons.includes('Withdraw'),
+    `buttons=${JSON.stringify(afterSecondSignature.buttons)}`);
 
   // ------------------------------------------------------------------
   // Librarian returns: execution belongs to the requesting session; the
   // approved work order is started and completed with evidence.
   // ------------------------------------------------------------------
   await page.goto(`${BASE}/library`, { waitUntil: 'networkidle2' });
-  await page.waitForFunction(() => document.querySelector('#library-main .toolbar') !== null, { timeout: 20_000 });
+  await waitIdle(page);
 
   librarian.expectDialogs(undefined, undefined); // disposal-date prompt + irreversible confirm
   await clickRowButton(page, 'Approved', 'Execute', 'Approval and execution queue');
@@ -478,6 +527,23 @@ try {
     }
   }
   console.error(`Console errors (${allConsoleErrors.length}): ${allConsoleErrors.slice(0, 5).join(' | ') || 'none'}`);
+
+  const summary = [
+    '## Library browser E2E failure',
+    '',
+    '```',
+    String(error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : error).slice(0, 2_500),
+    '```',
+    '',
+    `Records completed: ${results.length}`,
+    '',
+    '| Record | Result | Detail |',
+    '|---|---|---|',
+    ...results.map((entry) => `| ${entry.name} | ${entry.pass ? 'PASS' : 'FAIL'} | ${String(entry.detail ?? '').slice(0, 160).replace(/\|/g, '/')} |`),
+    '',
+    `Console errors: ${allConsoleErrors.slice(0, 5).join(' | ') || 'none'}`,
+  ];
+  writeStepSummary(summary.join('\n'));
   throw error;
 } finally {
   await browser.close();
@@ -485,4 +551,15 @@ try {
 
 const failed = results.filter((result) => !result.pass).length;
 console.log(`\nLIBRARY BROWSER E2E RESULT: ${results.length - failed}/${results.length} passed`);
+
+// Always publish the record table to the workflow step summary so the run
+// page shows the journey's outcome even where log downloads are restricted.
+writeStepSummary([
+  `### Library browser E2E: ${results.length - failed}/${results.length} passed`,
+  '',
+  '| Record | Result | Detail |',
+  '|---|---|---|',
+  ...results.map((entry) => `| ${entry.name} | ${entry.pass ? 'PASS' : 'FAIL'} | ${String(entry.detail ?? '').slice(0, 160).replace(/\|/g, '/')} |`),
+].join('\n'));
+
 process.exit(failed === 0 ? 0 : 1);
