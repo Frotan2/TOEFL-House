@@ -147,11 +147,18 @@ final class DocumentFeatureTest extends TestCase
     {
         $nobody = $this->actorWithoutAnyCapability('doc-nobody');
 
-        $this->expectException(AuthorizationDenied::class);
-        $this->expectExceptionMessage('no active authority grants documents.register');
-        app(RegisterDocument::class)->register($nobody, $this->subjectId, $this->classificationId, 'Stolen ID', 'hash-s', 'storage/s', 'doc-key-17');
+        // expectException would end the test before the audit assertion
+        // runs; catch instead so the denial AND its audit trail are both
+        // actually asserted.
+        try {
+            app(RegisterDocument::class)->register($nobody, $this->subjectId, $this->classificationId, 'Stolen ID', 'hash-s', 'storage/s', 'doc-key-17');
+            $this->fail('registration without authority must be denied');
+        } catch (AuthorizationDenied $denial) {
+            $this->assertSame('documents.register_denied', $denial->errorCode());
+        }
 
         $this->assertDatabaseHas('audit_events', ['operation' => 'documents.register.denied', 'actor_id' => 'doc-nobody']);
+        $this->assertSame(0, Document::query()->where('title', 'Stolen ID')->count());
     }
 
     public function test_retention_requires_a_rule_then_retains_before_due_and_archives_after(): void
