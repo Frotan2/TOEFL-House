@@ -78,13 +78,6 @@ The repository also includes:
 |---|---|
 | `START-TOEFL-HOUSE.bat` | Windows local deployment/startup |
 | `STOP-TOEFL-HOUSE.bat` | Windows shutdown |
-| `BACKUP-TOEFL-HOUSE.bat` | Verified PostgreSQL backup |
-| `RESTORE-TOEFL-HOUSE.bat` | Confirmed PostgreSQL restore |
-| `DIAG-PHP-CRASH.bat` | Read-only Windows PHP native-crash diagnostic utility |
-
-`DIAG-PHP-CRASH.bat` is an operational diagnostic, not an application runtime
-dependency. It is retained because it has a defined troubleshooting purpose
-and does not mutate the database or reinstall runtime components.
 
 ## 4. Manual developer bootstrap (Linux / clean environment)
 
@@ -236,9 +229,9 @@ real `idempotency_keys`, `scope_grants`, `org_wide_grant_requests`, and
 `docs/RUNTIME-RELEASE.md` is set. They require a dedicated disposable-database
 verifier role that can `SET LOCAL session_replication_role = 'replica'` (a
 superuser or a role with `GRANT SET ON PARAMETER session_replication_role`),
-not the normal application login. The invariant command additionally needs the
-ownership-level trigger-control access described in that release document. Do
-not run them alongside PHPUnit or a migration process.
+not the normal application login. The invariant command additionally needs
+ownership-level trigger-control access described in that release document.
+Do not run them alongside PHPUnit or a migration process.
 
 ### End-to-end business journeys (real HTTP, fresh first-boot databases)
 
@@ -292,11 +285,11 @@ Runtime claims are evidence-based, on the ladder defined by
 
 - **VERIFIED** — command executed successfully in the required runtime.
 - **STATICALLY VERIFIED** — established from repository inspection or static
-  tooling without runtime execution.
+tooling without runtime execution.
 - **UNVERIFIED** — not executed or not proven.
 - **BLOCKED** — execution is prevented by a missing dependency/environment
-  capability. Environment blockers are reported, never hidden by substituting
-  unsupported runtimes.
+capability. Environment blockers are reported, never hidden by substituting
+unsupported runtimes.
 
 The following are release-critical and require real runtime evidence:
 
