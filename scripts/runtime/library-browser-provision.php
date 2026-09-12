@@ -31,11 +31,12 @@
 declare(strict_types=1);
 
 use App\Modules\Identity\Models\UserAccount;
+use Illuminate\Contracts\Console\Kernel;
 use Tests\Concerns\BuildsActors;
 
 require __DIR__.'/../../vendor/autoload.php';
 $app = require __DIR__.'/../../bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$app->make(Kernel::class)->bootstrap();
 
 final class LibraryBrowserProvisioner
 {
