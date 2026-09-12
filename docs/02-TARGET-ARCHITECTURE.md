@@ -6,7 +6,7 @@
 
 Laravel 12.x modular monolith + PostgreSQL transactional backend + React/TypeScript feature frontend.
 
-The accepted integrated enterprise architecture graph and the 2026-09-05 unified-platform ADRs are the detailed architecture authority.
+The accepted integrated enterprise architecture graph and approved architecture decisions are the detailed architecture authority. Historical source material is provenance only.
 
 ## Module map
 
@@ -35,16 +35,15 @@ Every stateful aggregate has a guarded transition graph and a single transition 
 
 ## Target-state gaps
 
-The accepted target still calls for completion of remaining React migration, richer replay/dead-letter and external integration operations, selected workflow boundary extraction, and additional product breadth.
+The accepted target still calls for completion of remaining React migration, richer replay/dead-letter and external integration operations, selected workflow boundary extraction, and additional product breadth. Current maturity and active closure work are owned by `docs/DOMAIN-REGISTRY.md` and `docs/OPERATING-CONTROL.md`.
 
 ## Source evidence
 
 - `docs/MASTER_ENGINEERING_CONTRACT.md`
-- `docs/02-TARGET-ARCHITECTURE.md (accepted graph summarized; full historical evidence in history/02-architecture-history.md)`
 - `docs/16-DECISION-REGISTER.md`
-- `docs/16-DECISION-REGISTER.md`
-- `docs/reference/current-state-compliance-evidence.md`
-
+- `docs/DOMAIN-REGISTRY.md`
+- `docs/RUNTIME-RELEASE.md`
+- `docs/history/02-architecture-history.md` — historical provenance only; it is retained temporarily because the decision register still uses it for full decision-text provenance.
 
 ---
 
