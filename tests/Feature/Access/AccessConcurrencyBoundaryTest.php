@@ -19,7 +19,7 @@ final class AccessConcurrencyBoundaryTest extends TestCase
 
     public function test_two_simultaneous_position_activations_cannot_both_succeed(): void
     {
-        if (!function_exists('pcntl_fork') || !function_exists('pcntl_waitpid')) {
+        if (! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid')) {
             $this->markTestSkipped('pcntl is required for the real concurrency boundary test.');
         }
 
@@ -57,7 +57,17 @@ final class AccessConcurrencyBoundaryTest extends TestCase
                     $this->fail('pcntl_fork failed');
                 }
                 if ($pid === 0) {
+                    // A forked worker must terminate the process here: it is a
+                    // disposable contender, not a second test runner. Returning
+                    // without exit() makes the child fall back into this loop
+                    // (forking grandchildren) and then into PHPUnit's own
+                    // runner, where concurrent copies of the finally{} cleanup
+                    // drop the fixture table out from under the other workers
+                    // and the parent blocks forever in pcntl_waitpid(). The
+                    // worker itself exits 1 on any failure (catch below) and
+                    // returns normally only on a completed, recorded outcome.
                     $this->activationWorker($dsn, $username, $password, $table, $suffix, $barrier, $goFile, $resultPrefix, $worker);
+                    exit(0);
                 }
                 $children[$pid] = $worker;
                 $this->childPids[] = $pid;
@@ -109,7 +119,7 @@ final class AccessConcurrencyBoundaryTest extends TestCase
             $db = $this->connect($dsn, $username, $password);
             $db->beginTransaction();
             file_put_contents($barrier, "ready\n", FILE_APPEND | LOCK_EX);
-            while (!is_file($goFile)) {
+            while (! is_file($goFile)) {
                 usleep(10_000);
             }
 
@@ -119,6 +129,7 @@ final class AccessConcurrencyBoundaryTest extends TestCase
             if ($state !== 'proposed') {
                 $db->rollBack();
                 file_put_contents($resultPrefix.'-'.$worker, "denied_after_lock\n");
+
                 return;
             }
 
