@@ -156,11 +156,12 @@ final class CirculateBooks
                     $locked = BookIssuance::query()->whereKey($issuance->id)->lockForUpdate()->firstOrFail();
                     $lockedCopy = BookCopy::query()->whereKey($locked->copy_id)->firstOrFail();
                     $scope = ResourceScope::fromStored($lockedCopy->originating_branch_id, $lockedCopy->organization_id);
-                    $borrowerScope = PersonBranchScope::resolve($locked->borrower_person_id);
                     $this->require($actor, $scope);
-                    if ($borrowerScope->organizationId !== $scope->organizationId) {
-                        throw BusinessRejection::forCode('resources.borrower_organization_mismatch', 'a book borrower must remain inside the copy organization');
-                    }
+                    // Borrower provenance is verified when the issuance fact is created (issue()
+                    // above). Closing authority is the actor's capability over the copy scope; a
+                    // later borrower home-branch transfer or branch closure must not strand an
+                    // open issuance — the same doctrine the custody history guard (000197)
+                    // enforces at the database boundary for custody closure.
                     ResourceLifecycle::requireIssuanceTransition($locked->lifecycle_state, $toState);
                     if ($toState === ResourceLifecycle::ISSUANCE_RETURNED && ($returnedOn === null || $returnedOn < $locked->issued_on)) {
                         throw BusinessRejection::forCode('resources.issuance_returned_on', 'the return date cannot precede the issue date');
@@ -179,7 +180,7 @@ final class CirculateBooks
                         'lifecycle_state' => $toState,
                         'branch_id' => $scope->branchId,
                         'organization_id' => $scope->organizationId,
-                        'borrower_branch_id' => $borrowerScope->branchId,
+                        'borrower_person_id' => trim((string) $locked->borrower_person_id),
                     ]);
 
                     return ['issuance_id' => $locked->id, 'lifecycle_state' => $toState, 'correlation_id' => $event->correlation_id];
