@@ -52,15 +52,25 @@ const record = (name, pass, detail = '') => {
 
 /**
  * CI log downloads may be unavailable to an operator, so every failure also
- * lands in the workflow step summary, which is readable on the run page.
+ * lands in the workflow step summary. The workflow additionally commits a
+ * mirror file from /tmp to the branch, because step summaries are not
+ * exposed through the public REST API either.
  */
+const EVIDENCE_FILE = '/tmp/library-browser-e2e-summary.md';
+try {
+  fs.writeFileSync(EVIDENCE_FILE, '');
+} catch {
+  // Best-effort evidence; never mask the original failure.
+}
+
 function writeStepSummary(markdown) {
-  const target = process.env.GITHUB_STEP_SUMMARY;
-  if (!target) return;
-  try {
-    fs.appendFileSync(target, `${markdown}\n`);
-  } catch {
-    // The summary is best-effort evidence; never mask the original failure.
+  for (const target of [process.env.GITHUB_STEP_SUMMARY, EVIDENCE_FILE]) {
+    if (!target) continue;
+    try {
+      fs.appendFileSync(target, `${markdown}\n`);
+    } catch {
+      // The summary is best-effort evidence; never mask the original failure.
+    }
   }
 }
 
