@@ -17,10 +17,13 @@ frontend → test → runtime proof → operational proof, with the executing co
 
 **CONDITIONALLY CLOSED** — every P1/P2 finding from the forensic audit is fixed with
 regression, adversarial, concurrency, database-boundary, API-contract, canonical, frontend
-and (pending final CI observation) browser evidence on this branch. The condition is
-mechanical: the branch's final Verification run (including the new Library browser journey)
-must be observed green, and closure on `main` requires the merge plus a fresh Verification
-run on the actual `main` HEAD per `docs/OPERATING-CONTROL.md`.
+and **observed-green CI browser evidence** on this branch: Verification run **34713414829**
+(head `e603db9`) passed all four jobs — backend (migrations, full suite, invariants,
+concurrency), frontend, static analysis, and real-Chromium browser E2E including the
+**24/24-record Library journey** — and CRM Browser E2E run 34713414850 passed alongside.
+The only remaining conditions are mechanical: merge to `main` and a fresh Verification run
+on the actual `main` HEAD, which is what `docs/OPERATING-CONTROL.md` reserves for
+`RELEASE CERTIFIED`.
 
 No P0 finding was identified at any point.
 
@@ -34,7 +37,7 @@ No P0 finding was identified at any point.
 | F2 | P2 | The 15 `/api/v1/resources` mutation endpoints had no HTTP-level test. | **FIXED** (`2b6d975`, extended `f039d26`) | `ResourcesApiMutationContractTest`: 7 tests / 107 assertions — anonymous 401, full circulation over HTTP, three-session staged disposal incl. both signatures and withdrawal, work-order lifecycle, 403 denial contract + audit, 422/404 contracts, idempotent replay + conflicting payload, hostile `Idempotency-Key` headers. |
 | F3 | P2 | `verify:concurrency` raced no Library table. | **FIXED** (`77a843d`) | 4/4 → **7/7** production-table races: one-open-issuance, one-open-custody (each one commit + one 23505 on the named index, distinct backends proven by PID), staged disposal approval (one `requested→approved` commit; stale writer rejected by the write-once approver-slot guard). |
 | F4 | P2 | `verify:invariants` probed no Library boundary. | **FIXED** (`77a843d`) | 6/6 → **12/12** named boundaries: one-open issuance/custody/active-request indexes, terminal issuance history, withdrawal CHECK, independent-approvers CHECK; the two CHECKs + three indexes pinned in the schema preflight catalogue. |
-| F5 | P2 | Browser coverage of `/library` was a mount-and-title smoke check. | **FIXED** (`b54370c`, hardened `2a0d150`) | `scripts/runtime/library-browser-e2e.mjs`: three isolated Chromium sessions (librarian, two approvers) driving the real React workspace — register→issue→return, register asset→custody→release, staged disposal request→provoked 403 self-approval→withdrawal→corrected re-request→two distinct signatures→execution by the requester (asset disposed), work order request→provoked 403→independent approval→start→complete with evidence; mutation-route allowlist; step-summary evidence publishing. Wired into the Verification browser job. Server contract behind every step rehearsed green via authenticated HTTP before CI. |
+| F5 | P2 | Browser coverage of `/library` was a mount-and-title smoke check. | **FIXED** (`b54370c`, hardened `2a0d150`, deterministic dialogs `36cdc3a`+`e603db9`) — **24/24 green in CI** | `scripts/runtime/library-browser-e2e.mjs`: three isolated Chromium sessions (librarian, two approvers) driving the real React workspace — register→issue→return, register asset→custody→release, staged disposal request→provoked 403 self-approval→withdrawal→corrected re-request→two distinct signatures→execution by the requester (asset disposed), work order request→provoked 403→independent approval→start→complete with evidence; mutation-route allowlist; step-summary evidence publishing. Wired into the Verification browser job. Server contract behind every step rehearsed green via authenticated HTTP before CI. |
 | F6 | P3 | `resources-contract.test.mjs` was static source grep — and stale (no withdraw / custody-release pins). | **FIXED** (`e59c30e`) | 3 updated static pins + 5 behavioural tests rendering the real `LibraryApp` in JSDOM against a scripted API client: state-legal action matrix per lifecycle, six summary counts, exact POST payloads, irreversible-confirm gating (refused confirm posts nothing), server-calendar dates, rejection alerts without false success. 8/8. |
 | F9 | P3 | A concurrent insert landing between a command's pre-check and its insert surfaced as an opaque 500 instead of the honest contract. | **FIXED** (`932a770`) | Five contested creates translate `UniqueConstraintViolationException` into retryable `ConcurrencyConflict` (HTTP 409, `concurrency_conflict`) following the `TransferBranchToCampus` precedent; `ResourcesRaceTranslationTest` forces each window deterministically with one-shot `DB::beforeExecuting` rival inserts (6 tests / 24 assertions, incl. HTTP 409 shape and complete rollback of the loser). |
 | F10 | P3 | `LibraryController@index` executed twelve scoped collection queries that the mounting blade never reads. | **FIXED** (`73b5510`) | Dead projection and its private `applyRootScope` helper removed; authority gate (fail-closed audited denial for branch-less operators) untouched; 58 console/resources tests + frontend suites green. |
@@ -113,20 +116,23 @@ Concurrency evidence:
 
 ## 4. What remains
 
-1. **Observe the final CI run green** on the pushed head (static now passes locally; the
-   hardened journey publishes a step summary readable on the run page if anything remains).
-2. Merge to `main` and re-run Verification on the actual `main` HEAD; only that run can
-   support `RELEASE CERTIFIED` per OPERATING-CONTROL.
-3. Optional follow-ups (none block closure): seeder-side home-branch decision (observation
+1. Merge to `main` and re-run Verification on the actual `main` HEAD; only that run can
+   support `RELEASE CERTIFIED` per OPERATING-CONTROL. (The final branch run was observed
+   green; this cleanup commit changes only the workflow's temporary evidence channel,
+   `ci-evidence/` artifacts and docs — no product code.)
+2. Optional follow-ups (none block closure): seeder-side home-branch decision (observation
    above), `evidence_ref` integration with Documents, Resources builders in `BuildsActors`.
 
 ## 5. Recommendation
 
 On the evidence executed above, the Library & Resources domain on this branch meets the
-closure gates named in `docs/OPERATING-CONTROL.md` §closure doctrine at the **VERIFIED**
-level (evidence actually executed and observed locally and, through the `77a843d` run, on
-CI). Production-readiness recommendation: **merge, then certify from the `main`-HEAD
-Verification run**. The two P1 authority defects found by the audit (disposal wedge F7,
+closure gates named in `docs/OPERATING-CONTROL.md` at the **VERIFIED** level: every gate —
+backend suite, canonical proofs, static analysis, clean migration, environment lock,
+concurrency races, database-invariant probes, frontend typecheck/build/behavioural
+contracts, and the real-Chromium three-session journey — was actually executed and
+observed green, locally and on CI (Verification run 34713414829 at head `e603db9`;
+CRM run 34713414850). Production-readiness recommendation: **merge, then certify from the
+`main`-HEAD Verification run**. The two P1 authority defects found by the audit (disposal wedge F7,
 issuance stranding F8) are fixed at every layer — command, database guard, API, UI, tests,
 runtime races and browser journey — and the domain now carries the canonical, HTTP,
 concurrency, invariant and behavioural-frontend proof layers it previously lacked.

@@ -135,8 +135,6 @@ jobs:
     name: Browser E2E (real Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write
     services:
       postgres:
         image: postgres:18.4
@@ -161,8 +159,6 @@ jobs:
       APP_DEBUG: 'false'
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ env.PHP_VERSION }}
@@ -232,26 +228,4 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run verify:browser:library 2>&1 | tee /tmp/library-e2e-console.log
-
-      # Log downloads and step summaries are both unreachable from some
-      # operator environments, so the journey's console log and summary
-      # mirror are committed back to the branch as durable evidence.
-      - name: Publish Library E2E evidence
-        if: always()
-        run: |
-          mkdir -p ci-evidence
-          cp /tmp/library-e2e-console.log ci-evidence/library-e2e-console.log 2>/dev/null \
-            || echo 'console log unavailable' > ci-evidence/library-e2e-console.log
-          cp /tmp/library-browser-e2e-summary.md ci-evidence/library-e2e-summary.md 2>/dev/null \
-            || echo 'summary unavailable' > ci-evidence/library-e2e-summary.md
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ci-evidence
-          if ! git diff --cached --quiet; then
-            git commit -m "ci-evidence: library browser e2e, run $GITHUB_RUN_ID attempt $GITHUB_RUN_ATTEMPT [skip ci]"
-            git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
-          fi
+        run: npm run verify:browser:library
