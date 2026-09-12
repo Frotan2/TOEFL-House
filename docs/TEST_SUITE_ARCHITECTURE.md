@@ -127,6 +127,8 @@ confirm it fails. Verified examples:
 | Make `AccessResolution::decide()` always allow | **4 canonical tests failed** |
 | Remove the self-approval denial in `DisposeAsset::approve()` | **1 canonical test errored** — the database's independent-approver guard still refuses the signature |
 | Remove the lost-copy denial in `CirculateBooks::issue()` | **1 canonical test failed** |
+| Disable the uploader/verifier separation-of-duties guard in `TransitionDocument::verify()` | **1 canonical Documents test failed** |
+| Remove `DocumentLifecycle::requireTransition` from `TransitionDocument::simple()` | **2 canonical Documents tests failed** |
 | Remove the completion-evidence denial in `MaintainWorkOrder::complete()` | **1 canonical test failed** |
 | Unregister `/api/v1/payroll/workspace` | **2 API contract tests failed**, offending path named |
 | Drop the `accounts_code_unique` index | **`verify:invariants` 6/6 → 5/6** |
