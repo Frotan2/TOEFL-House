@@ -49,8 +49,8 @@ return new class extends Migration
                       JOIN campuses c ON c.id = ca.campus_id
                      WHERE b.id = NEW.branch_id
                        AND b.lifecycle_state = 'active'
-                       AND ca.effective_from <= CURRENT_DATE
-                       AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                       AND ca.effective_from <= kabul_today()
+                       AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                        AND c.organization_id = NEW.organization_id
                        AND c.lifecycle_state = 'active'
                 ) THEN

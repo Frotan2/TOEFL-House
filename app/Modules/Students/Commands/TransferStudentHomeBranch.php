@@ -7,6 +7,7 @@ namespace App\Modules\Students\Commands;
 use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentBranchTransfer;
@@ -17,7 +18,6 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -34,6 +34,7 @@ final class TransferStudentHomeBranch
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly CalendarAuthority $calendar,
     ) {}
 
     /** @return array{student_id: string, from_branch_id: string|null, to_branch_id: string, transfer_id: string, correlation_id: string} */
@@ -82,7 +83,10 @@ final class TransferStudentHomeBranch
                         'student_id' => $locked->id,
                         'from_branch_id' => $fromBranchId !== '' ? $fromBranchId : null,
                         'to_branch_id' => $targetBranchId,
-                        'effective_from' => (new CarbonImmutable)->startOfDay()->toDateString(),
+                        // The append-day transfer trigger requires the Kabul
+                        // civil append day; the kabul_today() append-day trigger
+                        // enforces equality.
+                        'effective_from' => $this->calendar->todayAsString(),
                         'reason' => $reason,
                         'transferred_by' => $actor->actorId,
                     ]);

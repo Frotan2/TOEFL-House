@@ -72,7 +72,7 @@ return new class extends Migration
                 IF NOT EXISTS (
                     SELECT 1
                       FROM branches b
-                      JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                      JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                       JOIN campuses c ON c.id = ca.campus_id
                       JOIN organizations o ON o.id = c.organization_id AND o.lifecycle_state = 'active'
                      WHERE b.id = NEW.branch_id

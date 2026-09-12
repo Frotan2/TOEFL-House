@@ -97,6 +97,18 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // The database session stays UTC, matching the application timezone
+            // (config/app.php). timestamptz instants then round-trip through
+            // Eloquent correctly: naive timestamp strings are always UTC and
+            // queries bound with explicit UTC instants are not reinterpreted.
+            // The business civil clock is Asia/Kabul (fixed UTC+04:30, no DST —
+            // see App\Modules\Calendar\CalendarAuthority); append-day guards and
+            // "effective as of today" projections do NOT rely on PostgreSQL's
+            // session-dependent CURRENT_DATE, they call the SQL helper
+            // kabul_today() (created in migration 000126), which converts the
+            // current instant to the Kabul wall-clock date independently of
+            // this session timezone.
+            'timezone' => env('DB_TIMEZONE', 'UTC'),
         ],
 
         'sqlsrv' => [

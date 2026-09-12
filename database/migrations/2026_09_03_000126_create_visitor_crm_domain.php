@@ -51,6 +51,23 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Civil-date authority for database-level guards and projections.
+        //
+        // The business calendar runs on Asia/Kabul (UTC+04:30, fixed AFT); see
+        // App\Modules\Calendar\CalendarAuthority. All append-day constraints and
+        // "effective as of today" projections in migrations must be evaluated
+        // against the Kabul civil date independently of the session timezone,
+        // which stays UTC so that timestamptz instants round-trip through
+        // Eloquent without offset shifts. PostgreSQL's CURRENT_DATE follows the
+        // SESSION timezone and therefore lags the Kabul day between 19:30 and
+        // 00:00 UTC; kabul_today() converts the current instant to the Kabul
+        // wall clock instead.
+        DB::statement(<<<'SQL'
+            CREATE OR REPLACE FUNCTION kabul_today() RETURNS date
+            LANGUAGE sql STABLE AS
+            $$ SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kabul')::date $$
+        SQL);
+
         // 1. Acquisition source catalog.
         Schema::create('visitor_sources', function (Blueprint $table): void {
             $table->char('id', 36)->primary();
@@ -317,7 +334,7 @@ return new class extends Migration
                     RAISE EXCEPTION 'visitor interaction requires summary and correlation id'
                         USING ERRCODE = 'check_violation';
                 END IF;
-                IF NEW.occurred_on > CURRENT_DATE THEN
+                IF NEW.occurred_on > kabul_today() THEN
                     RAISE EXCEPTION 'visitor interaction cannot be dated in the future'
                         USING ERRCODE = 'check_violation';
                 END IF;
@@ -638,8 +655,8 @@ return new class extends Migration
                        AND b.lifecycle_state = 'active'
                        AND c.lifecycle_state = 'active'
                        AND o.lifecycle_state = 'active'
-                       AND ca.effective_from <= CURRENT_DATE
-                       AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                       AND ca.effective_from <= kabul_today()
+                       AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                      LIMIT 1;
                     IF origin_scope IS NULL THEN
                         RAISE EXCEPTION 'visitor origin branch must be an active branch with organization provenance'
@@ -722,7 +739,7 @@ return new class extends Migration
                             RAISE EXCEPTION 'visitor campaign attribution must match the campaign source'
                                 USING ERRCODE = 'check_violation';
                         END IF;
-                        IF NOT EXISTS (SELECT 1 FROM visitor_campaigns c WHERE c.id = NEW.campaign_id AND c.starts_on <= CURRENT_DATE AND (c.ends_on IS NULL OR c.ends_on >= CURRENT_DATE)) THEN
+                        IF NOT EXISTS (SELECT 1 FROM visitor_campaigns c WHERE c.id = NEW.campaign_id AND c.starts_on <= kabul_today() AND (c.ends_on IS NULL OR c.ends_on >= kabul_today())) THEN
                             RAISE EXCEPTION 'visitor campaign attribution must be active on the capture date'
                                 USING ERRCODE = 'check_violation';
                         END IF;
@@ -876,8 +893,8 @@ return new class extends Migration
                       JOIN organizations o ON o.id = c.organization_id
                      WHERE b.id = target_branch AND b.lifecycle_state = 'active'
                        AND c.lifecycle_state = 'active' AND o.lifecycle_state = 'active'
-                       AND ca.effective_from <= CURRENT_DATE
-                       AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                       AND ca.effective_from <= kabul_today()
+                       AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                 ) THEN
                     RAISE EXCEPTION 'visitor conversion target requires active branch provenance'
                         USING ERRCODE = 'check_violation';
@@ -1007,8 +1024,8 @@ return new class extends Migration
                       JOIN organizations o ON o.id = c.organization_id
                      WHERE b.id = student_branch AND b.lifecycle_state = 'active'
                        AND c.lifecycle_state = 'active' AND o.lifecycle_state = 'active'
-                       AND ca.effective_from <= CURRENT_DATE
-                       AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                       AND ca.effective_from <= kabul_today()
+                       AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                 ) THEN
                     RAISE EXCEPTION 'student handoff target requires active branch provenance'
                         USING ERRCODE = 'check_violation';
@@ -1154,6 +1171,11 @@ return new class extends Migration
         Schema::dropIfExists('visitors');
         Schema::dropIfExists('visitor_campaigns');
         Schema::dropIfExists('visitor_sources');
+
+        // Rolled back last: later migrations create their own triggers/views
+        // first during up() and drop them first during down(), so nothing
+        // references this helper when it is finally removed.
+        DB::statement('DROP FUNCTION IF EXISTS kabul_today()');
     }
 
     private function statusList(): string

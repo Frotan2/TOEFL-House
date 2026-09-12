@@ -157,7 +157,7 @@ return new class extends Migration
                          JOIN organizations o ON o.id = c.organization_id
                         WHERE ca.branch_id = NEW.scope_id
                           AND b.lifecycle_state = 'active'
-                          AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                          AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                           AND c.organization_id = dashboard_organization
                           AND c.lifecycle_state = 'active'
                           AND o.lifecycle_state = 'active'
@@ -170,7 +170,7 @@ return new class extends Migration
                        SELECT 1
                          FROM students s
                          JOIN branches b ON b.id = COALESCE(NULLIF(btrim(s.current_home_branch_id), ''), NULLIF(btrim(s.originating_branch_id), ''))
-                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                          JOIN campuses c ON c.id = ca.campus_id
                          JOIN organizations o ON o.id = c.organization_id
                         WHERE s.id = NEW.scope_id
@@ -187,7 +187,7 @@ return new class extends Migration
                        SELECT 1
                          FROM classes cls
                          JOIN branches b ON b.id = cls.branch_id
-                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                          JOIN campuses c ON c.id = ca.campus_id
                          JOIN organizations o ON o.id = c.organization_id
                         WHERE cls.id = NEW.scope_id

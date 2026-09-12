@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\DeterministicTestClock;
 use Tests\Support\TestDatabaseGuard;
 
 /**
@@ -42,6 +43,12 @@ abstract class TestCase extends \Illuminate\Foundation\Testing\TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // One deterministic civil clock per test (see DeterministicTestClock).
+        // The framework clears Carbon test time in tearDown; reapplying it
+        // here is the correct lifecycle boundary, so no clock can leak across
+        // tests and no test depends on the real wall-clock hour.
+        DeterministicTestClock::freeze();
 
         // Stub the Vite manifest for every test.
         //

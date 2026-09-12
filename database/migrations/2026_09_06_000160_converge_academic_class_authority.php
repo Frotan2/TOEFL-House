@@ -46,8 +46,8 @@ return new class extends Migration
                        AND b.lifecycle_state = 'active'
                        AND c.lifecycle_state = 'active'
                        AND o.lifecycle_state = 'active'
-                       AND ca.effective_from <= CURRENT_DATE
-                       AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                       AND ca.effective_from <= kabul_today()
+                       AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                 ) THEN
                     RAISE EXCEPTION 'academic branch provenance requires active branch, campus and organization topology'
                         USING ERRCODE = 'check_violation';
@@ -379,7 +379,7 @@ return new class extends Migration
                     SELECT count(*) INTO future_sessions
                       FROM class_sessions s
                      WHERE s.class_id = NEW.id
-                       AND s.scheduled_on >= CURRENT_DATE;
+                       AND s.scheduled_on >= kabul_today();
                     IF future_sessions > 0 THEN
                         RAISE EXCEPTION 'class cannot become % while % future session(s) remain', NEW.lifecycle_state, future_sessions
                             USING ERRCODE = 'check_violation';

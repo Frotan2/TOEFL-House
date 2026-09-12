@@ -21,7 +21,7 @@ return new class extends Migration
                   INTO effective_status
                   FROM employment_statuses es
                  WHERE es.employment_id = NEW.employment_id
-                   AND es.effective_from <= CURRENT_DATE
+                   AND es.effective_from <= kabul_today()
                  ORDER BY es.effective_from DESC, es.seq DESC
                  LIMIT 1;
 

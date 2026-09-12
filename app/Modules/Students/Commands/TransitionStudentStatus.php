@@ -8,6 +8,7 @@ use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Academic\Queries\GraduationCertificationQuery;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Domain\StudentStatusRegistry;
 use App\Modules\Students\Models\Student;
@@ -18,7 +19,6 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -42,6 +42,7 @@ final class TransitionStudentStatus
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly GraduationCertificationQuery $certification,
+        private readonly CalendarAuthority $calendar,
     ) {}
 
     /** @return array{student_id: string, status: string, correlation_id: string} */
@@ -101,7 +102,9 @@ final class TransitionStudentStatus
                     }
                     StudentStatusRegistry::requireTransition($from, $toStatus);
 
-                    $today = (new CarbonImmutable)->startOfDay()->toDateString();
+                    // Append-day status facts must carry the Kabul civil
+                    // append day; the kabul_today() trigger enforces equality.
+                    $today = $this->calendar->todayAsString();
                     $status = StudentStatus::query()->create([
                         'id' => RandomIdentifier::new(),
                         'student_id' => $lockedStudent->id,

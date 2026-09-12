@@ -77,7 +77,7 @@ return new class extends Migration
 
                 SELECT o.organization_id INTO expense_organization
                   FROM branches b
-                  JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                  JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                   JOIN campuses c ON c.id = ca.campus_id
                   JOIN organizations o ON o.id = c.organization_id
                  WHERE b.id = expense_branch

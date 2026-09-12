@@ -7,6 +7,7 @@ namespace App\Modules\Students\Commands;
 use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Domain\GuardianPermissionRegistry;
@@ -18,9 +19,7 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Guardian relationship control: recorded unverified, verified as its own
@@ -38,7 +37,7 @@ final class MaintainGuardianRelationship
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /**
@@ -82,7 +81,9 @@ final class MaintainGuardianRelationship
                         'permissions' => array_values($permissions),
                         'verification_state' => 'unverified',
                         'lifecycle_state' => 'active',
-                        'effective_from' => (new CarbonImmutable)->startOfDay()->toDateString(),
+                        // The append-day trigger requires the Kabul civil
+                        // append day; the kabul_today() append-day trigger enforces equality.
+                        'effective_from' => $this->calendar->todayAsString(),
                         'effective_to' => null,
                         'recorded_by' => $recorder->actorId,
                     ]);

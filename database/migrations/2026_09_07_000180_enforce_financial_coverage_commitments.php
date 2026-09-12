@@ -125,8 +125,8 @@ return new class extends Migration
                        AND lifecycle_state = 'approved'
                      FOR UPDATE;
                     IF source_effective_from IS NULL
-                       OR source_effective_from > CURRENT_DATE
-                       OR (source_effective_to IS NOT NULL AND source_effective_to < CURRENT_DATE) THEN
+                       OR source_effective_from > kabul_today()
+                       OR (source_effective_to IS NOT NULL AND source_effective_to < kabul_today()) THEN
                         RAISE EXCEPTION 'a coverage commitment requires a currently effective approved gate exception'
                             USING ERRCODE = 'check_violation';
                     END IF;
@@ -145,7 +145,7 @@ return new class extends Migration
                 IF NOT financial_coverage_source_is_active(
                     NEW.coverage_source_type,
                     NEW.coverage_source_id,
-                    CURRENT_DATE
+                    kabul_today()
                 ) THEN
                     RAISE EXCEPTION 'coverage commitment references an inactive or revoked Finance gate source'
                         USING ERRCODE = 'check_violation';
@@ -257,7 +257,7 @@ return new class extends Migration
                    AND financial_coverage_source_is_active(
                        fcc.coverage_source_type,
                        fcc.coverage_source_id,
-                       CURRENT_DATE
+                       kabul_today()
                    );
                 IF active_committed + NEW.amount > obligation_remaining THEN
                     RAISE EXCEPTION 'coverage commitments exceed the authoritative uncommitted obligation remainder'
