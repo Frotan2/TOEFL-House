@@ -1,0 +1,31 @@
+
+> verify:browser:library
+> node scripts/runtime/library-browser-e2e.mjs
+
+library browser E2E actors provisioned on DB 'toefl_house_e2e'
+PASS  Health endpoint is reachable
+      HTTP 200
+PASS  Library browser session is authenticated
+      /library
+PASS  Library workspace renders authorized facts
+      metrics=["0","0","0","0","0","0"]
+PASS  Book copy is registered through the canonical API
+      E2E-BOOK-1789238625861
+
+LIBRARY BROWSER E2E FAILURE DIAGNOSTICS
+TimeoutError: Waiting failed: 20000ms exceeded
+    at new WaitTask (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/common/WaitTask.js:46:34)
+    at IsolatedWorld.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Realm.js:49:26)
+    at CdpFrame.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:585:43)
+    at CdpFrame.<anonymous> (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/util/decorators.js:101:27)
+    at CdpPage.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1537:37)
+    at waitForNotice (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:231:16)
+    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:372:9
+file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:525
+    for (const page of context.pages()) {
+                               ^
+
+TypeError: context.pages is not a function or its return value is not iterable
+    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/library-browser-e2e.mjs:525:32
+
+Node.js v22.22.3
