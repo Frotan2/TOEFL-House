@@ -4,11 +4,17 @@
 
 The live repository does not carry large duplicated snapshots of its own history. Git commits, tags and pull-request history are the authoritative historical record.
 
-This directory exists only for small, durable historical evidence that cannot be recovered conveniently from the current control plane.
+This directory exists only for durable historical evidence that cannot yet be removed without breaking a current documentation dependency.
 
 ## Current authority
 
 Use `../README.md` and the canonical documents at the docs root first. Historical material never overrides current architecture, runtime status, requirements or release evidence.
+
+## Retained exception
+
+`02-architecture-history.md` is temporarily retained because `docs/16-DECISION-REGISTER.md` still uses it as the full-text provenance source for material architecture decisions. It is historical, not normative. Its eventual removal requires first migrating every still-current decision to an explicit canonical decision record and then removing the dependency.
+
+No other large history snapshot is retained here.
 
 ## Retention rule
 
