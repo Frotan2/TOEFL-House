@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Modules\Calendar\CalendarAuthority;
-use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Resources\Commands\CirculateBooks;
 use App\Modules\Resources\Commands\DisposeAsset;
 use App\Modules\Resources\Commands\MaintainAsset;
 use App\Modules\Resources\Commands\MaintainWorkOrder;
 use App\Modules\Resources\Models\Asset;
-use App\Modules\Resources\Models\AssetDisposal;
 use App\Modules\Resources\Models\AssetDisposalRequest;
 use App\Modules\Resources\Models\BookCopy;
 use App\Modules\Resources\Models\BookIssuance;
@@ -58,34 +55,12 @@ final class LibraryController extends Controller
             $this->requireOrganizationRead('resources.books', 'library.console.index');
         }
 
-        // Resource roots now carry an immutable branch and organization
-        // snapshot. Legacy rows with null or topology-inconsistent provenance
-        // remain fail-closed rather than becoming a wildcard.
-        $assetIds = Asset::query();
-        $this->applyRootScope($assetIds, 'assets', $assetBranches);
-        $copyIds = BookCopy::query();
-        $this->applyRootScope($copyIds, 'book_copies', $bookBranches);
-        $workOrderIds = WorkOrder::query();
-        $this->applyRootScope($workOrderIds, 'work_orders', $workBranches);
-        $visibleAssetIds = $assetIds->select('id');
-        $visibleCopyIds = $copyIds->select('id');
-        $visibleWorkOrderIds = $workOrderIds->select('id');
-        $visibleIssuanceIds = BookIssuance::query()->whereIn('copy_id', $visibleCopyIds)->select('id');
-
-        return view('library.index', [
-            'assets' => Asset::query()->whereIn('id', $visibleAssetIds)->orderBy('code')->limit(200)->get(),
-            'copies' => BookCopy::query()->whereIn('id', $visibleCopyIds)->orderBy('code')->limit(200)->get(),
-            'bookBranches' => Branch::query()->whereIn('id', $bookBranches)->where('lifecycle_state', 'active')->orderBy('name')->get(),
-            'issuances' => BookIssuance::query()->whereIn('id', $visibleIssuanceIds)->orderByDesc('issued_on')->limit(200)->get(),
-            'workOrders' => WorkOrder::query()->whereIn('id', $visibleWorkOrderIds)->orderByDesc('id')->limit(200)->get(),
-            'borrowers' => Person::query()->where('verification_state', 'verified')->whereIn('home_branch_id', $bookBranches)->orderBy('legal_name')->limit(300)->get(),
-            'custodians' => Person::query()->where('verification_state', 'verified')->whereIn('home_branch_id', $assetBranches)->orderBy('legal_name')->limit(300)->get(),
-            'assetBranches' => Branch::query()->whereIn('id', $assetBranches)->where('lifecycle_state', 'active')->orderBy('name')->get(),
-            'workBranches' => Branch::query()->whereIn('id', $workBranches)->where('lifecycle_state', 'active')->orderBy('name')->get(),
-            'openCustodies' => Custody::query()->whereNull('released_on')->whereIn('asset_id', $visibleAssetIds)->orderBy('asset_id')->limit(200)->get(),
-            'disposalRequests' => AssetDisposalRequest::query()->whereIn('asset_id', $visibleAssetIds)->orderByDesc('id')->limit(200)->get(),
-            'disposals' => AssetDisposal::query()->whereIn('asset_id', $visibleAssetIds)->orderByDesc('id')->limit(200)->get(),
-        ]);
+        // The React console composes every fact from GET
+        // /api/v1/resources/workspace, which applies its own root-scope
+        // projection; the blade mounts the app and reads no view data. Keep
+        // the authority gate above — it is what makes an unauthorized visit
+        // an audited denial — and query no rows this template never renders.
+        return view('library.index');
     }
 
     public function addBookCopy(Request $request): RedirectResponse
@@ -215,33 +190,5 @@ final class LibraryController extends Controller
         app(MaintainWorkOrder::class)->cancel($this->actor(), WorkOrder::query()->findOrFail($orderId), $this->idempotencyKey('resources.work.cancel'));
 
         return redirect()->route('library.index')->with('success', 'Work order cancelled.');
-    }
-
-    /**
-     * @param \Illuminate\Database\Eloquent\Builder<*> $query
-     * @param  list<string>  $branchIds
-     */
-    private function applyRootScope($query, string $table, array $branchIds): void
-    {
-        $today = app(CalendarAuthority::class)->todayAsString();
-        $query->whereIn($table.'.originating_branch_id', $branchIds)
-            ->whereNotNull($table.'.organization_id')
-            ->whereNotNull($table.'.originating_branch_id')
-            ->whereExists(function ($topology) use ($table, $today): void {
-                $topology->selectRaw('1')
-                    ->from('campus_assignments as resource_ca')
-                    ->join('branches as resource_b', 'resource_b.id', '=', 'resource_ca.branch_id')
-                    ->join('campuses as resource_c', 'resource_c.id', '=', 'resource_ca.campus_id')
-                    ->join('organizations as resource_o', 'resource_o.id', '=', 'resource_c.organization_id')
-                    ->whereColumn('resource_ca.branch_id', $table.'.originating_branch_id')
-                    ->whereColumn('resource_c.organization_id', $table.'.organization_id')
-                    ->where('resource_ca.effective_from', '<=', $today)
-                    ->where(function ($active) use ($today): void {
-                        $active->whereNull('resource_ca.effective_to')->orWhere('resource_ca.effective_to', '>', $today);
-                    })
-                    ->where('resource_b.lifecycle_state', 'active')
-                    ->where('resource_c.lifecycle_state', 'active')
-                    ->where('resource_o.lifecycle_state', 'active');
-            });
     }
 }
