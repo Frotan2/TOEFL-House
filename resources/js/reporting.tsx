@@ -10,8 +10,8 @@ type Metric = { id: string; key: string; name: string; current_version: number; 
 type ReportRun = { id: string; metric_key: string; metric_name: string; period_key: string; scope_type: string; scope_id: string | null; organization_id: string | null; result: string | number | null; completeness: string | null; reproducibility_hash: string; created_at: string | null; evidence_status: 'complete' | 'incomplete' | 'historic_unclassified' };
 type Dashboard = { id: string; name: string; organization_id: string };
 type AcademicPeriod = { id: string; name: string; starts_on: string; ends_on: string; lifecycle_state: string };
-type FinancialPeriod = { id: string; period_key: string; starts_on: string; ends_on: string; lifecycle_state: string };
-type PayrollPeriod = { id: string; period_key: string; starts_on: string; ends_on: string; lifecycle_state: string };
+type FinancialPeriod = { id: string; period_key: string; date_from: string; date_to: string; lifecycle_state: string };
+type PayrollPeriod = { id: string; period_key: string; date_from: string; date_to: string; lifecycle_state: string };
 type ReportingWorkspace = { metrics: Metric[]; runs: ReportRun[]; dashboards: Dashboard[]; dashboard_organizations: string[]; periods: { academic: AcademicPeriod[]; financial: FinancialPeriod[]; payroll: PayrollPeriod[] } };
 type ReportingProps = ApiClient & { csrfToken: string };
 type Tab = 'overview' | 'runs' | 'dashboards';
@@ -35,10 +35,10 @@ export function ReportingApp({ getJson, postJson, csrfToken }: ReportingProps) {
     const metric = data.metrics.find((m) => m.key === metricKey);
     const authority = metric?.period_authority ?? 'academic_period';
     if (authority === 'financial_period') {
-      return data.periods.financial.map((p) => ({ key: p.period_key, label: `${p.period_key} · ${p.starts_on} to ${p.ends_on} (${p.lifecycle_state})` }));
+      return data.periods.financial.map((p) => ({ key: p.period_key, label: `${p.period_key} · ${p.date_from} to ${p.date_to} (${p.lifecycle_state})` }));
     }
     if (authority === 'payroll_period') {
-      return data.periods.payroll.map((p) => ({ key: p.period_key, label: `${p.period_key} · ${p.starts_on} to ${p.ends_on} (${p.lifecycle_state})` }));
+      return data.periods.payroll.map((p) => ({ key: p.period_key, label: `${p.period_key} · ${p.date_from} to ${p.date_to} (${p.lifecycle_state})` }));
     }
     return data.periods.academic.map((p) => ({ key: p.id, label: `${p.name} · ${p.starts_on} to ${p.ends_on} (${p.lifecycle_state})` }));
   };

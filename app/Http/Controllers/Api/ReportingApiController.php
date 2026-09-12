@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /** JSON interface for source-linked reporting and dashboard projections. */
 final class ReportingApiController extends Controller
@@ -128,19 +129,24 @@ final class ReportingApiController extends Controller
             ->get();
 
         // Authoritative period selectors — no free-text period keys
-        $academicPeriods = \Illuminate\Support\Facades\DB::table('academic_periods')
+        $academicPeriods = DB::table('academic_periods')
             ->select(['id', 'name', 'starts_on', 'ends_on', 'lifecycle_state'])
             ->orderBy('starts_on')
             ->limit(100)
             ->get();
-        $financialPeriods = \Illuminate\Support\Facades\DB::table('financial_periods')
-            ->select(['id', 'period_key', 'starts_on', 'ends_on', 'lifecycle_state'])
-            ->orderBy('starts_on')
+        // financial_periods/payroll_periods (migrations 000051/000058) are
+        // keyed periods bounded by date_from/date_to — only academic_periods
+        // has name/starts_on/ends_on. Selecting those columns here 500s with
+        // UndefinedColumn; the option value is still period_key, resolved by
+        // MetricCatalog::resolvePeriod when a report is run.
+        $financialPeriods = DB::table('financial_periods')
+            ->select(['id', 'period_key', 'date_from', 'date_to', 'lifecycle_state'])
+            ->orderBy('date_from')
             ->limit(100)
             ->get();
-        $payrollPeriods = \Illuminate\Support\Facades\DB::table('payroll_periods')
-            ->select(['id', 'period_key', 'starts_on', 'ends_on', 'lifecycle_state'])
-            ->orderBy('starts_on')
+        $payrollPeriods = DB::table('payroll_periods')
+            ->select(['id', 'period_key', 'date_from', 'date_to', 'lifecycle_state'])
+            ->orderBy('date_from')
             ->limit(100)
             ->get();
 
