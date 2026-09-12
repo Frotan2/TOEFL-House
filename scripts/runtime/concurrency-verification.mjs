@@ -501,6 +501,92 @@ async function stagedDisposalApprovalRace() {
   }
 }
 
+/**
+ * Documents race fixture: one subject person, one classification and one
+ * submitted document, created before the race and removed after it.
+ */
+async function createDocumentsRaceFixture() {
+  const personId = randomUUID();
+  const classificationId = randomUUID();
+  const documentId = randomUUID();
+  await oneConnection(async (client) => {
+    await client.query(
+      "INSERT INTO people (id, legal_name, date_of_birth, verification_state) VALUES ($1, 'Runtime documents race person', '1980-01-01', 'unverified')",
+      [personId],
+    );
+    await client.query(
+      "INSERT INTO document_classifications (id, category, owner_module, access_class) VALUES ($1, $2, 'documents-runtime', 'restricted')",
+      [classificationId, `runtime-race-${classificationId}`],
+    );
+    await client.query(
+      "INSERT INTO documents (id, subject_person_id, classification_id, title, lifecycle_state) VALUES ($1, $2, $3, 'Runtime documents race document', 'submitted')",
+      [documentId, personId, classificationId],
+    );
+  });
+
+  return { personId, classificationId, documentId };
+}
+
+async function cleanupDocumentsRaceFixture(fixture) {
+  await oneConnection(async (client) => {
+    await client.query('DELETE FROM documents WHERE id = $1', [fixture.documentId]);
+    await client.query('DELETE FROM document_classifications WHERE id = $1', [fixture.classificationId]);
+    await client.query('DELETE FROM people WHERE id = $1', [fixture.personId]);
+  });
+  await assertNoRows('documents race document', 'SELECT count(*)::int AS count FROM documents WHERE id = $1', [fixture.documentId]);
+  await assertNoRows('documents race person', 'SELECT count(*)::int AS count FROM people WHERE id = $1', [fixture.personId]);
+}
+
+async function documentVersionAppendRace() {
+  const fixture = await createDocumentsRaceFixture();
+  await oneConnection((client) => client.query(
+    "INSERT INTO document_versions (id, document_id, version_no, content_hash, storage_ref, uploaded_by) VALUES ($1, $2, 1, 'runtime-race-v1', 'storage/runtime-race-v1', $3)",
+    [randomUUID(), fixture.documentId, fixture.personId],
+  ));
+
+  try {
+    // Two concurrent submissions both compute max(version_no)+1 = 2. The
+    // command row-lock serializes application writers; this race proves the
+    // migrated uniqueness boundary independently defeats the duplicate even
+    // for writers that bypass the command entirely.
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        "INSERT INTO document_versions (id, document_id, version_no, content_hash, storage_ref, uploaded_by) VALUES ($1, $2, 2, $3, 'storage/runtime-race-v2', $4)",
+        [randomUUID(), fixture.documentId, `runtime-race-v2-contender-${contender}`, fixture.personId],
+      );
+    }));
+
+    return assertOneWinner('concurrent document version append', race, 'document_versions_document_id_version_no_unique');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM document_versions WHERE document_id = $1', [fixture.documentId]);
+    await cleanupDocumentsRaceFixture(fixture);
+    await assertNoRows('documents race versions', 'SELECT count(*)::int AS count FROM document_versions WHERE document_id = $1', [fixture.documentId]);
+  }
+}
+
+async function documentVerdictRace() {
+  const fixture = await createDocumentsRaceFixture();
+
+  try {
+    // Two concurrent verifiers race to record THE verdict for version 1.
+    // The command serializes on the document row lock and the loser sees the
+    // moved state; this race proves the named unique index independently
+    // guarantees one verdict per version against any writer.
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        "INSERT INTO document_verifications (id, document_id, version_no, verifier_person_id, result, reason) VALUES ($1, $2, 1, $3, $4, $5)",
+        [randomUUID(), fixture.documentId, fixture.personId, contender === 0 ? 'pass' : 'fail', `runtime race verdict ${contender}`],
+      );
+    }));
+
+    return assertOneWinner('single verdict per document version', race, 'document_verifications_one_verdict_per_version');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM document_verifications WHERE document_id = $1', [fixture.documentId]);
+    await cleanupDocumentsRaceFixture(fixture);
+    await assertNoRows('documents race verdicts', 'SELECT count(*)::int AS count FROM document_verifications WHERE document_id = $1', [fixture.documentId]);
+  }
+}
+
 async function verify(name, operation) {
   try {
     record(name, true, await operation());
@@ -527,6 +613,10 @@ try {
       { table: 'assets', privileges: ['SELECT', 'INSERT', 'DELETE'] },
       { table: 'custodies', privileges: ['SELECT', 'INSERT', 'DELETE'] },
       { table: 'asset_disposal_requests', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'document_classifications', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'documents', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'document_versions', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'document_verifications', privileges: ['SELECT', 'INSERT', 'DELETE'] },
     ],
   });
 
@@ -537,6 +627,8 @@ try {
   await verify('one open library issuance race', openBookIssuanceRace);
   await verify('one open asset custody race', openAssetCustodyRace);
   await verify('staged asset disposal approval race', stagedDisposalApprovalRace);
+  await verify('concurrent document version append race', documentVersionAppendRace);
+  await verify('single verdict per document version race', documentVerdictRace);
 
   const passed = results.filter((result) => result.pass).length;
   console.log(`Concurrency verification: ${passed}/${results.length} production-table races passed.`);
