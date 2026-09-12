@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workspace\Queries;
 
 use App\Modules\Academic\Models\ClassModel;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Finance\Models\FinancialGateException;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
@@ -15,10 +16,8 @@ use App\Modules\Students\Models\Student;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Management decision-support composition over governed projections and

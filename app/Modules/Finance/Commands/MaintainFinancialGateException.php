@@ -9,6 +9,7 @@ use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Offering;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Finance\Domain\FinancialCoverageCommitmentAllocator;
 use App\Modules\Finance\Domain\FinancialCoverageLock;
 use App\Modules\Finance\Models\FinancialGateException;
@@ -22,9 +23,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use App\Support\MoneyAmount;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Finance-owned, approved gate exception. An approved exception carries an
@@ -45,7 +44,7 @@ final class MaintainFinancialGateException
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly FinancialCoverageCommitmentAllocator $coverageCommitments,
-    
+
     ) {}
 
     /** @return array{exception_id: string, correlation_id: string} */

@@ -45,6 +45,7 @@ final class CalendarApiController extends Controller
         if ($gregorian !== null && $gregorian !== '') {
             $g = $this->calendar->parseGregorianDate((string) $gregorian);
             $data = $this->calendar->toApiPayload($g, $version !== null && $version !== '' ? (string) $version : null);
+
             return response()->json(['data' => $data]);
         }
 
@@ -52,6 +53,7 @@ final class CalendarApiController extends Controller
             $s = $this->calendar->parseShamsiDate((string) $shamsi, $version !== null && $version !== '' ? (string) $version : null);
             $gString = $this->calendar->toGregorian($s, $version !== null && $version !== '' ? (string) $version : null);
             $data = $this->calendar->toApiPayload($gString, $version !== null && $version !== '' ? (string) $version : null);
+
             return response()->json(['data' => $data]);
         }
 
@@ -71,10 +73,13 @@ final class CalendarApiController extends Controller
         $shamsiYear = $this->calendar->shamsiYearPeriod($todayShamsi->year, $version);
         $shamsiMonths = array_map(fn ($m) => $this->calendar->shamsiMonthPeriod($todayShamsi->year, $m, $version), range(1, 12));
 
-        // Canonical DB periods
+        // Canonical DB periods. Academic periods carry a name and on-style
+        // bounds; financial/payroll periods are keyed periods bounded by
+        // date_from/date_to (see migrations 000051/000058) — selecting
+        // name/starts_on/ends_on there 500s with UndefinedColumn.
         $academic = DB::table('academic_periods')->select(['id', 'name', 'starts_on', 'ends_on', 'lifecycle_state'])->orderBy('starts_on')->limit(200)->get();
-        $financial = DB::table('financial_periods')->select(['id', 'period_key', 'name', 'starts_on', 'ends_on', 'lifecycle_state'])->orderBy('starts_on')->limit(200)->get();
-        $payroll = DB::table('payroll_periods')->select(['id', 'period_key', 'name', 'starts_on', 'ends_on', 'lifecycle_state'])->orderBy('starts_on')->limit(200)->get();
+        $financial = DB::table('financial_periods')->select(['id', 'period_key', 'date_from', 'date_to', 'lifecycle_state'])->orderBy('date_from')->limit(200)->get();
+        $payroll = DB::table('payroll_periods')->select(['id', 'period_key', 'date_from', 'date_to', 'lifecycle_state'])->orderBy('date_from')->limit(200)->get();
 
         return response()->json(['data' => [
             'today' => $this->calendar->currentBusinessDatePayload($version),
@@ -107,6 +112,7 @@ final class CalendarApiController extends Controller
 
         if ($month !== null && $month !== '') {
             $data = $this->calendar->shamsiMonthPeriod($year, (int) $month, $version);
+
             return response()->json(['data' => [
                 'year_boundaries' => $this->calendar->shamsiYearPeriod($year, $version),
                 'month_boundaries' => $data,
@@ -118,6 +124,7 @@ final class CalendarApiController extends Controller
 
         $data = $this->calendar->shamsiYearPeriod($year, $version);
         $yearInfo = $this->calendar->yearInfo($year, $version);
+
         return response()->json(['data' => [
             'year_boundaries' => $data,
             'month_boundaries' => null,

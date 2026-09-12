@@ -21,6 +21,7 @@ use App\Modules\Academic\Placement\Models\PlacementTest;
 use App\Modules\Academic\Placement\Models\PlacementTestVersion;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Domain\CrmInteractionTraceRecorder;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Identity\Models\Person;
@@ -33,7 +34,6 @@ use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Placement profiles and server-authoritative attempts.
@@ -56,7 +56,7 @@ final class ManagePlacementProfile
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionTraceRecorder $crmTrace,
         private readonly PlacementEvidenceVerifier $evidenceVerifier,
-    
+
     ) {}
 
     /** @return array{profile_id: string, correlation_id: string} */

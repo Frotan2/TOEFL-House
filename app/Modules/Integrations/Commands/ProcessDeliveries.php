@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Integrations\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Integrations\Domain\DeliveryProcessor;
 use App\Modules\Integrations\Models\IntegrationDelivery;
 use App\Support\Authorization\AccessDecision;
@@ -12,7 +13,6 @@ use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Idempotency\IdempotentExecution;
 use Throwable;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Worker entry to the delivery core: every due delivery is processed in
@@ -30,7 +30,7 @@ final class ProcessDeliveries
         private readonly IdempotentExecution $idempotency,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly DeliveryProcessor $processor,
-    
+
     ) {}
 
     /** @return array{results: list<array{delivery_id: string, outcome: string, attempts: int}>, considered: int} */

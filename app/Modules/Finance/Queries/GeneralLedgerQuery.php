@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Finance\Queries;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Finance\Models\Discount;
 use App\Modules\Finance\Models\EmploymentSettlement;
 use App\Modules\Finance\Models\Expense;
@@ -15,12 +16,10 @@ use App\Modules\Finance\Models\Obligation;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PayrollLiabilityFact;
 use App\Modules\Finance\Models\Refund;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Finance's authoritative general-ledger read model.

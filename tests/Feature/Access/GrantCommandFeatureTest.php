@@ -9,6 +9,7 @@ use App\Modules\Access\Commands\GrantScopePermission;
 use App\Modules\Access\Commands\RevokeScopePermission;
 use App\Modules\Access\Models\OrgWideGrantRequest;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
@@ -243,7 +244,7 @@ final class GrantCommandFeatureTest extends TestCase
         $this->assertSame('revoked', $result['lifecycle_state']);
         $this->assertDatabaseHas('scope_grants', ['id' => $grant->id, 'lifecycle_state' => 'revoked']);
         $this->assertDatabaseHas('audit_events', ['operation' => 'access.revoke', 'target_type' => 'scope_grant', 'target_id' => $grant->id]);
-        $denied = (new AccessResolution)->decide(new Actor('grantee-7', 'Grantee'), 'identity.verify', new StructureScope($campus->organization_id, $campus->id));
+        $denied = (new AccessResolution(app(CalendarAuthority::class)))->decide(new Actor('grantee-7', 'Grantee'), 'identity.verify', new StructureScope($campus->organization_id, $campus->id));
         $this->assertFalse($denied->allowed);
 
         $this->expectException(BusinessRejection::class);

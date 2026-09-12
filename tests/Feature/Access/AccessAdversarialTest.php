@@ -11,6 +11,7 @@ use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\BusinessRejection;
@@ -37,7 +38,7 @@ final class AccessAdversarialTest extends TestCase
         $organization = $this->establishActiveOrganization();
 
         foreach (['*.*', 'identity.*', 'access', ''] as $fabricated) {
-            $decision = (new AccessResolution)->decide($actor, $fabricated, new StructureScope($organization->id));
+            $decision = (new AccessResolution(app(CalendarAuthority::class)))->decide($actor, $fabricated, new StructureScope($organization->id));
             $this->assertFalse($decision->allowed, sprintf('capability %s must not resolve', $fabricated));
         }
     }
@@ -51,7 +52,7 @@ final class AccessAdversarialTest extends TestCase
         $leaf = new Actor('adv-leaf', 'Leaf');
         $middle = new Actor('adv-middle', 'Middle');
 
-        $resolution = new AccessResolution;
+        $resolution = new AccessResolution(app(CalendarAuthority::class));
         $this->assertTrue($resolution->decide($middle, 'identity.verify', new StructureScope($organization->id))->allowed);
         $this->assertFalse($resolution->decide($leaf, 'identity.verify', new StructureScope($organization->id))->allowed);
     }
@@ -78,7 +79,7 @@ final class AccessAdversarialTest extends TestCase
         ]);
 
         $holder = new Actor('adv-holder', 'Holder');
-        $resolution = new AccessResolution;
+        $resolution = new AccessResolution(app(CalendarAuthority::class));
         $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($away->id))->allowed, 'a position assignment without a permission-granting role must not authorize');
         $this->assertTrue($resolution->decide($holder, 'identity.verify', new StructureScope($home->id))->allowed);
     }

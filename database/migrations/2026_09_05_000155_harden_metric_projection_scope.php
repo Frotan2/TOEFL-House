@@ -29,7 +29,7 @@ return new class extends Migration
                AND b.lifecycle_state = 'active'
                AND c.lifecycle_state = 'active'
                AND o.lifecycle_state = 'active'
-               AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+               AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                AND mp.organization_id IS NULL
             SQL);
         DB::statement(<<<'SQL'
@@ -37,7 +37,7 @@ return new class extends Migration
                SET organization_id = c.organization_id
               FROM students s
               JOIN branches b ON b.id = COALESCE(NULLIF(btrim(s.current_home_branch_id), ''), NULLIF(btrim(s.originating_branch_id), ''))
-              JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+              JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
               JOIN campuses c ON c.id = ca.campus_id
               JOIN organizations o ON o.id = c.organization_id
              WHERE mp.scope_type = 'student'
@@ -52,7 +52,7 @@ return new class extends Migration
                SET organization_id = c.organization_id
               FROM classes cls
               JOIN branches b ON b.id = cls.branch_id
-              JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+              JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
               JOIN campuses c ON c.id = ca.campus_id
               JOIN organizations o ON o.id = c.organization_id
              WHERE mp.scope_type = 'class'
@@ -77,7 +77,7 @@ return new class extends Migration
                                 JOIN organizations o ON o.id = c.organization_id
                                WHERE ca.branch_id = mp.scope_id
                                  AND b.lifecycle_state = 'active'
-                                 AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                                 AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                                  AND c.organization_id = mp.organization_id
                                  AND c.lifecycle_state = 'active'
                                  AND o.lifecycle_state = 'active'
@@ -90,7 +90,7 @@ return new class extends Migration
                               SELECT 1
                                 FROM students s
                                 JOIN branches b ON b.id = COALESCE(NULLIF(btrim(s.current_home_branch_id), ''), NULLIF(btrim(s.originating_branch_id), ''))
-                                JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                                JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                                 JOIN campuses c ON c.id = ca.campus_id
                                 JOIN organizations o ON o.id = c.organization_id
                                WHERE s.id = mp.scope_id
@@ -107,7 +107,7 @@ return new class extends Migration
                               SELECT 1
                                 FROM classes cls
                                 JOIN branches b ON b.id = cls.branch_id
-                                JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                                JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                                 JOIN campuses c ON c.id = ca.campus_id
                                 JOIN organizations o ON o.id = c.organization_id
                                WHERE cls.id = mp.scope_id
@@ -131,7 +131,7 @@ return new class extends Migration
                    AND NOT EXISTS (
                        SELECT 1
                          FROM branches b
-                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                          JOIN campuses c ON c.id = ca.campus_id
                          JOIN organizations o ON o.id = c.organization_id
                         WHERE b.id = NEW.scope_id
@@ -148,7 +148,7 @@ return new class extends Migration
                        SELECT 1
                          FROM students s
                          JOIN branches b ON b.id = COALESCE(NULLIF(btrim(s.current_home_branch_id), ''), NULLIF(btrim(s.originating_branch_id), ''))
-                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                          JOIN campuses c ON c.id = ca.campus_id
                          JOIN organizations o ON o.id = c.organization_id
                         WHERE s.id = NEW.scope_id
@@ -165,7 +165,7 @@ return new class extends Migration
                        SELECT 1
                          FROM classes cls
                          JOIN branches b ON b.id = cls.branch_id
-                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= CURRENT_DATE AND (ca.effective_to IS NULL OR ca.effective_to > CURRENT_DATE)
+                         JOIN campus_assignments ca ON ca.branch_id = b.id AND ca.effective_from <= kabul_today() AND (ca.effective_to IS NULL OR ca.effective_to > kabul_today())
                          JOIN campuses c ON c.id = ca.campus_id
                          JOIN organizations o ON o.id = c.organization_id
                         WHERE cls.id = NEW.scope_id

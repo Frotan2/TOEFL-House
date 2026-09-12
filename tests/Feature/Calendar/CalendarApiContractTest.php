@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Calendar;
 
 use App\Modules\Calendar\CalendarAuthority;
+use Carbon\CarbonImmutable;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
@@ -75,15 +76,14 @@ final class CalendarApiContractTest extends TestCase
 
     public function test_kabul_midnight_and_rollover_detection(): void
     {
-        $authority = new CalendarAuthority();
-        $kabulMidnight = \Carbon\CarbonImmutable::parse('2026-09-02 19:30:00', 'UTC');
+        $authority = new CalendarAuthority;
+        $kabulMidnight = CarbonImmutable::parse('2026-09-02 19:30:00', 'UTC');
         $this->assertTrue($authority->isKabulMidnight($kabulMidnight));
         $this->assertTrue($authority->isUtcMidnightRolloverRisk($kabulMidnight));
 
-        $edge = \Carbon\CarbonImmutable::parse('2026-09-02 20:00:00', 'UTC'); // 00:30 Kabul next day
+        $edge = CarbonImmutable::parse('2026-09-02 20:00:00', 'UTC'); // 00:30 Kabul next day
         $this->assertTrue($authority->isUtcMidnightRolloverRisk($edge));
         $this->assertSame('2026-09-02', $edge->toDateString());
         $this->assertSame('2026-09-03', $authority->gregorianCivilDayFromInstant($edge)->toDateString());
     }
-
 }

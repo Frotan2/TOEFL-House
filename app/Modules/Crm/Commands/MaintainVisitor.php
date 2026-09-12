@@ -6,6 +6,7 @@ namespace App\Modules\Crm\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Domain\CrmAccess;
 use App\Modules\Crm\Domain\VisitorContactKey;
 use App\Modules\Crm\Domain\VisitorStatus;
@@ -17,7 +18,6 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Maintain a visitor: update contact/ownership/interest/notes and advance the
@@ -38,7 +38,7 @@ final class MaintainVisitor
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /** @return array{visitor_id: string, status: string, correlation_id: string} */

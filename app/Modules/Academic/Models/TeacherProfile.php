@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Academic\Models;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Hr\Models\EmploymentStatus;
 use App\Modules\Identity\Models\Person;
 use App\Support\Errors\BusinessRejection;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Modules\Calendar\CalendarAuthority;
 
 /** Canonical academic capability profile; not an identity or job-title alias. */
 final class TeacherProfile extends Model

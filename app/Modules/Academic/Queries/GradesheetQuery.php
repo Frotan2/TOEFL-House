@@ -15,13 +15,12 @@ use App\Modules\Academic\Models\ResultCorrection;
 use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Audit\AttemptedOperation;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Students\Models\Student;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Per-class grade compilation over the certified assessment result chain.
@@ -58,7 +57,7 @@ final class GradesheetQuery
 
         private readonly AccessDecision $access,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /**

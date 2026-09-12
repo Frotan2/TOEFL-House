@@ -51,7 +51,7 @@ return new class extends Migration
                     SELECT count(*) INTO future_sessions
                       FROM class_sessions s
                      WHERE s.room_id = NEW.id
-                       AND s.scheduled_on >= CURRENT_DATE;
+                       AND s.scheduled_on >= kabul_today();
                     IF future_sessions > 0 THEN
                         RAISE EXCEPTION 'room cannot be % while % future session(s) reference it', NEW.lifecycle_state, future_sessions
                             USING ERRCODE = 'check_violation';
@@ -99,7 +99,7 @@ return new class extends Migration
                     SELECT count(*) INTO future_sessions
                       FROM class_sessions s
                      WHERE s.section_id = NEW.id
-                       AND s.scheduled_on >= CURRENT_DATE;
+                       AND s.scheduled_on >= kabul_today();
                     IF future_sessions > 0 THEN
                         RAISE EXCEPTION 'section cannot be % while % future session(s) reference it', NEW.lifecycle_state, future_sessions
                             USING ERRCODE = 'check_violation';

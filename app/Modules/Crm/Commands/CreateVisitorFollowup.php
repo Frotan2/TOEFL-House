@@ -6,6 +6,7 @@ namespace App\Modules\Crm\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Domain\CrmAccess;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorFollowup;
@@ -18,7 +19,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Manually schedule a next action on a visitor. This is the same destination
@@ -36,7 +36,7 @@ final class CreateVisitorFollowup
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /** @return array{followup_id: string, correlation_id: string} */

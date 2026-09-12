@@ -8,6 +8,7 @@ use App\Modules\Admissions\Domain\ApplicantLifecycle;
 use App\Modules\Admissions\Models\Applicant;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Audit\Models\AuditEvent;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Models\Visitor;
 use App\Modules\Crm\Models\VisitorConversion;
 use App\Modules\Crm\Models\VisitorConversionHandoff;
@@ -24,7 +25,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Cross-module conversion lineage recorder. The AUTHORIZING workflow is
@@ -43,7 +43,7 @@ final class VisitorConversionRecorder
 
         private readonly AuditRecorder $audit,
         private readonly IdempotentExecution $idempotency,
-    
+
     ) {}
 
     /** @return array{conversion_id: string, visitor_id: string, status: string, converted_at: string|null, conversion_time_basis: string|null, correlation_id: string} */

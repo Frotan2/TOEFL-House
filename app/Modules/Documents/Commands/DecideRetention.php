@@ -6,6 +6,7 @@ namespace App\Modules\Documents\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Documents\Domain\DocumentLifecycle;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Documents\Models\DocumentClassification;
@@ -35,6 +36,7 @@ final class DecideRetention
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly CalendarAuthority $calendar,
     ) {}
 
     /** @return array{decision_id: string, action: string, correlation_id: string} */
@@ -62,7 +64,10 @@ final class DecideRetention
 
                     $created = CarbonImmutable::parse($locked->created_at)->startOfDay();
                     $dueAt = $created->addDays((int) $rule->retention_days)->startOfDay();
-                    $action = (new CarbonImmutable)->startOfDay()->greaterThanOrEqualTo($dueAt) ? 'archive' : 'retain';
+                    // The retention cutoff is a civil-day comparison against
+                    // the one Kabul civil clock, not the server's UTC clock.
+                    $today = CarbonImmutable::parse($this->calendar->todayAsString())->startOfDay();
+                    $action = $today->greaterThanOrEqualTo($dueAt) ? 'archive' : 'retain';
 
                     $decision = RetentionDecision::query()->create([
                         'id' => RandomIdentifier::new(),

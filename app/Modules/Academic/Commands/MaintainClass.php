@@ -19,6 +19,7 @@ use App\Modules\Academic\Models\ProgramVersionLevel;
 use App\Modules\Academic\Models\TeacherAssignment;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Scheduling\Domain\SchedulingConstraints;
 use App\Support\Authorization\Actor;
@@ -29,7 +30,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Class and session control: a class delivers a published program version
@@ -52,7 +52,7 @@ final class MaintainClass
         private readonly SchedulingConstraints $scheduling,
         private readonly MaintainTeacherAssignment $teacherAssignments,
         private readonly ActorBranches $branches,
-    
+
     ) {}
 
     /** @return array{class_id: string, correlation_id: string} */

@@ -7,6 +7,7 @@ namespace App\Modules\Students\Commands;
 use App\Modules\Academic\Domain\RecordBranch;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentHoldEvent;
@@ -17,7 +18,6 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,6 +35,7 @@ final class ManageStudentHold
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly CalendarAuthority $calendar,
     ) {}
 
     /** @return array{student_id: string, action: string, hold_event_id: string, correlation_id: string} */
@@ -85,7 +86,9 @@ final class ManageStudentHold
                         'id' => RandomIdentifier::new(),
                         'student_id' => $locked->id,
                         'action' => $action,
-                        'effective_from' => (new CarbonImmutable)->startOfDay()->toDateString(),
+                        // Effective on the Kabul civil append day, matching
+                        // the kabul_today() append-day triggers.
+                        'effective_from' => $this->calendar->todayAsString(),
                         'reason' => $reason,
                         'actor_id' => $actor->actorId,
                     ]);

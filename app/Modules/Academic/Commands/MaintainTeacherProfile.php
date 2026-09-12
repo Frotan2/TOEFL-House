@@ -15,6 +15,7 @@ use App\Modules\Academic\Models\TeacherSkillAuthority;
 use App\Modules\Academic\Models\TeacherWorkloadLimit;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
@@ -26,7 +27,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Teacher/Faculty capability lifecycle. This command is the only writer for
@@ -46,7 +46,7 @@ final class MaintainTeacherProfile
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /** @return array{teacher_profile_id: string, correlation_id: string} */

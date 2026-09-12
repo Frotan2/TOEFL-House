@@ -7,6 +7,8 @@ namespace App\Modules\Organization\Commands;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Organization\Domain\OrganizationLifecycle;
+use App\Modules\Organization\Domain\StructureChangeDefinition;
+use App\Modules\Organization\Domain\StructureRetirementGuard;
 use App\Modules\Organization\Domain\StructureUnit;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\StructureDecision;
@@ -27,6 +29,7 @@ final class TransitionStructureUnit
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly StructureRetirementGuard $retirementGuard,
     ) {}
 
     /** @return array{id: string, unit_type: string, lifecycle_state: string, correlation_id: string} */
@@ -62,7 +65,7 @@ final class TransitionStructureUnit
                 $this->transitionPayload($unit, 'reopen', $decision),
                 function () use ($unit, $decision): array {
                     return DB::transaction(function () use ($unit, $decision): array {
-                        $decision->authorize($this->access, $unit->structureScope(), true);
+                        $decision->authorize($this->access, StructureChangeDefinition::authorityScope($unit, true), true);
                         $locked = $this->lockedUnit($unit);
 
                         OrganizationLifecycle::requireTransition($locked->lifecycleState(), OrganizationLifecycle::STATE_REOPENED);
@@ -89,9 +92,14 @@ final class TransitionStructureUnit
                 $this->transitionPayload($unit, $verb, $decision),
                 function () use ($unit, $toState, $verb, $decision): array {
                     return DB::transaction(function () use ($unit, $toState, $verb, $decision): array {
-                        $decision->authorize($this->access, $unit->structureScope(), true);
+                        $decision->authorize($this->access, StructureChangeDefinition::authorityScope($unit, true), true);
                         $locked = $this->lockedUnit($unit);
                         OrganizationLifecycle::requireTransition($locked->lifecycleState(), $toState);
+                        if ($verb === 'close') {
+                            // Bottom-up retirement: closure must not strand active
+                            // structure or active operations under a closed parent.
+                            $this->retirementGuard->requireCloseAllowed($locked);
+                        }
 
                         return $this->commitTransition($locked, $toState, $verb, $decision);
                     });

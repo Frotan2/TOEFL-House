@@ -11,6 +11,7 @@ use App\Modules\Access\Commands\TransitionPositionAssignment;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
@@ -84,7 +85,7 @@ final class PositionConferabilityFeatureTest extends TestCase
         }
 
         $this->assertDatabaseHas('position_assignments', ['id' => $assignment->id, 'lifecycle_state' => 'proposed']);
-        $this->assertFalse((new AccessResolution)->decide(new Actor('conf-target-2', 'Target'), 'finance.manage', new StructureScope($organizationId))->allowed);
+        $this->assertFalse((new AccessResolution(app(CalendarAuthority::class)))->decide(new Actor('conf-target-2', 'Target'), 'finance.manage', new StructureScope($organizationId))->allowed);
     }
 
     public function test_access_policy_administrator_retains_explicit_power_to_confer_any_position(): void

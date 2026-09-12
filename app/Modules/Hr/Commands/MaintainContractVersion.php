@@ -7,6 +7,7 @@ namespace App\Modules\Hr\Commands;
 use App\Modules\Academic\Models\Skill;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Domain\ContractLifecycle;
 use App\Modules\Hr\Domain\ContractVersionLifecycle;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
@@ -26,7 +27,6 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Versioned teacher contracts: the Finance Manager prepares a draft
@@ -56,7 +56,7 @@ final class MaintainContractVersion
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
-    
+
     ) {}
 
     /**

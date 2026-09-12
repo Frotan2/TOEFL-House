@@ -10,12 +10,12 @@ use App\Modules\Academic\Placement\Models\PlacementAttempt;
 use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Placement\Models\PlacementRecommendation;
 use App\Modules\Academic\Placement\Models\PlacementSectionResult;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Signing\AcademicEligibilitySigner;
 use App\Support\Signing\CanonicalJson;
 use Illuminate\Support\Carbon;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Builds the complete signed academic-context payload from the immutable

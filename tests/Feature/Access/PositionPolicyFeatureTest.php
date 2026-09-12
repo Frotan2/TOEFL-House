@@ -12,6 +12,7 @@ use App\Modules\Access\Models\AccessPolicy;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\Role;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
@@ -44,7 +45,7 @@ final class PositionPolicyFeatureTest extends TestCase
         $created = app(AssignPosition::class)->assign($publisher, 'pol-holder-1', $position->id, new CarbonImmutable('2026-08-25'), 'assign-key-1');
         $this->assertDatabaseHas('position_assignments', ['id' => $created['assignment_id'], 'lifecycle_state' => 'proposed']);
         $holder = new Actor('pol-holder-1', 'Holder');
-        $resolution = new AccessResolution;
+        $resolution = new AccessResolution(app(CalendarAuthority::class));
         $this->assertFalse($resolution->decide($holder, 'identity.verify', new StructureScope($organizationId))->allowed);
 
         app(TransitionPositionAssignment::class)->activate($publisher, PositionAssignment::query()->findOrFail($created['assignment_id']), 'assign-key-2');

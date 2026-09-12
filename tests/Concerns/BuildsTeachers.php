@@ -8,6 +8,7 @@ use App\Modules\Academic\Commands\MaintainTeacherProfile;
 use App\Modules\Academic\Models\TeacherProfile;
 use App\Modules\Academic\Models\TeacherProfileBranch;
 use App\Modules\Academic\Models\TeacherQualification;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Commands\MaintainContract;
 use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Models\Contract;
@@ -54,15 +55,15 @@ trait BuildsTeachers
         $keyPrefix = strlen($keyPrefix) > 12
             ? substr($keyPrefix, 0, 8).substr(md5($keyPrefix), 0, 4)
             : $keyPrefix;
-        // employ() stamps a `candidate` employment_status effective TODAY.
-        // The active-class guard reads the newest status with
-        // effective_from <= CURRENT_DATE, ordered by effective_from, then
-        // created_at, then id. A backdated hire would rank *below* that
-        // candidate row, and a same-day hire would depend on the created_at/id
-        // tiebreak. Dating the hire in the recent past is therefore wrong and
-        // A backdated hire would rank below it, so the hire is dated today and
-        // ordered above the candidate row by employment_statuses.seq.
-        $effectiveFrom = CarbonImmutable::today()->toDateString();
+        // employ() stamps a `candidate` employment_status effective on the
+        // Kabul civil append day (CalendarAuthority). The active-class guard
+        // reads the newest status with effective_from <= that same civil day,
+        // ordered by effective_from then seq; a backdated hire ranks below the
+        // candidate row and makes the fixture read candidate/candidate again
+        // during the 19:30–00:00 UTC window when Kabul is already one civil
+        // day ahead. The hire fact therefore uses the SAME Kabul civil day as
+        // the candidate; the later seq orders the active fact above it.
+        $effectiveFrom = app(CalendarAuthority::class)->todayAsString();
 
         // Identity: verified, homed in the branch. Set on insert because a
         // verified person is immutable (people_identity_guard).
@@ -125,9 +126,10 @@ trait BuildsTeachers
         // Fail loudly here rather than letting a later guard reject an
         // apparently unrelated operation: the fixture's whole purpose is to
         // produce an employment the domain reads as active.
+        $civilToday = app(CalendarAuthority::class)->todayAsString();
         $effectiveStatus = EmploymentStatus::query()
             ->where('employment_id', $employment['employment_id'])
-            ->whereDate('effective_from', '<=', CarbonImmutable::today()->toDateString())
+            ->whereDate('effective_from', '<=', $civilToday)
             ->orderByDesc('effective_from')->orderByDesc('seq')
             ->value('status');
         if ($effectiveStatus !== 'active') {

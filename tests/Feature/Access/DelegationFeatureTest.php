@@ -8,6 +8,7 @@ use App\Modules\Access\AccessResolution;
 use App\Modules\Access\Commands\DelegateAuthority;
 use App\Modules\Access\Commands\RevokeDelegation;
 use App\Modules\Access\Models\Delegation;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
@@ -37,7 +38,7 @@ final class DelegationFeatureTest extends TestCase
 
         $this->assertDatabaseHas('delegations', ['id' => $result['delegation_id'], 'lifecycle_state' => 'active', 'reason' => 'annual leave coverage']);
         $this->assertDatabaseHas('audit_events', ['operation' => 'access.delegate', 'target_type' => 'delegation', 'target_id' => $result['delegation_id']]);
-        $resolution = new AccessResolution;
+        $resolution = new AccessResolution(app(CalendarAuthority::class));
         $this->assertTrue($resolution->decide($delegate, 'identity.verify', new StructureScope($organization->id))->allowed);
         $this->assertFalse($resolution->decide($delegate, 'access.grant', new StructureScope($organization->id))->allowed);
     }
@@ -101,7 +102,7 @@ final class DelegationFeatureTest extends TestCase
         /** @var Delegation $delegation */
         $delegation = Delegation::query()->findOrFail($created['delegation_id']);
         $delegate = new Actor('dlg-delegate-4', 'Delegate');
-        $resolution = new AccessResolution;
+        $resolution = new AccessResolution(app(CalendarAuthority::class));
         $this->assertTrue($resolution->decide($delegate, 'identity.verify', new StructureScope($organization->id))->allowed);
 
         $result = app(RevokeDelegation::class)->revoke($delegator, $delegation, 'dlg-key-7');

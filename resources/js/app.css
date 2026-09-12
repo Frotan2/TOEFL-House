@@ -216,3 +216,25 @@
     .panel:hover, .quick-action:hover, .button:hover { transform: none; }
   }
 }
+
+@layer components {
+  .status-chip.status-draft { background: var(--info-bg); border-color: #c5def4; color: var(--info); }
+  .status-chip.status-suspended { background: var(--warning-bg); border-color: #efd9a4; color: var(--warning); }
+  .status-chip.status-closed { background: var(--surface-3); border-color: var(--line-strong); color: var(--ink-500); }
+  .status-chip.status-reopened { background: var(--success-bg); border-color: #c4e7d3; color: var(--success); }
+  .text-button.danger-text { color: var(--danger); }
+  .text-button:disabled { color: var(--ink-400); cursor: not-allowed; }
+  .heading-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; row-gap: 6px; }
+  .topology-unit { margin-bottom: 12px; }
+  .topology-unit.nested { box-shadow: none; background: var(--surface-2); }
+  .topology-children { list-style: none; margin: 12px 0 0; padding-left: 18px; border-left: 2px solid var(--line); display: grid; gap: 10px; }
+  .topology-children .nested { margin: 0; }
+  .department-row { background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: 10px; margin: 8px 0; padding: 9px 12px; }
+  .department-row .unit-heading { align-items: center; display: inline-flex; flex-wrap: wrap; gap: 8px; margin-right: 8px; }
+  .department-row .eyebrow { margin: 0; }
+  .row-meta { color: var(--ink-500); display: block; font-size: 11px; margin-top: 2px; }
+  .proposal-form { max-width: 920px; }
+  .proposal-form .button { margin-top: 4px; }
+  .form-note { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; color: var(--ink-600); font-size: 12px; line-height: 1.6; margin: 0 0 14px; padding: 11px 13px; }
+  .directory-filter select { margin-top: 6px; max-width: 420px; }
+}

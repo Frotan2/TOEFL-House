@@ -7,6 +7,7 @@ namespace App\Modules\Organization\Commands;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Organization\Domain\OrganizationLifecycle;
+use App\Modules\Organization\Domain\UniqueTopologyName;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Campus;
 use App\Modules\Organization\Models\CampusAssignment;
@@ -21,6 +22,7 @@ use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,6 +37,7 @@ final class CreateStructureUnit
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly UniqueTopologyName $uniqueNames,
     ) {}
 
     /** @return array{id: string, unit_type: string, correlation_id: string} */
@@ -46,6 +49,7 @@ final class CreateStructureUnit
             return $this->idempotency->execute('organization.structure.create', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($decision, $name): array {
                     $decision->authorize($this->access, null);
+                    $this->uniqueNames->requireAvailable('organization', $name);
 
                     return $this->insertUnit(new Organization, 'organization', ['name' => $name], $decision);
                 }),
@@ -67,6 +71,7 @@ final class CreateStructureUnit
                     $organization = Organization::query()->whereKey($organizationId)->lockForUpdate()->firstOrFail();
                     $this->requireActiveParent($organization->lifecycle_state, 'organization');
                     $decision->authorize($this->access, new StructureScope($organization->id));
+                    $this->uniqueNames->requireAvailable('campus', $name, 'organization', $organization->id);
 
                     return $this->insertUnit(new Campus, 'campus', ['organization_id' => $organization->id, 'name' => $name], $decision);
                 }),
@@ -88,6 +93,7 @@ final class CreateStructureUnit
                     $campus = Campus::query()->whereKey($campusId)->lockForUpdate()->firstOrFail();
                     $this->requireActiveParent($campus->lifecycle_state, 'campus');
                     $decision->authorize($this->access, new StructureScope($campus->organization_id, $campus->id));
+                    $this->uniqueNames->requireAvailable('branch', $name);
 
                     $outcome = $this->insertUnit(new Branch, 'branch', ['name' => $name], $decision);
                     CampusAssignment::query()->create([
@@ -131,6 +137,7 @@ final class CreateStructureUnit
                 fn (): array => DB::transaction(function () use ($decision, $scopeType, $scopeId, $name): array {
                     $scope = $this->resolveParentScope($scopeType, $scopeId);
                     $decision->authorize($this->access, $scope);
+                    $this->uniqueNames->requireAvailable('department', $name, $scopeType, $scopeId);
 
                     return $this->insertUnit(new Department, 'department', [
                         'name' => $name,
@@ -197,7 +204,14 @@ final class CreateStructureUnit
             'id' => RandomIdentifier::new(),
             'lifecycle_state' => OrganizationLifecycle::STATE_DRAFT,
         ]));
-        $unit->save();
+        try {
+            $unit->save();
+        } catch (UniqueConstraintViolationException) {
+            throw BusinessRejection::forCode(
+                'organization.structure.duplicate',
+                sprintf('a %s with this name already exists in the chosen scope', $unitType),
+            );
+        }
 
         $afterState = array_merge($attributes, ['lifecycle_state' => OrganizationLifecycle::STATE_DRAFT]);
         /** @var string $unitId */

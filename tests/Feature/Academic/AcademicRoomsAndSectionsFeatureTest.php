@@ -14,6 +14,7 @@ use App\Modules\Academic\Models\ClassSection;
 use App\Modules\Academic\Models\ClassSession;
 use App\Modules\Academic\Models\Program;
 use App\Modules\Academic\Queries\TimetableQuery;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Branch;
 use App\Support\Errors\BusinessRejection;
 use Carbon\CarbonImmutable;
@@ -31,6 +32,15 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
     use BuildsTeachers;
 
     private string $skillId;
+
+    /**
+     * Frozen Kabul business day for this test (see Tests\Support\DeterministicTestClock).
+     * All "future session" fixtures are anchored relative to it so the room and
+     * section retirement guards, which evaluate against the Kabul civil date
+     * (kabul_today() in SQL), observe the sessions as future on EVERY real run
+     * date — fixed literals silently move into the past and rot the suite.
+     */
+    private CarbonImmutable $businessDay;
 
     private string $classId;
 
@@ -52,9 +62,10 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
 
         // Rooms and timetables live in the class branch: a session room must
         // belong to the class branch, so no second branch is seeded.
+        $this->businessDay = app(CalendarAuthority::class)->today();
         $program = $structure->defineProgram($officer, 'Scheduling Program', 'sched-prog');
         $version = $structure->publishVersion($officer, Program::query()->findOrFail($program['program_id']), 'Scheduling v1', 'sched-ver');
-        $period = $structure->definePeriod($officer, 'Scheduling Term', new CarbonImmutable('2026-09-01'), new CarbonImmutable('2026-12-31'), 'sched-period');
+        $period = $structure->definePeriod($officer, 'Scheduling Term', $this->businessDay->subMonth(), $this->businessDay->addMonths(3), 'sched-period');
         $structure->transitionPeriod($officer, AcademicPeriod::query()->findOrFail($period['period_id']), 'published', 'sched-period-pub');
         // A class requires an OPEN OFFERING for its branch, level and period;
         // the domain refuses to infer one.
@@ -63,7 +74,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         $fixtureOffering = app(MaintainAcademicStructure::class)->openOffering($officer, $this->bootstrapBranchId(), $fixtureLevel['level_id'], $period['period_id'], 200, 'ofacademic-of');
 
         $this->classId = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 20, 'sched-class', null, $this->bootstrapBranchId())['class_id'];
-        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, new CarbonImmutable('2026-09-01'), null, 'sched-class-teacher');
+        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->classId), $this->teacherPersonId, $this->businessDay->subMonth(), null, 'sched-class-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'published', 'sched-class-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->classId), 'active', 'sched-class-active');
 
@@ -77,7 +88,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         // for concurrent bookings that the authority layer cannot see
         // (different teachers share a room).
         $this->secondClassId = app(MaintainClass::class)->defineClass($officer, $version['version_id'], $period['period_id'], 20, 'sched-class-2', null, $this->bootstrapBranchId())['class_id'];
-        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->secondClassId), $this->secondTeacherPersonId, new CarbonImmutable('2026-09-01'), null, 'sched-class-2-teacher');
+        app(MaintainClass::class)->assignTeacher($officer, ClassModel::query()->findOrFail($this->secondClassId), $this->secondTeacherPersonId, $this->businessDay->subMonth(), null, 'sched-class-2-teacher');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->secondClassId), 'published', 'sched-class-2-pub');
         app(MaintainClass::class)->transition($officer, ClassModel::query()->findOrFail($this->secondClassId), 'active', 'sched-class-2-active');
         $this->secondSkillId = $this->makeClassSchedulable($officer, $this->secondClassId, $this->bootstrapBranchId(), 'ofrooms-sched2');
@@ -101,7 +112,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         app(MaintainClass::class)->scheduleSession(
             $officer,
             ClassModel::query()->findOrFail($this->classId),
-            new CarbonImmutable('2026-09-10'),
+            $this->businessDay->addDays(3),
             '09:00',
             '11:00',
             'sched-session-room',
@@ -132,7 +143,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         $session = $maintainClass->scheduleSession(
             $officer,
             ClassModel::query()->findOrFail($this->classId),
-            new CarbonImmutable('2026-09-11'),
+            $this->businessDay->addDays(4),
             '09:00',
             '11:00',
             'section-session-1',
@@ -146,7 +157,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         $maintainClass->scheduleSession(
             $officer,
             ClassModel::query()->findOrFail($this->classId),
-            new CarbonImmutable('2026-09-11'),
+            $this->businessDay->addDays(4),
             '12:00',
             '13:30',
             'section-session-2',
@@ -162,7 +173,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
             $maintainClass->scheduleSession(
                 $officer,
                 ClassModel::query()->findOrFail($this->classId),
-                new CarbonImmutable('2026-09-11'),
+                $this->businessDay->addDays(4),
                 '10:30',
                 '12:30',
                 'section-session-overlap',
@@ -174,9 +185,9 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         } catch (BusinessRejection $rejection) {
             $this->assertSame('academic.teacher_delivery_unauthorized', $rejection->errorCode());
         }
-        $this->assertSame(2, ClassSession::query()->where('section_id', $section['section_id'])->where('scheduled_on', '2026-09-11')->count());
+        $this->assertSame(2, ClassSession::query()->where('section_id', $section['section_id'])->where('scheduled_on', $this->businessDay->addDays(4)->toDateString())->count());
 
-        $timetable = (new TimetableQuery)->forClass($this->classId, new CarbonImmutable('2026-09-11'));
+        $timetable = (new TimetableQuery)->forClass($this->classId, $this->businessDay->addDays(4));
         $this->assertSame('A', $timetable['sections'][0]['name']);
         $this->assertCount(2, $timetable['sessions']);
         $this->assertSame('R-02', $timetable['sessions'][0]['room']);
@@ -203,7 +214,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
             $maintainClass->scheduleSession(
                 $officer,
                 ClassModel::query()->findOrFail($this->classId),
-                new CarbonImmutable('2026-09-12'),
+                $this->businessDay->addDays(5),
                 '09:00',
                 '11:00',
                 'guard-session-room',
@@ -221,7 +232,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
             $maintainClass->scheduleSession(
                 $officer,
                 ClassModel::query()->findOrFail($this->classId),
-                new CarbonImmutable('2026-09-12'),
+                $this->businessDay->addDays(5),
                 '09:00',
                 '11:00',
                 'guard-session-section',
@@ -245,7 +256,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
         $maintainClass->scheduleSession(
             $officer,
             ClassModel::query()->findOrFail($this->classId),
-            new CarbonImmutable('2026-09-15'),
+            $this->businessDay->addDays(6),
             '09:00',
             '11:00',
             'roomdb-session-1',
@@ -263,7 +274,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
             $maintainClass->scheduleSession(
                 $officer,
                 ClassModel::query()->findOrFail($this->secondClassId),
-                new CarbonImmutable('2026-09-15'),
+                $this->businessDay->addDays(6),
                 '10:30',
                 '12:30',
                 'roomdb-session-overlap',
@@ -277,7 +288,7 @@ final class AcademicRoomsAndSectionsFeatureTest extends TestCase
             DB::rollBack();
             $this->assertStringContainsString('already booked', $exception->getMessage());
         }
-        $this->assertSame(1, ClassSession::query()->where('room_id', $room['room_id'])->where('scheduled_on', '2026-09-15')->count());
-        $this->assertDatabaseHas('class_sessions', ['class_id' => $this->classId, 'room_id' => $room['room_id'], 'scheduled_on' => '2026-09-15']);
+        $this->assertSame(1, ClassSession::query()->where('room_id', $room['room_id'])->where('scheduled_on', $this->businessDay->addDays(6)->toDateString())->count());
+        $this->assertDatabaseHas('class_sessions', ['class_id' => $this->classId, 'room_id' => $room['room_id'], 'scheduled_on' => $this->businessDay->addDays(6)->toDateString()]);
     }
 }

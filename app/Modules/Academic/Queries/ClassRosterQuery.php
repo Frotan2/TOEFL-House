@@ -7,8 +7,8 @@ namespace App\Modules\Academic\Queries;
 use App\Modules\Academic\Models\ClassModel;
 use App\Modules\Academic\Models\Enrollment;
 use App\Modules\Academic\Models\TeacherAssignment;
-use Illuminate\Support\Collection;
 use App\Modules\Calendar\CalendarAuthority;
+use Illuminate\Support\Collection;
 
 /**
  * Read-only roster of a class: every live seat claim (requested, active,

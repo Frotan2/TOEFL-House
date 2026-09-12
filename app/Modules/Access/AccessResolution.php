@@ -9,6 +9,7 @@ use App\Modules\Access\Models\Delegation;
 use App\Modules\Access\Models\Position;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Hr\Domain\EmploymentLifecycle;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Organization\Models\Branch;
@@ -21,7 +22,6 @@ use App\Support\Authorization\Actor;
 use App\Support\Authorization\Decision;
 use App\Support\Authorization\StructureScope;
 use Carbon\CarbonImmutable;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Canonical server authorization: resolves Position + Assignment + Role +
@@ -55,7 +55,7 @@ final class AccessResolution implements AccessDecision
 
     public function __construct(
         private readonly CalendarAuthority $calendar,
-private readonly ?CarbonImmutable $effectiveTime = null
+        private readonly ?CarbonImmutable $effectiveTime = null
     ) {}
 
     public function decide(Actor $actor, string $capability, ?StructureScope $scope): Decision

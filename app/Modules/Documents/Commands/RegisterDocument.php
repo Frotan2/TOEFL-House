@@ -6,6 +6,7 @@ namespace App\Modules\Documents\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Crm\Domain\CrmInteractionTraceRecorder;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Documents\Models\DocumentClassification;
@@ -18,9 +19,7 @@ use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Registers a subject evidence document as a draft with its first
@@ -40,7 +39,7 @@ final class RegisterDocument
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
         private readonly CrmInteractionTraceRecorder $crmTrace,
-    
+
     ) {}
 
     /**

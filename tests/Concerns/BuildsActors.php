@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
+use App\Modules\Identity\Models\Person;
+use App\Modules\Identity\Models\UserAccount;
 use App\Support\Authorization\Actor;
+use App\Support\Identifiers\RandomIdentifier;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * Actor fixtures of the authority registry roles. Identity only: authority
@@ -14,6 +18,48 @@ use App\Support\Authorization\Actor;
 trait BuildsActors
 {
     use SeedsAuthority;
+
+    /**
+     * The HTTP-facing form of an authority fixture: a REAL, active employee
+     * UserAccount linked to the seeded person, for use with
+     * `$this->actingAs($this->userForActor($person))`.
+     *
+     * This is not a test double for authentication. The returned model is
+     * the production identity (user_accounts, session guard) and every
+     * request still runs the real EnsureEmployeeSession middleware, which
+     * rebuilds the request Actor from the account's person_id; capabilities
+     * are then resolved by the canonical AccessDecision from the rows
+     * personWithAuthority() seeded. Tests that need capability denial must
+     * therefore seed the person WITHOUT the capability — never here.
+     *
+     * Accepts the domain Actor value object returned by the role helpers,
+     * the Person returned by personWithAuthority(), or a raw person id.
+     * Reuses the existing active account when one exists
+     * (user_accounts_one_active_per_person).
+     */
+    protected function userForActor(Actor|Person|string $actor, ?string $username = null): UserAccount
+    {
+        $personId = $actor instanceof Actor
+            ? $actor->actorId
+            : ($actor instanceof Person ? $actor->id : $actor);
+        $personId = trim((string) $personId);
+
+        $existing = UserAccount::query()
+            ->where('person_id', $personId)
+            ->where('account_state', UserAccount::STATE_ACTIVE)
+            ->first();
+        if ($existing instanceof UserAccount) {
+            return $existing;
+        }
+
+        return UserAccount::query()->create([
+            'id' => RandomIdentifier::new(),
+            'person_id' => $personId,
+            'username' => $username ?? 'employee-'.preg_replace('/[^A-Za-z0-9._-]/', '-', $personId),
+            'password_hash' => Hash::make('employee-password-1'),
+            'account_state' => UserAccount::STATE_ACTIVE,
+        ]);
+    }
 
     protected function generalManager(string $actorId = 'gm-1'): Actor
     {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Resources\Commands\CirculateBooks;
@@ -17,11 +18,9 @@ use App\Modules\Resources\Models\BookCopy;
 use App\Modules\Resources\Models\BookIssuance;
 use App\Modules\Resources\Models\Custody;
 use App\Modules\Resources\Models\WorkOrder;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Library &amp; Resources console: assets, book copies, circulation (issue,

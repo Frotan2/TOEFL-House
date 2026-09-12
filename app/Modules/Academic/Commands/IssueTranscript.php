@@ -11,6 +11,7 @@ use App\Modules\Academic\Models\ProgramVersion;
 use App\Modules\Academic\Models\Transcript;
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Documents\Commands\RegisterDocument;
 use App\Modules\Documents\Commands\TransitionDocument;
 use App\Modules\Documents\Models\Document;
@@ -23,9 +24,7 @@ use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use App\Support\Signing\CanonicalJson;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Modules\Calendar\CalendarAuthority;
 
 /**
  * Issues the official transcript: composes the record from immutable
@@ -53,7 +52,7 @@ final class IssueTranscript
         private readonly TranscriptComposer $composer,
         private readonly RegisterDocument $registerDocument,
         private readonly TransitionDocument $transitionDocument,
-    
+
     ) {}
 
     /** @return array{transcript_id: string, document_id: string, content_hash: string, correlation_id: string} */

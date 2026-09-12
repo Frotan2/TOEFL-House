@@ -204,7 +204,7 @@ return new class extends Migration
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION student_status_current_day_guard() RETURNS trigger AS $fn$
             BEGIN
-                IF NEW.effective_from <> CURRENT_DATE THEN
+                IF NEW.effective_from <> kabul_today() THEN
                     RAISE EXCEPTION 'Student status facts must be effective on the append date; corrections append a new current fact'
                         USING ERRCODE = 'check_violation';
                 END IF;
@@ -250,7 +250,7 @@ return new class extends Migration
         DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION student_transfer_current_day_guard() RETURNS trigger AS $fn$
             BEGIN
-                IF NEW.effective_from <> CURRENT_DATE THEN
+                IF NEW.effective_from <> kabul_today() THEN
                     RAISE EXCEPTION 'Student branch transfers must be effective on the append date; scheduled transfers require an explicit authority'
                         USING ERRCODE = 'check_violation';
                 END IF;

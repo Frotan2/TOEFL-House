@@ -426,8 +426,8 @@ return new class extends Migration
                      WHERE tpb.teacher_profile_id = NEW.id
                        AND tpb.branch_id = NEW.current_home_branch_id
                        AND tpb.lifecycle_state = 'active'
-                       AND tpb.effective_from <= CURRENT_DATE
-                       AND (tpb.effective_to IS NULL OR tpb.effective_to > CURRENT_DATE)
+                       AND tpb.effective_from <= kabul_today()
+                       AND (tpb.effective_to IS NULL OR tpb.effective_to > kabul_today())
                 ) THEN
                     RAISE EXCEPTION 'active teacher profile requires current-home branch authorization'
                         USING ERRCODE = 'check_violation';
@@ -452,7 +452,7 @@ return new class extends Migration
                         RAISE EXCEPTION 'an active teacher profile requires active employment for the same person'
                             USING ERRCODE = 'check_violation';
                     END IF;
-                    IF NOT EXISTS (SELECT 1 FROM teacher_qualifications q WHERE q.teacher_profile_id = NEW.id AND q.lifecycle_state = 'verified' AND (q.valid_from IS NULL OR q.valid_from <= CURRENT_DATE) AND (q.valid_to IS NULL OR q.valid_to >= CURRENT_DATE)) THEN
+                    IF NOT EXISTS (SELECT 1 FROM teacher_qualifications q WHERE q.teacher_profile_id = NEW.id AND q.lifecycle_state = 'verified' AND (q.valid_from IS NULL OR q.valid_from <= kabul_today()) AND (q.valid_to IS NULL OR q.valid_to >= kabul_today())) THEN
                         RAISE EXCEPTION 'an active teacher profile requires a current verified qualification'
                             USING ERRCODE = 'check_violation';
                     END IF;
@@ -613,7 +613,7 @@ return new class extends Migration
                         RAISE EXCEPTION 'terminal teacher assignment state is final' USING ERRCODE = 'check_violation';
                     END IF;
                 END IF;
-                IF NEW.lifecycle_state = 'cancelled' AND NEW.effective_from < CURRENT_DATE THEN
+                IF NEW.lifecycle_state = 'cancelled' AND NEW.effective_from < kabul_today() THEN
                     RAISE EXCEPTION 'only future-effective teacher assignments may be cancelled'
                         USING ERRCODE = 'check_violation';
                 END IF;
@@ -1170,13 +1170,13 @@ return new class extends Migration
                            AND tp.lifecycle_state = 'active'
                            AND COALESCE((SELECT es.status FROM employment_statuses es
                                           WHERE es.employment_id = e.id
-                                            AND es.effective_from <= CURRENT_DATE
+                                            AND es.effective_from <= kabul_today()
                                           ORDER BY es.effective_from DESC, es.seq DESC
                                           LIMIT 1), e.lifecycle_state) = 'active'
                            AND (ta.lifecycle_state IS NULL OR ta.lifecycle_state <> 'cancelled')
                            AND ta.branch_id = NEW.branch_id
-                           AND ta.effective_from <= CURRENT_DATE
-                           AND (ta.effective_to IS NULL OR ta.effective_to > CURRENT_DATE)
+                           AND ta.effective_from <= kabul_today()
+                           AND (ta.effective_to IS NULL OR ta.effective_to > kabul_today())
                     ) THEN
                         RAISE EXCEPTION 'an active class requires a canonical effective teacher assignment'
                             USING ERRCODE = 'check_violation';

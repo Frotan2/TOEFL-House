@@ -120,6 +120,12 @@ jobs:
         run: npm run verify:invariants
       - name: Concurrency
         run: npm run verify:concurrency
+      # The Feature suite includes WorkspacePageRenderTest, which renders the
+      # authenticated Blade consoles (they @vite the built bundles). The test
+      # fails this job when the manifest is absent under CI rather than
+      # silently skipping, so the canonical production build must exist first.
+      - name: Build frontend assets
+        run: npm run build
       - name: Canonical suite
         run: vendor/bin/phpunit --testsuite Canonical --no-coverage
       - name: Backend test suite

@@ -8,11 +8,11 @@ use App\Modules\Academic\Placement\Models\PlacementProfile;
 use App\Modules\Academic\Placement\Queries\AcademicEligibilitySnapshotQuery;
 use App\Modules\Admissions\Models\AdmissionDecision;
 use App\Modules\Admissions\Models\Applicant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentStatus;
 use App\Support\Errors\BusinessRejection;
 use App\Support\Identifiers\RandomIdentifier;
-use Carbon\CarbonImmutable;
 
 /**
  * Student-owned admission conversion port. Admissions may authorize and
@@ -29,6 +29,7 @@ final class StudentAdmissionRegistrar
 {
     public function __construct(
         private readonly AcademicEligibilitySnapshotQuery $eligibilitySnapshots,
+        private readonly CalendarAuthority $calendar,
     ) {}
 
     /**
@@ -103,7 +104,9 @@ final class StudentAdmissionRegistrar
             'id' => RandomIdentifier::new(),
             'student_id' => $student->id,
             'status' => StudentStatusRegistry::STATUS_ACTIVE,
-            'effective_from' => (new CarbonImmutable)->startOfDay()->toDateString(),
+            // The initial status fact is effective on the Kabul civil append
+            // day; the kabul_today() append-day trigger enforces equality.
+            'effective_from' => $this->calendar->todayAsString(),
             'reason' => 'admission conversion',
             'actor_id' => $actorId,
         ]);

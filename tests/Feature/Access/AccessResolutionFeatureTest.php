@@ -9,6 +9,7 @@ use App\Modules\Access\Models\AccessPolicy;
 use App\Modules\Access\Models\Delegation;
 use App\Modules\Access\Models\PositionAssignment;
 use App\Modules\Access\Models\ScopeGrant;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Organization\Models\Organization;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
@@ -26,7 +27,7 @@ final class AccessResolutionFeatureTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->resolution = new AccessResolution;
+        $this->resolution = new AccessResolution(app(CalendarAuthority::class));
     }
 
     public function test_role_derived_authority_resolves_through_the_whole_chain(): void
@@ -70,8 +71,8 @@ final class AccessResolutionFeatureTest extends TestCase
         $this->grantScopeAuthority('exp-1', ['access.grant'], 'organization', $organization, '2026-08-01');
         $actor = new Actor('exp-1', 'Time Limited Holder');
 
-        $asOfBefore = new AccessResolution(new CarbonImmutable('2026-06-15'));
-        $asOfAfter = new AccessResolution(new CarbonImmutable('2026-09-15'));
+        $asOfBefore = new AccessResolution(app(CalendarAuthority::class), new CarbonImmutable('2026-06-15'));
+        $asOfAfter = new AccessResolution(app(CalendarAuthority::class), new CarbonImmutable('2026-09-15'));
         $scope = new StructureScope($organization);
 
         $this->assertTrue($asOfBefore->decide($actor, 'access.grant', $scope)->allowed);

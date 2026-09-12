@@ -458,7 +458,7 @@ return new class extends Migration
                 IF btrim(COALESCE(NEW.summary, '')) = '' OR btrim(COALESCE(NEW.correlation_id, '')) = '' THEN
                     RAISE EXCEPTION 'visitor interaction requires summary and correlation id' USING ERRCODE = 'check_violation';
                 END IF;
-                IF NEW.occurred_on > CURRENT_DATE THEN
+                IF NEW.occurred_on > kabul_today() THEN
                     RAISE EXCEPTION 'visitor interaction cannot be dated in the future' USING ERRCODE = 'check_violation';
                 END IF;
                 SELECT verification_state INTO agent_state FROM people WHERE id = NEW.agent_id;
@@ -628,7 +628,7 @@ return new class extends Migration
                 IF btrim(COALESCE(NEW.summary, '')) = '' OR btrim(COALESCE(NEW.correlation_id, '')) = '' THEN
                     RAISE EXCEPTION 'visitor interaction requires summary and correlation id' USING ERRCODE = 'check_violation';
                 END IF;
-                IF NEW.occurred_on > CURRENT_DATE THEN
+                IF NEW.occurred_on > kabul_today() THEN
                     RAISE EXCEPTION 'visitor interaction cannot be dated in the future' USING ERRCODE = 'check_violation';
                 END IF;
                 SELECT verification_state INTO agent_state FROM people WHERE id = NEW.agent_id;

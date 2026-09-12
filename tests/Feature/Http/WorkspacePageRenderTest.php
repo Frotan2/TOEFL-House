@@ -29,9 +29,22 @@ final class WorkspacePageRenderTest extends TestCase
         parent::setUp();
 
         // These routes render Blade templates that @vite the built bundles.
-        // Without public/build/manifest.json every route returns 500 and the
-        // failure looks like a template defect rather than a missing build.
+        // Without public/build/manifest.json the views do NOT 500 on current
+        // Laravel: they return 200 with an empty shell — no <script>/bundle
+        // tags at all — so every assertion below (status, Blade title, mount
+        // div) would still pass while a browser loads a permanently empty
+        // console. The guard therefore keeps the tests honest rather than
+        // green over an unbuilt UI:
+        //   - local/developer checkout without a build: explicit skip with the
+        //     command to run;
+        //   - CI (CI=true, as on GitHub Actions): fail loudly. A green CI run
+        //     must mean the rendered console was genuinely exercised; a
+        //     workflow that forgets the production build cannot silently
+        //     drop this coverage.
         if (! is_file(public_path('build/manifest.json'))) {
+            if (getenv('CI') !== false && getenv('CI') !== '' && getenv('CI') !== 'false') {
+                $this->fail('Frontend assets are not built in CI (public/build/manifest.json missing); run the canonical `npm run build` before the PHP suite so console page rendering is actually verified.');
+            }
             $this->markTestSkipped('Frontend assets are not built; run `npm run build` first.');
         }
 
