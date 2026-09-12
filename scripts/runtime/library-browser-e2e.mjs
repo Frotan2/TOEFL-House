@@ -142,14 +142,16 @@ try {
       window.__dialogQueue = [];
       window.__dialogLog = [];
       window.prompt = (message, defaultValue) => {
+        // Scripted "use the default" answers cross the evaluate bridge as
+        // null (JSON serialization of undefined); both mean: no override.
         const response = window.__dialogQueue.shift();
-        const value = response === undefined ? (defaultValue ?? '') : String(response);
+        const value = (response === undefined || response === null) ? (defaultValue ?? '') : String(response);
         window.__dialogLog.push({ kind: 'prompt', message: String(message).slice(0, 120), default: defaultValue === undefined ? null : String(defaultValue), returned: value });
         return value;
       };
       window.confirm = (message) => {
         const response = window.__dialogQueue.shift();
-        const ok = response === undefined ? true : Boolean(response);
+        const ok = (response === undefined || response === null) ? true : Boolean(response);
         window.__dialogLog.push({ kind: 'confirm', message: String(message).slice(0, 160), returned: ok });
         return ok;
       };
@@ -428,8 +430,8 @@ try {
   record('Book issuance round-trips through the circulation ledger', true, 'chip=Issued');
   const issueDialogs = await page.evaluate(() => (window.__dialogLog || []).slice(-2));
   record('Issue dialogs default from the server calendar and name the record',
-    issueDialogs[0]?.kind === 'prompt' && issueDialogs[0]?.default === today
-      && issueDialogs[1]?.kind === 'confirm' && (issueDialogs[1]?.message || '').includes('Issue'),
+    issueDialogs[0]?.kind === 'prompt' && issueDialogs[0]?.default === today && issueDialogs[0]?.returned === today
+      && issueDialogs[1]?.kind === 'confirm' && issueDialogs[1]?.returned === true && (issueDialogs[1]?.message || '').includes('Issue'),
     JSON.stringify(issueDialogs));
 
   await librarian.expectDialogs(undefined, undefined); // return-date prompt + confirm
