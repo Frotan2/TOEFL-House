@@ -1,0 +1,96 @@
+name: Students & Admissions Browser E2E
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: students-admissions-browser-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: '8.4.25'
+  COMPOSER_VERSION: '2.10.3'
+  NODE_VERSION: '22.22.3'
+  NPM_VERSION: '10.9.8'
+
+jobs:
+  students-admissions-browser-e2e:
+    name: Students & Admissions Browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: toefl_house_students_e2e
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5433
+      DB_DATABASE: toefl_house_students_e2e
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      APP_ENV: production
+      APP_DEBUG: 'false'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:${{ env.COMPOSER_VERSION }}
+          extensions: pdo_pgsql, mbstring, dom, xml, xmlwriter, tokenizer, curl, bcmath, iconv, fileinfo, openssl, pcntl, posix
+          coverage: none
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm install --global npm@${{ env.NPM_VERSION }}
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: npm ci --engine-strict
+      - name: Prepare application
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - run: php artisan migrate:fresh --force
+      - run: php artisan db:seed --class=StandardFinanceChartSeeder --force
+      - run: npm run build
+      - name: Provision Students and Admissions actors
+        run: php scripts/runtime/students-admissions-browser-provision.php
+      - name: Install and warm Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium
+          timeout 120s /usr/bin/chromium --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --version
+      - name: Start application
+        run: |
+          (
+            cd public
+            php -S 127.0.0.1:8999 -t . ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
+          ) > /tmp/toefl-house-students-e2e.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 http://127.0.0.1:8999/health >/dev/null \
+              && curl --fail --silent --show-error --connect-timeout 2 --max-time 5 --output /dev/null --write-out '%{http_code} %{content_type}' http://127.0.0.1:8999/build/manifest.json | grep -Eq '^200 application/json'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/toefl-house-students-e2e.log
+          exit 1
+      - name: Run Students and Admissions lifecycle browser E2E
+        env:
+          BASE_URL: http://127.0.0.1:8999
+          CHROMIUM_PATH: /usr/bin/chromium
+        run: node scripts/runtime/students-admissions-browser-e2e.mjs
