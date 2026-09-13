@@ -44,7 +44,7 @@ const CONSOLES = [
   ['/access', 'Access'],
   ['/organization', 'Organization'],
   ['/identity', 'Identity'],
-  ['/governance/privacy', 'Privacy'],
+  ['/privacy', 'Privacy'],
   ['/governance/audit', 'Audit'],
 ];
 

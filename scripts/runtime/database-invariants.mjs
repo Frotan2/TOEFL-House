@@ -39,6 +39,12 @@ const EXPECTED_CONSTRAINTS = new Map([
   ['retention_rules_positive_period_check', 'c'],
   ['retention_rules_category_unique', 'u'],
   ['retention_decisions_action_check', 'c'],
+  ['consent_purposes_name_channel_unique', 'u'],
+  ['consents_lifecycle_state_check', 'c'],
+  ['consents_period_check', 'c'],
+  ['disclosures_scope_type_check', 'c'],
+  ['privacy_export_requests_purpose_check', 'c'],
+  ['privacy_export_requests_lifecycle_state_check', 'c'],
 ]);
 
 // This production boundary is intentionally a unique *index* rather than an
@@ -51,16 +57,22 @@ const EXPECTED_UNIQUE_INDEXES = [
   'custodies_one_open_per_asset',
   'asset_disposal_requests_one_active_per_asset',
   'document_verifications_one_verdict_per_version',
+  'consents_one_open_per_subject_purpose',
 ];
 
 // Final-state trigger guards whose absence would silently reopen a closed
-// evidence boundary (identity rewrite protection plus the three append-only
-// Documents guards).
+// evidence boundary (identity rewrite protection, the three append-only
+// Documents guards, and the four Privacy guards that make consent,
+// withdrawal, disclosure and staged-export evidence unavoidable facts).
 const EXPECTED_TRIGGERS = [
   ['people', 'people_identity_guard_trigger'],
   ['document_versions', 'document_versions_immutable_trigger'],
   ['document_verifications', 'document_verifications_append_only_trigger'],
   ['retention_decisions', 'retention_decisions_append_only_trigger'],
+  ['consents', 'consents_guard_trigger'],
+  ['consent_revocations', 'consent_revocations_append_only_trigger'],
+  ['disclosures', 'disclosures_append_only_trigger'],
+  ['privacy_export_requests', 'privacy_export_requests_guard_trigger'],
 ];
 
 const conn = async () => {
@@ -181,6 +193,11 @@ async function mustReject(name, probe) {
     documentVerification: randomUUID(),
     retentionRule: randomUUID(),
     retentionDecision: randomUUID(),
+    consentPurpose: randomUUID(),
+    consent: randomUUID(),
+    consentRevocation: randomUUID(),
+    disclosure: randomUUID(),
+    exportRequest: randomUUID(),
   };
   let rejection;
 
@@ -286,6 +303,44 @@ async function documentsVerdictScaffold(client, ids) {
   );
 }
 
+/**
+ * Transaction-scoped Privacy scaffold: one purpose and one born-draft consent
+ * for the library-topology subject. The consent guard is a production
+ * boundary, so fixtures are created *through* it rather than around it — a
+ * fixture that only exists because triggers were disabled proves nothing.
+ */
+async function privacyScaffold(client, ids) {
+  const topology = await libraryScaffold(client, ids);
+  await client.query(
+    "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, $2, 'email', 'communication')",
+    [ids.consentPurpose, `runtime-inv-${ids.consentPurpose}`],
+  );
+  await client.query(
+    `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'draft', CURRENT_DATE, NULL, 'evidence/runtime-invariant', $4, NOW(), NOW())
+    `,
+    [ids.consent, ids.person, ids.consentPurpose, ids.person],
+  );
+
+  return topology;
+}
+
+/** Walk the staged chain to `exported` so a closed request can be attacked. */
+async function exportedRequestScaffold(client, ids) {
+  const topology = await privacyScaffold(client, ids);
+  await client.query(
+    `
+      INSERT INTO privacy_export_requests (id, subject_person_id, purpose, organization_id, lifecycle_state, requested_by, created_at, updated_at)
+      VALUES ($1, $2, 'runtime invariant bulk export', $3, 'requested', $4, NOW(), NOW())
+    `,
+    [ids.exportRequest, ids.person, topology.organizationId, ids.person],
+  );
+  await client.query('UPDATE privacy_export_requests SET approver_one_id = $1, updated_at = NOW() WHERE id = $2', [randomUUID(), ids.exportRequest]);
+  await client.query("UPDATE privacy_export_requests SET approver_two_id = $1, lifecycle_state = 'approved', updated_at = NOW() WHERE id = $2", [randomUUID(), ids.exportRequest]);
+  await client.query("UPDATE privacy_export_requests SET exported_by = $1, disclosure_id = $2, lifecycle_state = 'exported', updated_at = NOW() WHERE id = $3", [randomUUID(), randomUUID(), ids.exportRequest]);
+}
+
 try {
   assertDisposableVerificationTarget(CFG.database);
   await assertPrivilegedFixtureAccess(conn, 'Database invariant verification', {
@@ -312,8 +367,13 @@ try {
       { table: 'document_verifications', privileges: ['INSERT', 'UPDATE'] },
       { table: 'retention_rules', privileges: ['INSERT'] },
       { table: 'retention_decisions', privileges: ['INSERT', 'UPDATE'] },
+      { table: 'consent_purposes', privileges: ['INSERT'] },
+      { table: 'consents', privileges: ['INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'consent_revocations', privileges: ['INSERT', 'UPDATE'] },
+      { table: 'disclosures', privileges: ['INSERT', 'UPDATE'] },
+      { table: 'privacy_export_requests', privileges: ['INSERT', 'UPDATE', 'DELETE'] },
     ],
-    userTriggerControlTables: ['payments', 'enrollments', 'classes', 'journal_lines', 'asset_disposal_requests'],
+    userTriggerControlTables: ['payments', 'enrollments', 'classes', 'journal_lines', 'asset_disposal_requests', 'consents'],
   });
   await assertExpectedSchema();
 
@@ -618,7 +678,203 @@ try {
     params: (ids) => [ids.retentionDecision, ids.document, ids.retentionRule, ids.person],
   });
 
-  console.log('Database invariants: 23/23 named production-schema boundaries rejected invalid writes.');
+  await mustReject('consent purpose catalog stays unique per name and channel', {
+    expected: { code: '23505', constraint: 'consent_purposes_name_channel_unique' },
+    setup: async (client, ids) => {
+      await client.query(
+        "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, 'runtime-duplicate-purpose', 'email', 'communication')",
+        [ids.consentPurpose],
+      );
+    },
+    sql: "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, 'runtime-duplicate-purpose', 'email', 'marketing')",
+    params: () => [randomUUID()],
+  });
+
+  await mustReject('consent lifecycle state legality', {
+    expected: { code: '23514', constraint: 'consents_lifecycle_state_check' },
+    setup: async (client, ids) => {
+      await libraryScaffold(client, ids);
+      await client.query(
+        "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, $2, 'email', 'communication')",
+        [ids.consentPurpose, `runtime-inv-${ids.consentPurpose}`],
+      );
+      // The consent guard rejects a non-draft birth first; disable USER
+      // triggers so the named vocabulary CHECK is the rejection under test.
+      await client.query('ALTER TABLE consents DISABLE TRIGGER USER');
+    },
+    sql: `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'burned', CURRENT_DATE, NULL, 'evidence/runtime-invariant', $4, NOW(), NOW())
+    `,
+    params: (ids) => [ids.consent, ids.person, ids.consentPurpose, ids.person],
+  });
+
+  await mustReject('a consent is born draft', {
+    expected: { code: '23514', messageIncludes: 'a consent is born draft' },
+    setup: async (client, ids) => {
+      await libraryScaffold(client, ids);
+      await client.query(
+        "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, $2, 'email', 'communication')",
+        [ids.consentPurpose, `runtime-inv-${ids.consentPurpose}`],
+      );
+    },
+    // Verification and activation are separate attributable acts: no writer
+    // may forge an already-active consent, whatever capability it holds.
+    sql: `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'active', CURRENT_DATE, NULL, 'evidence/runtime-invariant', $4, NOW(), NOW())
+    `,
+    params: (ids) => [ids.consent, ids.person, ids.consentPurpose, ids.person],
+  });
+
+  await mustReject('a consent requires its evidence locator', {
+    expected: { code: '23514', messageIncludes: 'a consent requires its evidence reference' },
+    setup: async (client, ids) => {
+      await libraryScaffold(client, ids);
+      await client.query(
+        "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, $2, 'email', 'communication')",
+        [ids.consentPurpose, `runtime-inv-${ids.consentPurpose}`],
+      );
+    },
+    sql: `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'draft', CURRENT_DATE, NULL, '   ', $4, NOW(), NOW())
+    `,
+    params: (ids) => [ids.consent, ids.person, ids.consentPurpose, ids.person],
+  });
+
+  await mustReject('a consent window must end after it starts', {
+    expected: { code: '23514', constraint: 'consents_period_check' },
+    setup: async (client, ids) => {
+      await libraryScaffold(client, ids);
+      await client.query(
+        "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, $2, 'email', 'communication')",
+        [ids.consentPurpose, `runtime-inv-${ids.consentPurpose}`],
+      );
+    },
+    sql: `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'draft', CURRENT_DATE, CURRENT_DATE, 'evidence/runtime-invariant', $4, NOW(), NOW())
+    `,
+    params: (ids) => [ids.consent, ids.person, ids.consentPurpose, ids.person],
+  });
+
+  await mustReject('one open consent per subject and purpose', {
+    expected: { code: '23505', constraint: 'consents_one_open_per_subject_purpose' },
+    setup: (client, ids) => privacyScaffold(client, ids),
+    sql: `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'draft', CURRENT_DATE, NULL, 'evidence/runtime-rival', $4, NOW(), NOW())
+    `,
+    params: (ids) => [randomUUID(), ids.person, ids.consentPurpose, ids.person],
+  });
+
+  await mustReject('consent facts are write-once', {
+    expected: { code: '23514', messageIncludes: 'only the lifecycle state may change on a consent' },
+    setup: (client, ids) => privacyScaffold(client, ids),
+    // A corrected consent is a new consent: the subject, purpose, evidence
+    // locator, effective window and recorder can never be rewritten.
+    sql: "UPDATE consents SET evidence_ref = 'evidence/tampered' WHERE id = $1",
+    params: (ids) => [ids.consent],
+  });
+
+  await mustReject('consents move only forward through the lifecycle', {
+    expected: { code: '23514', messageIncludes: 'a consent moves only forward' },
+    setup: (client, ids) => privacyScaffold(client, ids),
+    sql: "UPDATE consents SET lifecycle_state = 'active', updated_at = NOW() WHERE id = $1",
+    params: (ids) => [ids.consent],
+  });
+
+  await mustReject('consent evidence cannot be deleted', {
+    expected: { code: '23514', messageIncludes: 'cannot be deleted' },
+    setup: (client, ids) => privacyScaffold(client, ids),
+    sql: 'DELETE FROM consents WHERE id = $1',
+    params: (ids) => [ids.consent],
+  });
+
+  await mustReject('consent withdrawals stay append-only', {
+    expected: { code: 'P0001', messageIncludes: 'privacy evidence is append-only' },
+    setup: async (client, ids) => {
+      await privacyScaffold(client, ids);
+      await client.query(
+        "INSERT INTO consent_revocations (id, consent_id, revoked_by, scope, effect, created_at, updated_at) VALUES ($1, $2, $3, 'all-channels', 'immediate-cessation', NOW(), NOW())",
+        [ids.consentRevocation, ids.consent, ids.person],
+      );
+    },
+    sql: "UPDATE consent_revocations SET effect = 'rewritten' WHERE id = $1",
+    params: (ids) => [ids.consentRevocation],
+  });
+
+  await mustReject('disclosure scope vocabulary legality', {
+    expected: { code: '23514', constraint: 'disclosures_scope_type_check' },
+    setup: (client, ids) => privacyScaffold(client, ids),
+    sql: `
+      INSERT INTO disclosures (id, subject_person_id, recipient, purpose, authority, scope_type, scope_id, disclosed_category, disclosed_by, created_at, updated_at)
+      VALUES ($1, $2, 'Runtime invariant recipient', 'runtime-invariant', 'privacy.disclose', 'galaxy', $3, 'academic-records', $4, NOW(), NOW())
+    `,
+    params: (ids) => [ids.disclosure, ids.person, ids.person, ids.person],
+  });
+
+  await mustReject('disclosures stay append-only', {
+    expected: { code: 'P0001', messageIncludes: 'privacy evidence is append-only' },
+    setup: async (client, ids) => {
+      await privacyScaffold(client, ids);
+      await client.query(
+        `
+          INSERT INTO disclosures (id, subject_person_id, recipient, purpose, authority, scope_type, scope_id, disclosed_category, disclosed_by, created_at, updated_at)
+          VALUES ($1, $2, 'Runtime invariant recipient', 'runtime-invariant', 'privacy.disclose', 'subject', $3, 'academic-records', $4, NOW(), NOW())
+        `,
+        [ids.disclosure, ids.person, ids.person, ids.person],
+      );
+    },
+    // Release evidence is a fact about the past; a correction is a new
+    // disclosure, never an edit of the recorded one.
+    sql: "UPDATE disclosures SET recipient = 'Rewritten recipient' WHERE id = $1",
+    params: (ids) => [ids.disclosure],
+  });
+
+  await mustReject('a bulk export request is born requested', {
+    expected: { code: '23514', messageIncludes: 'a bulk export request is born requested' },
+    setup: (client, ids) => privacyScaffold(client, ids),
+    sql: `
+      INSERT INTO privacy_export_requests (id, subject_person_id, purpose, organization_id, lifecycle_state, requested_by, created_at, updated_at)
+      VALUES ($1, $2, 'runtime invariant forged approval', $3, 'approved', $4, NOW(), NOW())
+    `,
+    params: (ids) => [ids.exportRequest, ids.person, ids.person, ids.person],
+  });
+
+  await mustReject('bulk export approvals stay distinct', {
+    expected: { code: '23514', messageIncludes: 'a bulk export needs two distinct approvers' },
+    setup: async (client, ids) => {
+      await privacyScaffold(client, ids);
+      await client.query(
+        `
+          INSERT INTO privacy_export_requests (id, subject_person_id, purpose, organization_id, lifecycle_state, requested_by, created_at, updated_at)
+          VALUES ($1, $2, 'runtime invariant single approver', $3, 'requested', $4, NOW(), NOW())
+        `,
+        [ids.exportRequest, ids.person, ids.person, ids.person],
+      );
+      await client.query('UPDATE privacy_export_requests SET approver_one_id = $1, updated_at = NOW() WHERE id = $2', [ids.person, ids.exportRequest]);
+    },
+    sql: "UPDATE privacy_export_requests SET approver_two_id = $1, lifecycle_state = 'approved', updated_at = NOW() WHERE id = $2",
+    params: (ids) => [ids.person, ids.exportRequest],
+  });
+
+  await mustReject('an executed bulk export request is closed', {
+    expected: { code: '23514', messageIncludes: 'an executed bulk export request is closed' },
+    setup: (client, ids) => exportedRequestScaffold(client, ids),
+    sql: "UPDATE privacy_export_requests SET purpose = 'rewritten after release', updated_at = NOW() WHERE id = $1",
+    params: (ids) => [ids.exportRequest],
+  });
+
+  await mustReject('bulk export requests cannot be deleted', {
+    expected: { code: '23514', messageIncludes: 'cannot be deleted' },
+    setup: (client, ids) => exportedRequestScaffold(client, ids),
+    sql: 'DELETE FROM privacy_export_requests WHERE id = $1',
+    params: (ids) => [ids.exportRequest],
+  });
+
+  console.log('Database invariants: 39/39 named production-schema boundaries rejected invalid writes.');
 } catch (error) {
   console.error(`Database invariant verification failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;

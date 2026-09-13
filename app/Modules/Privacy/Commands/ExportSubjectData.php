@@ -8,6 +8,7 @@ use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Organization;
+use App\Modules\Privacy\Domain\ExportApprovalChain;
 use App\Modules\Privacy\Domain\PrivacyScopePolicy;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\Disclosure;
@@ -87,7 +88,7 @@ final class ExportSubjectData
                     $this->requireSubjectAndPurpose($subjectPersonId, $purpose);
                     $request = PrivacyExportRequest::query()->create([
                         'id' => RandomIdentifier::new(), 'subject_person_id' => $subjectPersonId, 'purpose' => $purpose,
-                        'organization_id' => $organizationId, 'lifecycle_state' => 'requested', 'requested_by' => $requester->actorId,
+                        'organization_id' => $organizationId, 'lifecycle_state' => ExportApprovalChain::STATE_REQUESTED, 'requested_by' => $requester->actorId,
                     ]);
                     $event = $this->audit->record($requester->actorId, 'privacy.export.request', 'privacy_export_request', $request->id, null, [
                         'subject_person_id' => $subjectPersonId, 'purpose' => $purpose, 'organization_id' => $organizationId, 'branch_id' => $subjectScope->branchId,
@@ -115,18 +116,14 @@ final class ExportSubjectData
                         throw BusinessRejection::forCode('privacy.export_scope_mismatch', 'the export subject provenance no longer matches its organization request');
                     }
                     $this->requireCapability($approver, self::CAPABILITY_BULK_APPROVE, 'privacy.bulk_export_approver_denied', $organizationScope);
-                    if ($locked->lifecycle_state !== 'requested') {
-                        throw BusinessRejection::forCode('privacy.export_request_state', sprintf('the request is already %s; approvals only count while it is requested', $locked->lifecycle_state));
-                    }
-                    if ($locked->approver_one_id === null) {
+                    // One chain authority decides which signature is legal
+                    // next; the same registry answers the API projection, so
+                    // an offered signature is never a forged one.
+                    $state = ExportApprovalChain::requireSignature((string) $locked->lifecycle_state, $locked->approver_one_id, $approver->actorId);
+                    if ($state === ExportApprovalChain::STATE_REQUESTED) {
                         $locked->forceFill(['approver_one_id' => $approver->actorId]);
-                        $state = 'requested';
                     } else {
-                        if (trim((string) $locked->approver_one_id) === $approver->actorId) {
-                            throw AuthorizationDenied::forCode('privacy.bulk_export_single_actor', 'organization-wide exports require two distinct approvers');
-                        }
-                        $locked->forceFill(['approver_two_id' => $approver->actorId, 'lifecycle_state' => 'approved']);
-                        $state = 'approved';
+                        $locked->forceFill(['approver_two_id' => $approver->actorId, 'lifecycle_state' => ExportApprovalChain::STATE_APPROVED]);
                     }
                     $locked->save();
                     $event = $this->audit->record($approver->actorId, 'privacy.export.approve', 'privacy_export_request', $locked->id, null, [
@@ -156,9 +153,7 @@ final class ExportSubjectData
                         throw BusinessRejection::forCode('privacy.export_scope_mismatch', 'the export subject provenance no longer matches its organization request');
                     }
                     $this->requireCapability($exporter, self::CAPABILITY, 'privacy.export_denied', $organizationScope);
-                    if ($locked->lifecycle_state !== 'approved') {
-                        throw BusinessRejection::forCode('privacy.export_request_state', sprintf('the request must be approved before execution; it is %s', $locked->lifecycle_state));
-                    }
+                    ExportApprovalChain::requireExecution((string) $locked->lifecycle_state);
                     $dataset = $this->deriveDataset($locked->subject_person_id);
                     $disclosure = Disclosure::query()->create([
                         'id' => RandomIdentifier::new(), 'subject_person_id' => $locked->subject_person_id,
@@ -166,7 +161,7 @@ final class ExportSubjectData
                         'authority' => self::CAPABILITY, 'scope_type' => 'organization', 'scope_id' => $locked->organization_id,
                         'disclosed_category' => 'subject-data-export', 'disclosed_by' => $exporter->actorId,
                     ]);
-                    $locked->forceFill(['lifecycle_state' => 'exported', 'exported_by' => $exporter->actorId, 'disclosure_id' => $disclosure->id]);
+                    $locked->forceFill(['lifecycle_state' => ExportApprovalChain::STATE_EXPORTED, 'exported_by' => $exporter->actorId, 'disclosure_id' => $disclosure->id]);
                     $locked->save();
                     $event = $this->audit->record($exporter->actorId, 'privacy.export.execute', 'disclosure', $disclosure->id, null, [
                         'subject_person_id' => $locked->subject_person_id, 'purpose' => $locked->purpose,

@@ -120,7 +120,10 @@ for (const contract of [
   'toefl-house-legacy-operations.css',
   '<base href="{{ url(\'/\') }}/">',
 ]) assert.ok(legacyLayout.includes(contract), `legacy layout contract missing: ${contract}`);
-for (const folder of ['library', 'communication', 'audit', 'privacy']) assert.ok(fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: legacy boundary missing`);
-assert.ok(!fs.existsSync(path.join(viewsRoot, 'documents', 'index.blade.php')), 'documents: retired Blade read model must not survive beside the canonical React workspace');
+for (const folder of ['library', 'communication', 'audit']) assert.ok(fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: legacy boundary missing`);
+// Documents and Privacy are closed domains with one React read model each; a
+// surviving Blade projection would be a second, divergent authority over the
+// same facts.
+for (const folder of ['documents', 'privacy']) assert.ok(!fs.existsSync(path.join(viewsRoot, folder, 'index.blade.php')), `${folder}: retired Blade read model must not survive beside the canonical React workspace`);
 
 console.log('PASS  frontend domain, transport, shell, CI and legacy-boundary contracts');

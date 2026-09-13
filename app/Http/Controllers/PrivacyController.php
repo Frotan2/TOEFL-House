@@ -16,18 +16,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * Legacy write transport; canonical privacy reads live in the React/API
- * surface. Mutation commands remain the authoritative write path.
+ * Legacy write transport kept as a thin compatibility adapter; the canonical
+ * privacy surface is the React workspace on `/api/v1/privacy`. Mutation
+ * commands remain the authoritative write path.
  */
 final class PrivacyController extends Controller
 {
-    public function index(): RedirectResponse
-    {
-        $this->requireOrganizationRead('privacy.disclose', 'privacy.console.index');
-
-        return redirect()->route('governance.privacy');
-    }
-
     public function definePurpose(Request $request): RedirectResponse
     {
         $input = $request->validate([
@@ -48,7 +42,11 @@ final class PrivacyController extends Controller
             'purpose_id' => ['required', 'string'],
             'evidence_ref' => ['required', 'string', 'max:500'],
             'effective_from' => ['required', 'date'],
-            'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'],
+            // Both transports agree with `RecordConsent` and the
+            // consents_period_check boundary: a window must end *after* it
+            // starts, so an equal-date request is a 422 here rather than a
+            // domain rejection deeper in the stack.
+            'effective_to' => ['nullable', 'date', 'after:effective_from'],
         ]);
 
         app(RecordConsent::class)->record($this->actor(), $input['subject_person_id'], $input['purpose_id'], $input['evidence_ref'], CarbonImmutable::parse($input['effective_from']), (($input['effective_to'] ?? '') !== '') ? CarbonImmutable::parse($input['effective_to']) : null, $this->idempotencyKey('privacy.consent.record'));
@@ -75,6 +73,13 @@ final class PrivacyController extends Controller
         app(TransitionConsent::class)->activate($this->actor(), Consent::query()->findOrFail($consentId), $this->idempotencyKey('privacy.consent.activate'));
 
         return redirect()->route('privacy.index')->with('success', 'Consent active.');
+    }
+
+    public function expireConsent(Request $request, string $consentId): RedirectResponse
+    {
+        app(TransitionConsent::class)->expire($this->actor(), Consent::query()->findOrFail($consentId), $this->idempotencyKey('privacy.consent.expire'));
+
+        return redirect()->route('privacy.index')->with('success', 'Consent expired; the record and its evidence are retained.');
     }
 
     public function revokeConsent(Request $request, string $consentId): RedirectResponse

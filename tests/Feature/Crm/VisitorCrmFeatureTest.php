@@ -27,6 +27,9 @@ use App\Modules\Finance\Commands\RecordPayment;
 use App\Modules\Finance\Models\FinancialPeriod;
 use App\Modules\Identity\Models\Person;
 use App\Modules\Organization\Models\Branch;
+use App\Modules\Privacy\Commands\DefineConsentPurpose;
+use App\Modules\Privacy\Commands\RecordConsent;
+use App\Modules\Privacy\Commands\TransitionConsent;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\ConsentPurpose;
 use App\Support\Authorization\Actor;
@@ -556,27 +559,28 @@ final class VisitorCrmFeatureTest extends TestCase
         $this->assertDatabaseHas('visitor_interactions', ['visitor_id' => $capture['visitor_id'], 'type' => 'payment', 'payment_id' => $payment['payment_id']]);
 
         // Communication: a consent-gated message appends a message interaction.
+        // The consent is built through the production privacy commands: a
+        // consent is born draft and becomes `active` only by verification and
+        // activation, which the consents guard now also enforces at the
+        // database boundary, so a directly inserted `active` row is no longer
+        // a producible fixture.
         $communicator = $this->personWithAuthority('crm-int-comm', ['communication.send']);
-        $purpose = ConsentPurpose::query()->create([
-            'id' => RandomIdentifier::new(),
-            'name' => 'CRM Test Updates',
-            'channel' => 'email',
-            'category' => 'communication',
-        ]);
-        Consent::query()->create([
-            'id' => RandomIdentifier::new(),
-            'subject_person_id' => $person->id,
-            'purpose_id' => $purpose->id,
-            'lifecycle_state' => 'active',
-            'effective_from' => '2026-01-01',
-            'effective_to' => null,
-            'evidence_ref' => 'consent/integration',
-            'recorded_by' => $person->id,
-        ]);
+        $privacyOfficer = new Actor($this->personWithAuthority('crm-int-privacy', ['privacy.define_purpose', 'privacy.consent'])->id, 'Privacy Officer');
+        $purposeId = app(DefineConsentPurpose::class)->define(
+            $privacyOfficer, 'CRM Test Updates', 'email', 'communication', 'crm-int-purpose',
+        )['purpose_id'];
+        $consentId = app(RecordConsent::class)->record(
+            $privacyOfficer, $person->id, $purposeId, 'consent/integration',
+            new CarbonImmutable('2026-01-01'), null, 'crm-int-consent-1',
+        )['consent_id'];
+        $consentTransitions = app(TransitionConsent::class);
+        $consentTransitions->submit($privacyOfficer, Consent::query()->findOrFail($consentId), 'crm-int-consent-2');
+        $consentTransitions->verify($privacyOfficer, Consent::query()->findOrFail($consentId), 'crm-int-consent-3');
+        $consentTransitions->activate($privacyOfficer, Consent::query()->findOrFail($consentId), 'crm-int-consent-4');
         $message = app(SendMessage::class)->queue(
             new Actor($communicator->id, 'Communication Officer'),
             $person->id,
-            $purpose->id,
+            $purposeId,
             'email',
             'content/integration',
             'message-integration',

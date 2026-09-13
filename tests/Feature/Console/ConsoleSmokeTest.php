@@ -50,7 +50,6 @@ final class ConsoleSmokeTest extends TestCase
         $compatibilityRedirects = [
             'home' => 'workspace',
             'academic.sessions' => 'academic.index',
-            'privacy.index' => 'governance.privacy',
             'audit.index' => 'governance.audit',
         ];
         $skipped = ['api.me', 'health', 'login'];

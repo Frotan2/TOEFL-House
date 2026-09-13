@@ -175,6 +175,36 @@
   .documents-timeline > li::before { align-items: center; background: var(--brand-800); border-radius: 999px; color: #fff; content: counter(evidence); counter-increment: evidence; display: inline-flex; font-size: 11px; font-weight: 800; height: 25px; justify-content: center; left: 14px; position: absolute; top: 14px; width: 25px; }
   .documents-timeline ul { display: grid; gap: 8px; list-style: none; margin: 11px 0 0; padding: 0; }
   .documents-timeline ul li { color: var(--ink-700); font-size: 12px; }
+  .privacy-workspace .scope-badge { align-items: center; background: #eef4fa; border: 1px solid #d8e6f3; border-radius: 999px; color: var(--brand-900); display: inline-flex; font-size: 11px; font-weight: 800; min-height: 38px; padding: 7px 11px; white-space: nowrap; }
+  .privacy-authority { align-items: flex-start; display: flex; gap: 12px; }
+  .privacy-authority strong { color: var(--brand-900); flex: 0 0 auto; }
+  .privacy-authority span { color: var(--ink-600); }
+  .privacy-search { margin: 0 0 16px; max-width: 640px; }
+  .privacy-search label, .privacy-inset label, .privacy-command-panel label, .privacy-asof label { color: var(--ink-700); display: grid; font-size: 12px; font-weight: 750; gap: 6px; }
+  .privacy-id { color: var(--ink-500); display: block; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; margin-top: 3px; }
+  .privacy-actions { min-width: 216px; }
+  .privacy-record, .privacy-release { display: grid; gap: 20px; }
+  .privacy-inset { border-top: 1px solid var(--line); display: grid; gap: 13px; grid-template-columns: 1fr; margin: 18px 0 0; padding: 17px 0 0; }
+  .privacy-command-panel { border-color: #bcd2e8; box-shadow: 0 8px 28px rgba(31,79,134,.09); }
+  .privacy-asof { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
+  .privacy-asof .inline-actions { align-items: flex-end; }
+  .privacy-dossier-grid { display: grid; gap: 20px; grid-template-columns: repeat(2,minmax(0,1fr)); margin: 18px 0 0; }
+  .privacy-dossier-grid h3, .privacy-dossier > h3 { color: var(--brand-900); font-size: 13px; letter-spacing: .02em; margin: 0 0 10px; text-transform: uppercase; }
+  .privacy-dossier > h3:not(:first-of-type) { margin-top: 22px; }
+  .privacy-list { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+  .privacy-list li { align-items: baseline; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .privacy-list .muted { color: var(--ink-600); font-size: 12px; }
+  .privacy-timeline { counter-reset: consent; display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; }
+  .privacy-timeline > li { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 14px 50px; position: relative; }
+  .privacy-timeline > li::before { align-items: center; background: var(--brand-800); border-radius: 999px; color: #fff; content: counter(consent); counter-increment: consent; display: inline-flex; font-size: 11px; font-weight: 800; height: 25px; justify-content: center; left: 14px; position: absolute; top: 14px; width: 25px; }
+  .privacy-timeline .muted { color: var(--ink-600); font-size: 12px; }
+  .privacy-timeline ul { display: grid; gap: 8px; list-style: none; margin: 11px 0 0; padding: 0; }
+  .privacy-timeline ul li { color: var(--ink-700); font-size: 12px; }
+  .privacy-receipt-list { display: grid; gap: 8px; list-style: none; margin: 14px 0 0; padding: 0; }
+  .privacy-receipt-list li { align-items: baseline; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; display: flex; gap: 10px; justify-content: space-between; padding: 10px 12px; }
+  .privacy-receipt-list span { color: var(--ink-600); font-size: 12px; }
+  .privacy-receipt-list strong { color: var(--ink-900); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .privacy-revocations { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 18px; }
 }
 
 @layer responsive {
@@ -199,8 +229,8 @@
     .workspace { padding-inline: 14px; }
     .panel, .search { border-radius: 12px; padding: 15px; }
     .section-heading { flex-direction: column; gap: 12px; }
-    .form-grid, .compact-grid, .documents-policy-forms { grid-template-columns: 1fr; }
-    .documents-authority { flex-direction: column; }
+    .form-grid, .compact-grid, .documents-policy-forms, .privacy-dossier-grid { grid-template-columns: 1fr; }
+    .documents-authority, .privacy-authority { flex-direction: column; }
     .search-row { flex-direction: column; }
     .search-row .button { width: 100%; }
     .metric-grid { grid-template-columns: 1fr; }

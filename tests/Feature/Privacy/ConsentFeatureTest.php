@@ -135,8 +135,18 @@ final class ConsentFeatureTest extends TestCase
         $this->assertDatabaseHas('consent_purposes', ['id' => $this->marketingPurposeId, 'channel' => 'marketing']);
         $this->assertDatabaseHas('consent_purposes', ['id' => $this->communicationPurposeId, 'channel' => 'communication']);
 
-        $this->expectException(QueryException::class);
-        app(DefineConsentPurpose::class)->define($this->privacyOfficer(), 'enrollment-updates', 'marketing', 'duplicate-purpose', 'purpose-key-3');
+        // The catalog key is name + channel, and a second definition of it is a
+        // business fact with its own domain code — not a raw unique violation
+        // escaping to the operator as a server fault.
+        try {
+            app(DefineConsentPurpose::class)->define($this->privacyOfficer(), 'enrollment-updates', 'marketing', 'duplicate-purpose', 'purpose-key-3');
+            $this->fail('a duplicate purpose definition must be refused');
+        } catch (BusinessRejection $rejection) {
+            $this->assertSame('privacy.purpose_duplicate', $rejection->errorCode());
+        }
+
+        $this->assertSame(1, DB::table('consent_purposes')->where('name', 'enrollment-updates')->where('channel', 'marketing')->count());
+        $this->assertDatabaseHas('consent_purposes', ['id' => $this->marketingPurposeId, 'category' => 'prospect-outreach']);
     }
 
     public function test_unverified_subject_is_rejected(): void
