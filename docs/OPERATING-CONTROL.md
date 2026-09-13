@@ -10,11 +10,11 @@
 ## 1. Current control state
 
 - **Authoritative branch:** `main`
-- **Active domain:** CRM / Front Office — **SELECTED, NOT STARTED**
-- **Active domain status:** **PLANNED / BLOCKED on baseline confirmation.** Selected by the fresh reassessment of `DOMAIN-REGISTRY.md` §2 recorded in this reconciliation. No CRM implementation, migration, test, route or surface change has begun under this selection, and none may until the baseline gate in §4 is satisfied against the actual current `main` HEAD.
-- **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`), Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`) and Privacy & Consent (`docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`) are each **VERIFIED and CERTIFIED**, and none was reopened by this reconciliation. Privacy closed through PR #29 (merge commit `27b96d8`) with Verification run 34744897784 green on all four jobs and the Privacy browser journey at 38/38; its findings ledger and per-dimension evidence chain remain in its own audit and are not restated here.
-- **Next allowed domain:** CRM / Front Office, and only once the §4 baseline gate is recorded green at the then-current `main` HEAD. The one-domain rule stays strictly enforced: no second material domain may start, and no closed domain may be reopened, while CRM / Front Office is active.
-- **Release status:** **CERTIFIED for `main` HEAD `b824efd`** — Verification run 34745363765 (all four jobs: static analysis, backend, frontend, browser E2E) and CRM Browser E2E run 34745363720 are the latest non-superseded evidence for that exact commit. PR #30 produced `b824efd` and was documentation-only: the compare against `27b96d8` touches four Markdown files and no source, test, migration, workflow or route file. The certification was therefore re-earned by execution at the new HEAD, not inherited from the old one. Certification is attached to the commit, not to the repository: any later commit on `main` — including the merge of this reconciliation — requires fresh applicable verification before it can be called certified.
+- **Active domain:** CRM / Front Office — **SELECTED, BASELINE CONFIRMED, IMPLEMENTATION NOT YET WRITTEN**
+- **Active domain status:** **PLANNED — the §4 baseline gate is SATISFIED, so the domain is unblocked.** Selected by the fresh reassessment of `DOMAIN-REGISTRY.md` §2–§3 recorded at PR #31. The mandatory baseline gate has now been executed against the actual current `main` HEAD `eb67300` and is green (§4). No CRM implementation, migration, test, route or surface change has been written yet; the gate that blocked it is open, and closure work proceeds against the measured inventory `DOMAIN-REGISTRY.md` §3.3 (G1–G8).
+- **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`), Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`) and Privacy & Consent (`docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`) are each **VERIFIED and CERTIFIED**, and none was reopened. Privacy closed through PR #29 (merge commit `27b96d8`) with Verification run 34744897784 green on all four jobs and the Privacy browser journey at 38/38; its findings ledger and per-dimension evidence chain remain in its own audit and are not restated here.
+- **Next allowed domain:** CRM / Front Office, now unblocked. The one-domain rule stays strictly enforced: no second material domain may start, and no closed domain may be reopened, while CRM / Front Office is active. CRM / Front Office must itself reach complete closure before any other domain is selected.
+- **Release status:** **CERTIFIED for `main` HEAD `eb67300`** — Verification run 34750406256 (all four jobs: static analysis, backend, frontend, browser E2E) and CRM Browser E2E run 34750406270 are the latest non-superseded evidence for that exact commit. PR #31 produced `eb67300` and was documentation-only — it changed four Markdown files and no source, test, migration, workflow or route file — so this certification was again re-earned by execution at the new HEAD rather than inherited from `b824efd` (Verification run 34745363765, CRM Browser E2E run 34745363720). Certification is attached to the commit, not to the repository: any later commit on `main`, including the merge of this baseline record, requires fresh applicable verification before it can be called certified.
 
 To determine current evidence, inspect the actual `main` HEAD and the latest non-superseded Verification workflow. Do not infer state from a previous run recorded in a document.
 
@@ -46,7 +46,7 @@ Only materially applicable stages are required, but omissions must be explicit.
 
 ## 4. Current domain gate
 
-**The Privacy & Consent gate is resolved. The CRM / Front Office gate is selected but not yet open.**
+**The Privacy & Consent gate is resolved. The CRM / Front Office gate is open — its mandatory baseline precondition is satisfied.**
 
 Privacy & Consent was declared closed only after current-main evidence proved its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates — plus the three that are specific to personal data: consent is a lifecycle fact and never a boolean flag, erasure is revocation/expiry/archive over retained evidence and never a row deletion, and an organization-wide release needs two distinct approver signatures with its requester excluded and execution decided at organization scope.
 
@@ -60,7 +60,22 @@ No CRM or Front Office implementation, migration, test, route or surface change 
 2. **CRM Browser E2E** has been executed at that same exact commit and concluded green;
 3. the resulting green baseline is **recorded here with its run identifiers and commit SHA**.
 
-Merging this reconciliation advances `main` and therefore lapses the `b824efd` certification. Steps 1–3 must be re-executed against the resulting merge commit; `b824efd` evidence does not carry forward, because `GREEN OLD COMMIT ≠ GREEN CURRENT COMMIT`. Both workflows trigger on `push` to `main`, so the runs exist automatically — the obligation is to read them at the exact SHA and record them, not to assume them.
+Merging the reconciliation that recorded the selection advanced `main` and lapsed the `b824efd` certification, so steps 1–3 were re-executed against the resulting merge commit rather than inherited: `b824efd` evidence did not carry forward, because `GREEN OLD COMMIT ≠ GREEN CURRENT COMMIT`. Both workflows trigger on `push` to `main`, so the runs existed automatically — the obligation was to read them at the exact SHA and record them, not to assume them.
+
+**Gate status: SATISFIED at `main` HEAD `eb67300`.** Recorded as executed, with each run read at that exact commit:
+
+| Step | Gate | Run | Head | Result |
+|---|---|---|---|---|
+| 1 | Verification — static analysis (Pint, PHPStan, audits) | **34750406256** | `eb67300` | **success** |
+| 1 | Verification — backend (migrations, suite, invariants, concurrency) | **34750406256** | `eb67300` | **success** |
+| 1 | Verification — frontend (typecheck, build, mount) | **34750406256** | `eb67300` | **success** |
+| 1 | Verification — browser E2E (real Chromium) | **34750406256** | `eb67300` | **success** |
+| 2 | CRM Browser E2E | **34750406270** | `eb67300` | **success** |
+| 3 | Green baseline confirmed and recorded here | — | `eb67300` | **this record** |
+
+Both runs were `push`-triggered on `main` at `eb673007c42abaacb047ed1d2c341b6b8bf08b73`, the merge commit of PR #31. **CRM / Front Office closure work is therefore unblocked** and may begin against `DOMAIN-REGISTRY.md` §3.3.
+
+This gate is not permanently discharged. Recording it advances `main` again, so the certification above lapses at the merge of this record and the gate must be re-satisfied at that new HEAD before the *next* material CRM change is certified. The gate governs every material step of the closure, not only its start: it is a standing precondition, and a green baseline is a fact about one commit rather than a licence for the repository.
 
 ### CRM / Front Office closure scope
 
@@ -126,8 +141,8 @@ New documentation is permitted only when all of the following are true: its subj
 
 ## 11. Handoff
 
-The next agent starts here and inspects the actual current `main` HEAD rather than trusting any SHA written below. As of this reconciliation: Library & Resources, Documents & Evidence and Privacy & Consent are closed and certified and must not be reopened absent observed regression; `b824efd` is the last commit carrying green Verification (run 34745363765, all four jobs) and CRM Browser E2E (run 34745363720); and **CRM / Front Office is the selected next material domain and is not started**.
+The next agent starts here and inspects the actual current `main` HEAD rather than trusting any SHA written below. As of this record: Library & Resources, Documents & Evidence and Privacy & Consent are closed and certified and must not be reopened absent observed regression; `eb67300` is the commit whose green baseline was confirmed by Verification run 34750406256 (all four jobs) and CRM Browser E2E run 34750406270; and **CRM / Front Office is the active material domain, selected, baseline-confirmed, and not yet implemented**.
 
-The next-domain reassessment this handoff previously waited on has now been performed and is recorded in `DOMAIN-REGISTRY.md` §2–§3, so the selection is not to be re-litigated. What remains gating is execution order, not choice: satisfy the §4 baseline gate against the current `main` HEAD, record the green baseline here with its run identifiers, and only then begin CRM / Front Office closure. Keep the one-domain rule strictly enforced throughout — one material domain, closed completely, before the next.
+Both questions that previously gated this handoff are now answered and are not to be re-litigated. The next-domain reassessment was performed and is recorded in `DOMAIN-REGISTRY.md` §2–§3, so the *choice* is settled. The §4 baseline gate was then executed at `eb67300` and is recorded green, so the *execution order* precondition is discharged. What remains is the work itself: close CRM / Front Office against the measured inventory in `DOMAIN-REGISTRY.md` §3.3 (G1–G8), one gap at a time, re-satisfying the §4 gate at each material step because a green baseline is a fact about one commit and not a standing licence.
 
-Update the canonical control documents after every material change. Historical audits are never the execution authority.
+Keep the one-domain rule strictly enforced throughout — one material domain, closed completely, before the next. Update the canonical control documents after every material change. Historical audits are never the execution authority.
