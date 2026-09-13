@@ -182,9 +182,14 @@ journey's fix.
 | 34742078457 | `9440e41` | green | green | green | **FAIL** — the shared smoke journey, with the three domain journeys skipped behind it | the console-paint race; docs-and-workflow-only commit, so nothing in it could explain the failure |
 | **34742746987** | **`55fc461`** | **green** | **green** | **green** | **green** — all four journeys, privacy 38/38 | — **closure evidence run** |
 
-- CRM Browser E2E runs 34740270038, 34741188858, 34741595850 and 34742746986:
-  success (actionlint plus the CRM journey, so every workflow edit was
-  structurally valid and the CRM surface is untouched).
+- The closure commit re-proved every gate on its own tree: run **34743236679**
+  (tree `5e5ea4c`, this report plus the retirement of the evidence mirror) is
+  green on all four jobs, with CRM Browser E2E run 34743236760 alongside. The
+  green run above and the green run on the closure tree are the same workflow
+  shape, because retiring the mirror changes no gate command.
+- CRM Browser E2E runs 34740270038, 34741188858, 34741595850, 34742746986 and
+  34743236760: success (actionlint plus the CRM journey, so every workflow edit
+  was structurally valid and the CRM surface is untouched).
 - The temporary annotation channel is retired in the commit that carries this
   report; the workflow returns byte-for-byte to the shape that ran as `4b88837`,
   so every gate command is identical to the ones that produced the green run
