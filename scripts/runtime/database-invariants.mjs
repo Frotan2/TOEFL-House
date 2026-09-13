@@ -984,16 +984,16 @@ try {
         [ids.person],
       );
       await client.query(
-        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'candidate', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'candidate', NOW(), NOW())",
         [ids.account, ids.person],
       );
       await client.query(
-        \"INSERT INTO employment_statuses (id, employment_id, status, effective_from, reason, actor_id, created_at, updated_at) VALUES ($1, $2, 'candidate', CURRENT_DATE, 'opened', $3, NOW(), NOW())\",
+        "INSERT INTO employment_statuses (id, employment_id, status, effective_from, reason, actor_id, created_at, updated_at) VALUES ($1, $2, 'candidate', CURRENT_DATE, 'opened', $3, NOW(), NOW())",
         [ids.enrollment, ids.account, ids.person],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"UPDATE employment_statuses SET reason = 'tampered' WHERE id = $1\",
+    sql: "UPDATE employment_statuses SET reason = 'tampered' WHERE id = $1",
     params: (ids) => [ids.enrollment],
   });
 
@@ -1001,22 +1001,22 @@ try {
   await mustReject('leave self-approval is prevented by schema', {
     expected: { code: '23514', messageIncludes: 'the leave decider must differ from the requester' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR leave person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR leave person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
         [ids.account, ids.person],
       );
       await client.query(
-        \"INSERT INTO leaves (id, employment_id, category, date_from, date_to, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'sick', CURRENT_DATE, CURRENT_DATE + 3, 'illness', 'requested', $3, NOW(), NOW())\",
+        "INSERT INTO leaves (id, employment_id, category, date_from, date_to, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'sick', CURRENT_DATE, CURRENT_DATE + 3, 'illness', 'requested', $3, NOW(), NOW())",
         [ids.leave, ids.account, ids.person],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"UPDATE leaves SET lifecycle_state = 'approved', decided_by = requested_by, updated_at = NOW() WHERE id = $1\",
+    sql: "UPDATE leaves SET lifecycle_state = 'approved', decided_by = requested_by, updated_at = NOW() WHERE id = $1",
     params: (ids) => [ids.leave],
   });
 
@@ -1024,22 +1024,22 @@ try {
   await mustReject('signed contract terms are immutable', {
     expected: { code: 'P0001', messageIncludes: 'signed contract terms are immutable' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR contract person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR contract person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
         [ids.account, ids.person],
       );
       await client.query(
-        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'original terms', 'active', CURRENT_DATE, NOW(), NOW())\",
+        "INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'original terms', 'active', CURRENT_DATE, NOW(), NOW())",
         [ids.student, ids.account],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"UPDATE contracts SET terms_summary = 'tampered terms', updated_at = NOW() WHERE id = $1\",
+    sql: "UPDATE contracts SET terms_summary = 'tampered terms', updated_at = NOW() WHERE id = $1",
     params: (ids) => [ids.student],
   });
 
@@ -1047,20 +1047,20 @@ try {
   await mustReject('contracts cannot be deleted', {
     expected: { code: 'P0001', messageIncludes: 'contracts are retained history and cannot be deleted' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR delete contract person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR delete contract person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
         [ids.account, ids.person],
       );
       await client.query(
-        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'immutable terms', 'closed', CURRENT_DATE, NOW(), NOW())\",
+        "INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'immutable terms', 'closed', CURRENT_DATE, NOW(), NOW())",
         [ids.student, ids.account],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
     sql: 'DELETE FROM contracts WHERE id = $1',
     params: (ids) => [ids.student],
@@ -1071,7 +1071,7 @@ try {
     expected: { code: 'P0001', messageIncludes: 'scales are retained compensation history and cannot be deleted' },
     setup: async (client, ids) => {
       await client.query(
-        \"INSERT INTO scales (id, key, name, rank_order, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'Runtime Scale', 99, 'active', NOW(), NOW())\",
+        "INSERT INTO scales (id, key, name, rank_order, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'Runtime Scale', 99, 'active', NOW(), NOW())",
         [ids.documentClassification, `runtime-scale-${ids.documentClassification}`],
       );
     },
@@ -1083,24 +1083,24 @@ try {
   await mustReject('contract versions cannot be deleted', {
     expected: { code: 'P0001', messageIncludes: 'contract versions are retained approval history and cannot be deleted' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR version person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR version person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
         [ids.account, ids.person],
       );
       await client.query(
-        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'version contract', 'active', CURRENT_DATE, NOW(), NOW())\",
+        "INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'version contract', 'active', CURRENT_DATE, NOW(), NOW())",
         [ids.student, ids.account],
       );
       await client.query(
-        \"INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, created_at, updated_at) VALUES ($1, $2, 1, 'draft', 'terms.pdf', CURRENT_DATE, $3, NOW(), NOW())\",
+        "INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, created_at, updated_at) VALUES ($1, $2, 1, 'draft', 'terms.pdf', CURRENT_DATE, $3, NOW(), NOW())",
         [ids.documentVersion, ids.student, ids.person],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
     sql: 'DELETE FROM contract_versions WHERE id = $1',
     params: (ids) => [ids.documentVersion],
@@ -1110,26 +1110,26 @@ try {
   await mustReject('compensation rules frozen after version leaves draft', {
     expected: { code: 'P0001', messageIncludes: 'compensation rules attach to a draft contract version only' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR rule person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR rule person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
         [ids.account, ids.person],
       );
       await client.query(
-        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'rule contract', 'active', CURRENT_DATE, NOW(), NOW())\",
+        "INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'rule contract', 'active', CURRENT_DATE, NOW(), NOW())",
         [ids.student, ids.account],
       );
       await client.query(
-        \"INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, submitted_at, approved_by, approved_at, approval_digest, created_at, updated_at) VALUES ($1, $2, 1, 'active', 'terms.pdf', CURRENT_DATE, $3, NOW(), $4, NOW(), 'digest', NOW(), NOW())\",
+        "INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, submitted_at, approved_by, approved_at, approval_digest, created_at, updated_at) VALUES ($1, $2, 1, 'active', 'terms.pdf', CURRENT_DATE, $3, NOW(), $4, NOW(), 'digest', NOW(), NOW())",
         [ids.documentVersion, ids.student, ids.person, ids.verifiedPerson],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"INSERT INTO compensation_rules (id, contract_version_id, method, rate, created_at, updated_at) VALUES ($1, $2, 'fixed_monthly', 100.00, NOW(), NOW())\",
+    sql: "INSERT INTO compensation_rules (id, contract_version_id, method, rate, created_at, updated_at) VALUES ($1, $2, 'fixed_monthly', 100.00, NOW(), NOW())",
     params: (ids) => [randomUUID(), ids.documentVersion],
   });
 
