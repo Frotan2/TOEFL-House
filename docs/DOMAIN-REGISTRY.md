@@ -22,13 +22,15 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 
 ## 2. Current domain registry
 
+> **Reading the certification citations.** Each closed domain's row cites the commit and Verification run at which *that domain's* closure was certified. Those are lineage, not current release authority. Current release authority is the single `main` HEAD recorded in `docs/OPERATING-CONTROL.md` §1 — as of this reassessment, `b824efd` — and it lapses with the next commit to `main`. A domain staying `VERIFIED` does not mean an older commit is still the certified one.
+
 | Domain | Authority | Frontend surface | Current status | Required closure / next evidence |
 |---|---|---|---|---|
 | Organization / Scope | Organization | Organization workspace | **COVERED / STRONG** | Preserve topology, scope and adversarial tests. |
 | Identity | Identity | Identity workspace | **COVERED / STRONG** | Preserve identity/account lifecycle and provenance. |
 | Access / RBAC | Access | Access workspace | **PARTIAL** | Complete grants, revoke, delegation, approval and denial-path parity. |
 | Applicants & Students | Students / Admissions | Students workspace | **PARTIAL** | Re-evaluate every lifecycle transition, scope, financial gate, evidence and E2E path. |
-| CRM / Front Office | CRM | CRM/front-office workspaces | **PARTIAL** | Close follow-up, automation, evidence and conversion workflow gaps. |
+| CRM / Front Office | CRM | CRM + Reception Desk (`/crm`, `/crm?view=front-office`) | **PARTIAL — SELECTED NEXT DOMAIN (NOT STARTED)** | The domain selected by the 2026-09-13 reassessment of this section; see §3 for the measured gap inventory and `docs/OPERATING-CONTROL.md` §4 for the mandatory baseline gate. No work has begun. Closure must cover: React parity for the 8 of 21 CRM API routes that currently have no operator surface (source define/retire, campaign define/retire, visitor `PATCH` update, automation-rule read/define/retire); automation-rule lifecycle and evaluation evidence; conversion and conversion-handoff workflow, including `VisitorConversionHandoff` which has no test reference and no surface; Reception Desk depth, which is presently a read-only projection making no CRM mutation; and browser-journey depth beyond the current 10 checks. |
 | Academic | Academic | Academic workspace | **PARTIAL** | Close corrections, appeals, progression, graduation, transcript, waitlist and terminal-state actions. |
 | Placement | Placement / Academic boundary | Placement workspace | **PARTIAL** | Close moderation/release/appeals/content and report decision surfaces. |
 | Teachers | HR / Academic boundary | Teachers workspace | **PARTIAL** | Close qualification, availability, assignment, transfer and workload actions. |
@@ -37,56 +39,95 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 | Payroll / Settlement | Payroll calculation; Finance settlement truth | Payroll workspace | **PARTIAL** | Close calculate/approve/held-resolution/clearance/settlement parity. |
 | Library & Resources | Resources | Library workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34713414829 (head `e603db9`, branch `arena/01a09629-toefl-house`) — backend suite/invariants/concurrency, frontend, static and real-Chromium jobs all green; Library browser journey 24/24 across three sessions (lifecycle, withdrawals, provoked denials, staged approvals, canonical-route and session-hygiene records). **Certified on `main`**: merged as PR #26; Verification run 34735425882 at main HEAD `0e46611` green on all four jobs with the Library journey 24/24, CRM Browser E2E run 34735426000 alongside. |
 | Documents | Documents | Documents workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34732090672 (tree `5f32839`) — all four jobs green; Documents browser journey 26/26 across three isolated Chromium sessions (full lifecycle, separation-of-duties denial, terminal state, immutable history, no storage reference in any read model, 14 canonical mutations / 0 violations). Evidence: `docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`. **Certified on `main`**: merged as PR #26; Verification run 34735425882 at main HEAD `0e46611` green on all four jobs with the Documents journey 26/26, CRM Browser E2E run 34735426000 alongside. |
-| Privacy | Privacy | Privacy workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34742746987 (tree `55fc461`, branch `arena/01a098fa-toefl-house`) — all four jobs green; Privacy browser journey 38/38 across four isolated Chromium sessions (purpose catalog, full consent lifecycle, provoked denials, withdrawal evidence, disclosure evidence, subject dossier, direct release, staged organization-wide export with two distinct approvers, subject-side boundary, canonical-POST-only mutations / 0 violations). Erasure is lifecycle-only: no delete path exists in model, transport or UI. Evidence: `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. **Certified on `main`**: merged as PR #29 (merge commit `27b96d8`); Verification run 34744897784 at that HEAD green on all four jobs with the Privacy journey 38/38, CRM Browser E2E run 34744897779 alongside. |
+| Privacy | Privacy | Privacy workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34742746987 (tree `55fc461`, branch `arena/01a098fa-toefl-house`) — all four jobs green; Privacy browser journey 38/38 across four isolated Chromium sessions (purpose catalog, full consent lifecycle, provoked denials, withdrawal evidence, disclosure evidence, subject dossier, direct release, staged organization-wide export with two distinct approvers, subject-side boundary, canonical-POST-only mutations / 0 violations). Erasure is lifecycle-only: no delete path exists in model, transport or UI. Evidence: `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. **Certified on `main`**: merged as PR #29 (merge commit `27b96d8`); Verification run 34744897784 at that HEAD green on all four jobs with the Privacy journey 38/38, CRM Browser E2E run 34744897779 alongside. Superseded as current release authority by documentation-only PR #30 (merge commit `b824efd`, no source/test/migration/workflow/route change), which was independently verified green at that HEAD by Verification run 34745363765 with CRM Browser E2E run 34745363720 alongside. Not reopened by the CRM reassessment. |
 | Audit | Audit | Legacy / partial | **PARTIAL** | Provide scoped evidence search/read surfaces without moving authority client-side. |
 | Communication | Communication | Communication + workspace surfaces | **PARTIAL** | Close message/thread/search/status and notification/work integration. |
 | Reporting | Reporting | Reporting workspace | **PARTIAL** | Close report-run lifecycle, evidence/status actions and remaining replay/snapshot depth. |
 | Management / Work | Work Management | Workspace / management | **PARTIAL** | Close queue membership and complete work lifecycle surfaces. |
 | Integrations / queues / projections / DB machinery | Outbox / infrastructure / DB | Operator-only as required | **BACKEND-ONLY / OPERATOR** | Do not duplicate business authority in normal UI. Add observability only when approved. |
 
-## 3. Active domain — Privacy & Consent (closed, certified on `main`)
+## 3. Active domain — CRM / Front Office (selected, not started)
 
-One material domain at a time. Library & Resources and Documents & Evidence are
-closed and were not reopened; Privacy & Consent was the active domain and has
-converged. Confirmed implementation includes:
+One material domain at a time. Library & Resources, Documents & Evidence and
+Privacy & Consent are closed, certified and were **not reopened** by this
+reassessment; CRM / Front Office is the domain this reassessment selects, and
+**no work on it has begun**.
 
-- purposes of personal-data use as an organization-rooted catalog, with
-  communication and marketing as separate definitions and a duplicate
-  definition refused as a business rejection rather than a database error;
-- consent capture as a born-draft, write-once fact with its evidence reference;
-- one open consent per (subject, purpose), enforced by a partial unique index
-  and attacked under savepoints in the canonical suite;
-- the single consent lifecycle table (`ConsentLifecycle`) consulted by the
-  command, the transport and the projection alike, so no surface re-derives it:
-  draft → submitted → verified → active → expired/revoked → archived;
-- expiry as the passage of the recorded window, decided by the CalendarAuthority
-  and never by a client clock;
-- withdrawal as append-only revocation evidence attached to the consent it ended;
-- disclosure as immutable release evidence with recipient, purpose, authority
-  and declared scope, the scope re-resolved server-side so a forged one is
-  refused;
-- subject access: one dossier projection (identity, complete consent history
-  with its withdrawals, every disclosure, every export request) that the subject
-  may read about themselves without holding any staff capability;
-- subject-data release in two shapes — a direct single-subject export inside a
-  non-organization scope, and a staged organization-wide export that needs two
-  distinct approver signatures, excludes its requester, and executes only at
-  organization scope (`ExportApprovalChain`);
-- erasure as lifecycle only: `Consent::delete()` and `forceDelete()` throw
-  `privacy.consent_immutable`, the database guards refuse rewriting export
-  history, and no delete/erase/purge control exists in the UI;
-- server-owned authorization/scope (`PrivacyScopePolicy`), fail-closed denials
-  that are audit-recorded with their code and capability reason, idempotency on
-  every mutation, and concurrency races on the consent tables;
-- one canonical operator surface: `/privacy` renders the React workspace over
-  `/api/v1/privacy`; the Blade privacy index and the `/governance/privacy` alias
-  are retired, and the legacy web POST endpoints remain thin adapters.
+### 3.1 Selection basis
 
-Release closure is no longer blocked: the domain merged to `main` as PR #29
-(merge commit `27b96d8`) and Verification run 34744897784 passed all four jobs
-at that HEAD, with CRM Browser E2E run 34744897779 alongside. Certification is
-attached to that exact commit and lapses with any later one. No next material
-domain may begin until a fresh reassessment of §2 selects one.
+Reassessed against `main` HEAD `b824efd`. CRM / Front Office is selected because
+it is the `PARTIAL` domain whose backend authority is already substantially
+present while its operator-facing proof is the thinnest of any domain adjacent to
+closure. Closing it therefore converts *existing* authority into proven
+capability rather than inventing new authority — the smallest coherent next step
+available under the one-domain rule, and the one least likely to disturb the
+three certified closures.
+
+Measured at that HEAD, the backend is not the gap:
+
+- `app/Modules/Crm` ships 9 commands, 7 domain authorities (`CrmAccess`,
+  `VisitorStatus`, `VisitorInteractionCatalog`, `VisitorInteractionLineage`,
+  `CrmInteractionTraceRecorder`, `VisitorContactKey`, `VisitorConversionRecorder`),
+  8 models and 2 queries;
+- 5 CRM test files carry 24 distinct test methods covering branch-provenance
+  scoping and its immutability; fail-closed behaviour on unknown legacy
+  provenance; contact de-duplication and key normalization; the
+  one-open-lead-per-verified-person rule; state-machined transitions with a
+  required loss reason; immutable interaction append; follow-up
+  completion/cancellation serialized against competing status writers;
+  automation scheduling a follow-up and re-checking assignee authority at the
+  triggering visitor's branch; catalog lifecycle and campaign window; capture
+  idempotency hashing; and conversion recorded through admissions, with manual
+  conversion explicitly *not* a CRM write authority.
+
+### 3.2 Mandatory precondition
+
+`docs/OPERATING-CONTROL.md` §4 governs and is not restated here. No CRM or Front
+Office implementation starts until Verification and CRM Browser E2E have both
+been executed green at the *actual current* `main` HEAD and that baseline is
+recorded there with its run identifiers. Merging the reconciliation that records
+this selection advances `main` and lapses the `b824efd` certification, so the gate
+must be satisfied against the resulting merge commit:
+`GREEN OLD COMMIT ≠ GREEN CURRENT COMMIT`.
+
+### 3.3 Measured closure gaps
+
+Recorded as measured at `b824efd`, not as assumption. Each row is a closure
+obligation for the active domain.
+
+| # | Gap | Measured evidence | Required closure |
+|---|---|---|---|
+| G1 | **React parity: 8 of 21 CRM API routes have no operator surface.** | `routes/api.php` declares 21 routes under `/api/v1/crm`. `resources/js/crm.tsx` (186 lines) and `resources/js/front-office.tsx` (107 lines) between them reach 13. Unreached: `POST /crm/sources`, `POST /crm/sources/{id}/retire`, `POST /crm/campaigns`, `POST /crm/campaigns/{id}/retire`, `PATCH /crm/visitors/{id}`, `GET /crm/automation-rules`, `POST /crm/automation-rules`, `POST /crm/automation-rules/{id}/retire`. | Every route carrying a normal operator capability gets a React surface with its UX and error states, or is explicitly reclassified as operator/backend-only with the reason recorded here. |
+| G2 | **The canonical transport cannot express `PATCH` at all.** | `resources/js/core/api.ts` exposes an `ApiClient` of exactly `getJson` and `postJson`. `crm.tsx` contains zero `patch`/`put` calls. `PATCH /crm/visitors/{id}` (`api.crm.visitors.update`) is therefore unreachable from the canonical client. | Either extend the canonical transport (a frontend-contract decision in its own right) or retire/replace the `PATCH` route with a canonical `POST`. Do not leave a declared mutation route no operator can call. |
+| G3 | **Automation rules have no operator surface whatsoever.** | Zero references to `automation-rules` in either React surface, against `DefineVisitorAutomationRule` and three API routes on the backend, and backend tests that already prove automation schedules a follow-up and re-checks assignee authority. | Read, define and retire automation rules from the React workspace, with rule evaluation and its follow-up effect proven end-to-end in a real browser. |
+| G4 | **Conversion handoff is unproven and unsurfaced.** | `VisitorConversionHandoff` is referenced only inside `app/` (`VisitorConversionRecorder`, `Visitor`, `VisitorConversion`, `VisitorTimelineQuery`). It has **no test reference** and **no frontend reference**. `routes/api.php` declares **zero** conversion routes, so CRM owns no conversion write endpoint. | Prove the handoff at the CRM↔Admissions boundary with tests, keep CRM explicitly *not* a conversion write authority (already asserted by `test_manual_conversion_is_not_a_crm_write_authority`), and surface conversion state read-only in the timeline. |
+| G5 | **Reception Desk is a read-only projection, not a front-office workspace.** | `front-office.tsx` calls only `GET /crm/visitors?limit=200`, `GET /academic/workspace` and `GET /students`. It performs no CRM mutation: no capture, no interaction, no follow-up, no transition. Navigation registers it as a separate destination (`/crm?view=front-office`, "Reception Desk"). | Decide and record whether Reception Desk is an operational surface that must carry capture/interaction/follow-up capability, or an explicitly approved read-only projection. Either is acceptable; leaving it undeclared is not. |
+| G6 | **Browser-journey depth is the shallowest in the repository.** | `scripts/runtime/crm-browser-e2e.mjs` statically records 10 checks: authenticated session, explicit branch contract on capture, capture via the canonical API, reopen from the authorized directory, stage transition round-trip, interaction append, follow-up scheduling, follow-up terminal transition, no uncaught console errors, no failed network requests. It asserts **nothing** for automation rules, conversion, campaigns, catalog maintenance, evidence/provenance, denial paths or separation of duties. For scale, the certified closures documented run totals of 24 (Library), 26 (Documents) and 38 (Privacy). | Extend the journey to assert the workflows the domain actually claims — including provoked denials, cross-branch refusal, idempotent replay and terminal-state refusal — and report a real-browser total, not a source-level count. |
+| G7 | **No `verify:browser:crm` npm alias.** | `package.json` defines `verify:browser`, `:structure`, `:library`, `:documents` and `:privacy`. The CRM journey is invoked in CI only by direct `node scripts/runtime/crm-browser-e2e.mjs` in `.github/workflows/crm-browser-e2e.yml`. | Add the alias so the CRM journey is locally runnable on the same contract as its siblings. CI coverage exists; local parity does not. |
+| G8 | **Security/scope matrix not yet proven at the CRM boundary in a browser.** | Backend tests cover branch provenance, organization scope and fail-closed unknown provenance. No CRM browser evidence exists for manager cross-branch denial, unauthorized mutation, invalid lifecycle transition, idempotency conflict/replay or concurrent mutation as *observed operator behaviour*. | Execute the full §5 matrix against CRM and record it, per `docs/OPERATING-CONTROL.md` §5. A UI hiding a control is never a substitute for server authorization — and server authorization already proven in PHPUnit still needs the browser-layer denial evidence. |
+
+G1–G8 are the closure inventory. They are derived from this registry and the
+operating control state, and they are not a second source of truth: if inspection
+at the then-current HEAD contradicts a row, the row is wrong and must be
+corrected before it is relied on.
+
+### 3.4 Closed predecessors
+
+Their per-dimension evidence chains live in their own audits and are deliberately
+not restated here, because a registry row is not a closure report:
+
+| Domain | Closed by | Evidence owner |
+|---|---|---|
+| Library & Resources | PR #26 | `docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md` |
+| Documents & Evidence | PR #26 | `docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md` |
+| Privacy & Consent | PR #29 (`27b96d8`); current HEAD `b824efd` re-verified after documentation-only PR #30 | `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md` |
+
+Privacy's closure remains the reference standard for what "closed" means in this
+repository: consent as a lifecycle fact and never a boolean flag; erasure as
+revocation/expiry/archive over retained evidence and never a row deletion; and an
+organization-wide release requiring two distinct approver signatures with its
+requester excluded and execution decided at organization scope. CRM closure is
+held to the same evidentiary standard, not a lighter one.
 
 ## 4. Domain closure trace
 
