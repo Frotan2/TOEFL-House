@@ -6,6 +6,7 @@ namespace Tests\Feature\Api;
 
 use App\Modules\Documents\Commands\DefineDocumentClassification;
 use App\Modules\Documents\Commands\RegisterDocument;
+use App\Modules\Documents\Commands\TransitionDocument;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Identity\Models\UserAccount;
 use App\Modules\Organization\Models\Branch;
@@ -135,7 +136,11 @@ final class DocumentsApiFeatureTest extends TestCase
         $this->assertFalse($payload['available_actions']['register']);
         $this->assertTrue($payload['available_actions']['verify']);
         $this->assertFalse($payload['documents'][0]['available_actions']['submit']);
-        $this->assertTrue($payload['documents'][0]['available_actions']['verify']);
+        // The visible document is a draft: row affordances are lifecycle-legal,
+        // so a draft never offers verify even to a holder of documents.verify
+        // (the workspace-level verify flag above remains the capability echo).
+        $this->assertFalse($payload['documents'][0]['available_actions']['verify']);
+        $this->assertFalse($payload['documents'][0]['available_actions']['activate']);
         $this->assertSame('server_access_decision', $payload['policy']['authority']);
         $this->assertStringNotContainsString('storage/private/', $response->getContent());
         $this->assertStringNotContainsString('storage_ref', $response->getContent());
@@ -151,7 +156,7 @@ final class DocumentsApiFeatureTest extends TestCase
         $this->signIn('documents-api-union-actor');
 
         $payload = $this->getJson('/api/v1/documents')->assertOk()->json('data');
-        /** @var list<array{id: string, available_actions: array{submit: bool, verify: bool, retention: bool}}> $visibleDocuments */
+        /** @var list<array{id: string, available_actions: array{submit: bool, verify: bool, activate: bool, expire: bool, archive: bool, retention: bool}}> $visibleDocuments */
         $visibleDocuments = $payload['documents'];
         $documents = [];
         foreach ($visibleDocuments as $document) {
@@ -167,6 +172,68 @@ final class DocumentsApiFeatureTest extends TestCase
         $this->assertFalse($documents[$this->documentA]['available_actions']['retention']);
         $this->assertFalse($documents[$this->documentB]['available_actions']['submit']);
         $this->assertTrue($documents[$this->documentB]['available_actions']['retention']);
+    }
+
+    public function test_row_affordances_project_the_lifecycle_legal_action_matrix(): void
+    {
+        // The uploader and the observing verifier are different actors so the
+        // separation-of-duties boundary stays intact while the observer walks
+        // the document through every lifecycle state.
+        $uploader = $this->actorWithoutAnyCapability('documents-api-matrix-uploader');
+        $this->grantScopeAuthority($uploader->actorId, ['documents.register'], 'branch', $this->branchA);
+        $observer = $this->actorWithoutAnyCapability('documents-api-matrix-verifier');
+        $this->grantScopeAuthority($observer->actorId, ['documents.register', 'documents.verify'], 'branch', $this->branchA);
+        $this->createAccount($observer->actorId, 'documents-api-matrix-verifier');
+        $this->signIn('documents-api-matrix-verifier');
+
+        $documentId = app(RegisterDocument::class)->register(
+            $uploader,
+            $this->subjectA,
+            $this->classificationId,
+            'Matrix evidence',
+            'matrix-hash-v1',
+            'storage/private/matrix-v1',
+            'documents-api-matrix-register',
+        )['document_id'];
+
+        $transitions = app(TransitionDocument::class);
+        $document = static fn (): Document => Document::query()->findOrFail($documentId);
+
+        /**
+         * Row affordances MUST be the server's lifecycle-legal matrix: scope
+         * alone never offers an action the DocumentLifecycle table forbids
+         * (a draft never offers verify, an archived record offers nothing),
+         * and every state-legal action for the granted scope IS offered.
+         */
+        $assertRow = function (string $state, array $expected) use ($documentId): void {
+            $payload = $this->getJson('/api/v1/documents')->assertOk()->json('data');
+            $row = null;
+            foreach ($payload['documents'] as $candidate) {
+                if ($candidate['id'] === $documentId) {
+                    $row = $candidate;
+                }
+            }
+            $this->assertNotNull($row, "row for {$documentId} missing in state {$state}");
+            $this->assertSame($state, $row['lifecycle_state']);
+            $this->assertSame($expected, $row['available_actions'], "affordances in state {$state}");
+        };
+
+        $none = ['submit' => false, 'verify' => false, 'activate' => false, 'expire' => false, 'archive' => false, 'retention' => false];
+
+        $assertRow('draft', [...$none, 'submit' => true]);
+        $transitions->submit($uploader, $document(), 'matrix-hash-v2', 'storage/private/matrix-v2', 'documents-api-matrix-submit-1');
+        $assertRow('submitted', [...$none, 'verify' => true]);
+        $transitions->verify($observer, $document(), false, 'Matrix rework required.', 'documents-api-matrix-verify-1');
+        $assertRow('rejected', [...$none, 'submit' => true]);
+        $transitions->submit($uploader, $document(), 'matrix-hash-v3', 'storage/private/matrix-v3', 'documents-api-matrix-submit-2');
+        $transitions->verify($observer, $document(), true, 'Matrix evidence passes.', 'documents-api-matrix-verify-2');
+        $assertRow('verified', [...$none, 'activate' => true]);
+        $transitions->activate($observer, $document(), 'documents-api-matrix-activate');
+        $assertRow('active', [...$none, 'expire' => true, 'archive' => true]);
+        $transitions->expire($observer, $document(), 'documents-api-matrix-expire');
+        $assertRow('expired', [...$none, 'archive' => true]);
+        $transitions->archive($observer, $document(), 'documents-api-matrix-archive');
+        $assertRow('archived', $none);
     }
 
     public function test_history_is_scoped_and_projects_only_safe_append_only_evidence(): void

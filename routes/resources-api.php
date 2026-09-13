@@ -16,6 +16,7 @@ Route::prefix('resources')->name('api.resources.')->group(function (): void {
     Route::post('/assets/{assetId}/custody/release', [ResourcesApiController::class, 'releaseCustody'])->name('asset.custody.release');
     Route::post('/assets/{assetId}/disposal', [ResourcesApiController::class, 'requestDisposal'])->name('asset.disposal.request');
     Route::post('/disposals/{requestId}/approve', [ResourcesApiController::class, 'approveDisposal'])->name('asset.disposal.approve');
+    Route::post('/disposals/{requestId}/withdraw', [ResourcesApiController::class, 'withdrawDisposal'])->name('asset.disposal.withdraw');
     Route::post('/disposals/{requestId}/execute', [ResourcesApiController::class, 'executeDisposal'])->name('asset.disposal.execute');
     Route::post('/work-orders', [ResourcesApiController::class, 'requestWork'])->name('work.request');
     Route::post('/work-orders/{orderId}/approve', [ResourcesApiController::class, 'approveWork'])->name('work.approve');

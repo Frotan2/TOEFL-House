@@ -35,7 +35,7 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 | HR | HR | HR workspace | **PARTIAL** | Close employment, contracts and leave lifecycle actions. |
 | Finance | Finance | Finance workspace | **PARTIAL** | Close approvals, reversals, corrections, cash, scholarships, settlement and GL controls. |
 | Payroll / Settlement | Payroll calculation; Finance settlement truth | Payroll workspace | **PARTIAL** | Close calculate/approve/held-resolution/clearance/settlement parity. |
-| Library & Resources | Resources | Library workspace | **IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED** | **ACTIVE:** current-main runtime, browser, security/scope, concurrency and evidence gates. |
+| Library & Resources | Resources | Library workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34713414829 (head `e603db9`, branch `arena/01a09629-toefl-house`) — backend suite/invariants/concurrency, frontend, static and real-Chromium jobs all green; Library browser journey 24/24 across three sessions (lifecycle, withdrawals, provoked denials, staged approvals, canonical-route and session-hygiene records). Certification still requires merge and a Verification run on the actual `main` HEAD. |
 | Documents | Documents | Legacy / partial | **PARTIAL / HIGH PRIORITY NEXT** | Converge identity/version/classification/verification/retention workflows in React after Library closure. |
 | Privacy | Privacy | Legacy / partial | **PARTIAL** | Modernize operational controls while retaining server policy authority. |
 | Audit | Audit | Legacy / partial | **PARTIAL** | Provide scoped evidence search/read surfaces without moving authority client-side. |
@@ -52,7 +52,7 @@ The selected domain has converged in source inspection. Confirmed implementation
 - circulation issue/return/loss;
 - assets and custody;
 - facilities work lifecycle;
-- staged disposal request → approval → execution;
+- staged disposal request → approval → execution, with requester-only withdrawal while the request is unapproved (withdrawal is terminal and frees the asset for a corrected request);
 - explicit consequential actor selection;
 - evidence capture;
 - irreversible-action confirmation;

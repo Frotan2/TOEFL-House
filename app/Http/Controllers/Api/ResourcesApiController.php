@@ -163,9 +163,18 @@ final class ResourcesApiController extends Controller
 
     public function approveDisposal(string $requestId): JsonResponse
     {
-        app(DisposeAsset::class)->approve($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $this->idempotencyKey('resources.disposal.approve'));
+        $result = app(DisposeAsset::class)->approve($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $this->idempotencyKey('resources.disposal.approve'));
 
-        return response()->json(['status' => 'approved']);
+        // A first signature records the approval while the request stays
+        // 'requested'; the response must not overstate the lifecycle state.
+        return response()->json(['status' => $result['lifecycle_state']]);
+    }
+
+    public function withdrawDisposal(string $requestId): JsonResponse
+    {
+        app(DisposeAsset::class)->withdraw($this->actor(), AssetDisposalRequest::query()->findOrFail($requestId), $this->idempotencyKey('resources.disposal.withdraw'));
+
+        return response()->json(['status' => 'withdrawn']);
     }
 
     public function executeDisposal(Request $request, string $requestId): JsonResponse

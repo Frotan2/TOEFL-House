@@ -275,6 +275,7 @@ Route::middleware('employee')->group(function (): void {
         Route::post('assets/{assetId}/custody/release', [LibraryController::class, 'releaseCustody'])->name('custody.release');
         Route::post('assets/{assetId}/disposal', [LibraryController::class, 'requestDisposal'])->name('disposal.request');
         Route::post('disposals/{requestId}/approve', [LibraryController::class, 'approveDisposal'])->name('disposal.approve');
+        Route::post('disposals/{requestId}/withdraw', [LibraryController::class, 'withdrawDisposal'])->name('disposal.withdraw');
         Route::post('disposals/{requestId}/execute', [LibraryController::class, 'executeDisposal'])->name('disposal.execute');
         Route::post('work-orders', [LibraryController::class, 'requestWork'])->name('work.request');
         Route::post('work-orders/{orderId}/approve', [LibraryController::class, 'approveWork'])->name('work.approve');

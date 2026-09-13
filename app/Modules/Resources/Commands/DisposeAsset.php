@@ -16,14 +16,18 @@ use App\Support\Authorization\Actor;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
+use App\Support\Errors\ConcurrencyConflict;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Asset disposal (authority registry), staged (000115): the custodian/
  * manager session requests, two DISTINCT approver sessions each sign in
- * their own session, and the requesting session executes.
+ * their own session, and the requesting session executes. While the request
+ * is still 'requested', the requesting session may withdraw it (000209);
+ * 'withdrawn' is terminal and frees the asset for a corrected request.
  */
 final class DisposeAsset
 {
@@ -65,19 +69,25 @@ final class DisposeAsset
                     if (AssetDisposal::query()->where('asset_id', $locked->id)->exists()) {
                         throw BusinessRejection::forCode('resources.disposal_exists', 'this asset is already disposed');
                     }
-                    $pending = AssetDisposalRequest::query()->where('asset_id', $locked->id)->where('lifecycle_state', '!=', 'completed')->exists();
+                    $pending = AssetDisposalRequest::query()->where('asset_id', $locked->id)->whereNotIn('lifecycle_state', ['completed', 'withdrawn'])->exists();
                     if ($pending) {
                         throw BusinessRejection::forCode('resources.disposal_pending', 'this asset already has a disposal request in progress');
                     }
 
-                    $request = AssetDisposalRequest::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'asset_id' => $locked->id,
-                        'method' => $method,
-                        'reason' => $reason,
-                        'lifecycle_state' => 'requested',
-                        'requested_by' => $requester->actorId,
-                    ]);
+                    try {
+                        $request = AssetDisposalRequest::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'asset_id' => $locked->id,
+                            'method' => $method,
+                            'reason' => $reason,
+                            'lifecycle_state' => 'requested',
+                            'requested_by' => $requester->actorId,
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Defense in depth behind the asset row lock: the partial
+                        // unique index remains the authority on one active request.
+                        throw ConcurrencyConflict::forCode('resources.disposal_active.concurrent', 'a concurrent session already opened a disposal request for this asset');
+                    }
                     $event = $this->audit->record($requester->actorId, 'resources.disposal.request', 'asset_disposal_request', $request->id, null, [
                         'asset_id' => $locked->id, 'method' => $method,
                         'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,
@@ -137,6 +147,47 @@ final class DisposeAsset
             );
         } catch (AuthorizationDenied $denial) {
             $this->attemptedOperation->deniedByActor($denial, $approver, 'resources.disposal.approve', 'asset_disposal_request', $request->id);
+        }
+    }
+
+    /** @return array{request_id: string, lifecycle_state: string, correlation_id: string} */
+    public function withdraw(Actor $requester, AssetDisposalRequest $request, string $idempotencyKey): array
+    {
+        $payload = hash('sha256', implode('|', ['resources.disposal.withdraw', $request->id, $requester->actorId]));
+
+        try {
+            return $this->idempotency->execute('resources.disposal.withdraw', $idempotencyKey, $payload,
+                fn (): array => DB::transaction(function () use ($requester, $request): array {
+                    /** @var AssetDisposalRequest $locked */
+                    $locked = AssetDisposalRequest::query()->whereKey($request->id)->lockForUpdate()->firstOrFail();
+                    if ($locked->lifecycle_state !== 'requested') {
+                        throw BusinessRejection::forCode('resources.disposal_request_state', sprintf('only a requested disposal can be withdrawn; it is %s', $locked->lifecycle_state));
+                    }
+                    if (trim((string) $locked->requested_by) !== $requester->actorId) {
+                        throw AuthorizationDenied::forCode('resources.disposal_withdrawer', 'only the requesting session withdraws its own disposal request');
+                    }
+
+                    /** @var Asset $asset */
+                    $asset = Asset::query()->whereKey($locked->asset_id)->lockForUpdate()->firstOrFail();
+                    $scope = ResourceScope::fromStored($asset->originating_branch_id, $asset->organization_id);
+                    $this->require($requester, self::CAPABILITY_REQUEST, $scope);
+
+                    $locked->forceFill(['lifecycle_state' => 'withdrawn', 'withdrawn_by' => $requester->actorId]);
+                    $locked->save();
+
+                    $event = $this->audit->record($requester->actorId, 'resources.disposal.withdraw', 'asset_disposal_request', $locked->id, ['lifecycle_state' => 'requested'], [
+                        'asset_id' => $locked->asset_id,
+                        'method' => $locked->method,
+                        'lifecycle_state' => 'withdrawn',
+                        'branch_id' => $scope->branchId,
+                        'organization_id' => $scope->organizationId,
+                    ]);
+
+                    return ['request_id' => $locked->id, 'lifecycle_state' => 'withdrawn', 'correlation_id' => $event->correlation_id];
+                }),
+            );
+        } catch (AuthorizationDenied $denial) {
+            $this->attemptedOperation->deniedByActor($denial, $requester, 'resources.disposal.withdraw', 'asset_disposal_request', $request->id);
         }
     }
 

@@ -300,6 +300,293 @@ async function chartAccountCodeRace() {
   }
 }
 
+async function createLibraryRaceTopology() {
+  const organizationId = randomUUID();
+  const campusId = randomUUID();
+  const branchId = randomUUID();
+  const assignmentId = randomUUID();
+
+  await oneConnection(async (client) => {
+    await client.query(
+      "INSERT INTO organizations (id, name, lifecycle_state) VALUES ($1, 'Runtime library race organization', 'active')",
+      [organizationId],
+    );
+    await client.query(
+      "INSERT INTO campuses (id, organization_id, name, lifecycle_state) VALUES ($1, $2, 'Runtime library race campus', 'active')",
+      [campusId, organizationId],
+    );
+    await client.query(
+      "INSERT INTO branches (id, name, lifecycle_state) VALUES ($1, 'Runtime library race branch', 'active')",
+      [branchId],
+    );
+    await client.query(
+      'INSERT INTO campus_assignments (id, branch_id, campus_id, effective_from, transfer_correlation_id) VALUES ($1, $2, $3, CURRENT_DATE, $4)',
+      [assignmentId, branchId, campusId, randomUUID()],
+    );
+  });
+
+  return { organizationId, campusId, branchId, assignmentId };
+}
+
+async function cleanupLibraryRaceTopology(topology) {
+  await oneConnection(async (client) => {
+    await client.query('DELETE FROM campus_assignments WHERE id = $1', [topology.assignmentId]);
+    await client.query('DELETE FROM branches WHERE id = $1', [topology.branchId]);
+    await client.query('DELETE FROM campuses WHERE id = $1', [topology.campusId]);
+    await client.query('DELETE FROM organizations WHERE id = $1', [topology.organizationId]);
+  });
+  await assertNoRows('library race branch', 'SELECT count(*)::int AS count FROM branches WHERE id = $1', [topology.branchId]);
+}
+
+async function insertLibraryRacePerson(client, personId, label, homeBranchId) {
+  await client.query(
+    'INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, $2, \'1980-01-01\', \'unverified\', $3)',
+    [personId, label, homeBranchId],
+  );
+}
+
+async function openBookIssuanceRace() {
+  const topology = await createLibraryRaceTopology();
+  const copyId = randomUUID();
+  const copyCode = `RUNTIME-COPY-${randomUUID()}`;
+  const borrowers = [randomUUID(), randomUUID()];
+
+  await oneConnection(async (client) => {
+    await insertLibraryRacePerson(client, borrowers[0], 'Runtime race borrower one', topology.branchId);
+    await insertLibraryRacePerson(client, borrowers[1], 'Runtime race borrower two', topology.branchId);
+    await client.query(
+      'INSERT INTO book_copies (id, code, title, acquired_on, organization_id, originating_branch_id) VALUES ($1, $2, \'Runtime race volume\', CURRENT_DATE, $3, $4)',
+      [copyId, copyCode, topology.organizationId, topology.branchId],
+    );
+  });
+
+  try {
+    const race = await raceTransactions(borrowers.map((personId) => async (client) => {
+      await client.query(
+        `
+          INSERT INTO book_issuances (id, copy_id, borrower_person_id, issued_on, due_on, lifecycle_state, issued_by)
+          VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '30 days', 'issued', $4)
+        `,
+        [randomUUID(), copyId, personId, randomUUID()],
+      );
+    }));
+
+    return assertOneWinner('one open issuance per library copy', race, 'book_issuances_one_open_per_copy');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM book_issuances WHERE copy_id = $1', [copyId]);
+    await deleteAppendOnlyRows('DELETE FROM book_copies WHERE id = $1', [copyId]);
+    await oneConnection(async (client) => {
+      await client.query('DELETE FROM people WHERE id = $1', [borrowers[0]]);
+      await client.query('DELETE FROM people WHERE id = $1', [borrowers[1]]);
+    });
+    await cleanupLibraryRaceTopology(topology);
+    await assertNoRows('library issuance race', 'SELECT count(*)::int AS count FROM book_issuances WHERE copy_id = $1', [copyId]);
+    await assertNoRows('library copy race', 'SELECT count(*)::int AS count FROM book_copies WHERE id = $1', [copyId]);
+  }
+}
+
+async function openAssetCustodyRace() {
+  const topology = await createLibraryRaceTopology();
+  const assetId = randomUUID();
+  const assetCode = `RUNTIME-ASSET-${randomUUID()}`;
+  const custodians = [randomUUID(), randomUUID()];
+
+  await oneConnection(async (client) => {
+    await insertLibraryRacePerson(client, custodians[0], 'Runtime race custodian one', topology.branchId);
+    await insertLibraryRacePerson(client, custodians[1], 'Runtime race custodian two', topology.branchId);
+    await client.query(
+      `
+        INSERT INTO assets (id, code, name, category, location, acquired_on, lifecycle_state, organization_id, originating_branch_id)
+        VALUES ($1, $2, 'Runtime race asset', 'equipment', 'Room 1', CURRENT_DATE, 'in_service', $3, $4)
+      `,
+      [assetId, assetCode, topology.organizationId, topology.branchId],
+    );
+  });
+
+  try {
+    const race = await raceTransactions(custodians.map((personId) => async (client) => {
+      await client.query(
+        `
+          INSERT INTO custodies (id, asset_id, custodian_person_id, assigned_on, assigned_by)
+          VALUES ($1, $2, $3, CURRENT_DATE, $4)
+        `,
+        [randomUUID(), assetId, personId, randomUUID()],
+      );
+    }));
+
+    return assertOneWinner('one open custody per asset', race, 'custodies_one_open_per_asset');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM custodies WHERE asset_id = $1', [assetId]);
+    await deleteAppendOnlyRows('DELETE FROM assets WHERE id = $1', [assetId]);
+    await oneConnection(async (client) => {
+      await client.query('DELETE FROM people WHERE id = $1', [custodians[0]]);
+      await client.query('DELETE FROM people WHERE id = $1', [custodians[1]]);
+    });
+    await cleanupLibraryRaceTopology(topology);
+    await assertNoRows('custody race', 'SELECT count(*)::int AS count FROM custodies WHERE asset_id = $1', [assetId]);
+    await assertNoRows('asset race', 'SELECT count(*)::int AS count FROM assets WHERE id = $1', [assetId]);
+  }
+}
+
+async function stagedDisposalApprovalRace() {
+  const topology = await createLibraryRaceTopology();
+  const assetId = randomUUID();
+  const assetCode = `RUNTIME-DISPOSAL-${randomUUID()}`;
+  const requesterId = randomUUID();
+  const requestId = randomUUID();
+
+  await oneConnection(async (client) => {
+    await client.query(
+      `
+        INSERT INTO assets (id, code, name, category, location, acquired_on, lifecycle_state, organization_id, originating_branch_id)
+        VALUES ($1, $2, 'Runtime race disposal asset', 'equipment', 'Room 2', CURRENT_DATE, 'in_service', $3, $4)
+      `,
+      [assetId, assetCode, topology.organizationId, topology.branchId],
+    );
+    await client.query(
+      `
+        INSERT INTO asset_disposal_requests (id, asset_id, method, reason, lifecycle_state, requested_by, created_at, updated_at)
+        VALUES ($1, $2, 'scrap', 'runtime race disposal request', 'requested', $3, NOW(), NOW())
+      `,
+      [requestId, assetId, requesterId],
+    );
+  });
+
+  try {
+    const contenders = [
+      [randomUUID(), randomUUID()],
+      [randomUUID(), randomUUID()],
+    ];
+    const race = await raceTransactions(
+      contenders.map(([first, second]) => async (client) => {
+        await client.query(
+          `
+            UPDATE asset_disposal_requests
+            SET lifecycle_state = 'approved', approver_one_id = $1, approver_two_id = $2, updated_at = NOW()
+            WHERE id = $3
+          `,
+          [first, second, requestId],
+        );
+      }),
+      async (client) => {
+        const { rows } = await client.query('SELECT lifecycle_state FROM asset_disposal_requests WHERE id = $1', [requestId]);
+        if (rows.length !== 1 || rows[0].lifecycle_state !== 'requested') {
+          throw new Error('a contender did not observe the requested state before the contested approval');
+        }
+      },
+    );
+    const committed = race.outcomes.filter((outcome) => outcome.state === 'committed');
+    const rejected = race.outcomes.filter((outcome) => outcome.state === 'rejected');
+    // The stale writer re-evaluates against the committed row and is stopped
+    // by the write-once approver-slot guard, which fires before the
+    // transition guard on the second trigger.
+    const staleWriter = rejected.find((outcome) => {
+      const error = outcome.error && typeof outcome.error === 'object' ? outcome.error : {};
+
+      return String(error.message ?? '').includes('first disposal approver is immutable');
+    });
+    if (committed.length !== 1 || rejected.length !== 1 || staleWriter === undefined) {
+      throw new Error(
+        `staged asset disposal approval: expected one approval and one rejected stale writer; observed ${race.outcomes.map((outcome) => outcome.state === 'committed' ? 'committed' : describeError(outcome.error)).join(' | ')}`,
+      );
+    }
+
+    return `backends=${race.pids.join(', ')}; one requested→approved transition committed, stale writer rejected by the write-once approver-slot guard`;
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM asset_disposal_requests WHERE id = $1', [requestId]);
+    await deleteAppendOnlyRows('DELETE FROM assets WHERE id = $1', [assetId]);
+    await cleanupLibraryRaceTopology(topology);
+    await assertNoRows('staged disposal race request', 'SELECT count(*)::int AS count FROM asset_disposal_requests WHERE id = $1', [requestId]);
+    await assertNoRows('staged disposal race asset', 'SELECT count(*)::int AS count FROM assets WHERE id = $1', [assetId]);
+  }
+}
+
+/**
+ * Documents race fixture: one subject person, one classification and one
+ * submitted document, created before the race and removed after it.
+ */
+async function createDocumentsRaceFixture() {
+  const personId = randomUUID();
+  const classificationId = randomUUID();
+  const documentId = randomUUID();
+  await oneConnection(async (client) => {
+    await client.query(
+      "INSERT INTO people (id, legal_name, date_of_birth, verification_state) VALUES ($1, 'Runtime documents race person', '1980-01-01', 'unverified')",
+      [personId],
+    );
+    await client.query(
+      "INSERT INTO document_classifications (id, category, owner_module, access_class) VALUES ($1, $2, 'documents-runtime', 'restricted')",
+      [classificationId, `runtime-race-${classificationId}`],
+    );
+    await client.query(
+      "INSERT INTO documents (id, subject_person_id, classification_id, title, lifecycle_state) VALUES ($1, $2, $3, 'Runtime documents race document', 'submitted')",
+      [documentId, personId, classificationId],
+    );
+  });
+
+  return { personId, classificationId, documentId };
+}
+
+async function cleanupDocumentsRaceFixture(fixture) {
+  await oneConnection(async (client) => {
+    await client.query('DELETE FROM documents WHERE id = $1', [fixture.documentId]);
+    await client.query('DELETE FROM document_classifications WHERE id = $1', [fixture.classificationId]);
+    await client.query('DELETE FROM people WHERE id = $1', [fixture.personId]);
+  });
+  await assertNoRows('documents race document', 'SELECT count(*)::int AS count FROM documents WHERE id = $1', [fixture.documentId]);
+  await assertNoRows('documents race person', 'SELECT count(*)::int AS count FROM people WHERE id = $1', [fixture.personId]);
+}
+
+async function documentVersionAppendRace() {
+  const fixture = await createDocumentsRaceFixture();
+  await oneConnection((client) => client.query(
+    "INSERT INTO document_versions (id, document_id, version_no, content_hash, storage_ref, uploaded_by) VALUES ($1, $2, 1, 'runtime-race-v1', 'storage/runtime-race-v1', $3)",
+    [randomUUID(), fixture.documentId, fixture.personId],
+  ));
+
+  try {
+    // Two concurrent submissions both compute max(version_no)+1 = 2. The
+    // command row-lock serializes application writers; this race proves the
+    // migrated uniqueness boundary independently defeats the duplicate even
+    // for writers that bypass the command entirely.
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        "INSERT INTO document_versions (id, document_id, version_no, content_hash, storage_ref, uploaded_by) VALUES ($1, $2, 2, $3, 'storage/runtime-race-v2', $4)",
+        [randomUUID(), fixture.documentId, `runtime-race-v2-contender-${contender}`, fixture.personId],
+      );
+    }));
+
+    return assertOneWinner('concurrent document version append', race, 'document_versions_document_id_version_no_unique');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM document_versions WHERE document_id = $1', [fixture.documentId]);
+    await cleanupDocumentsRaceFixture(fixture);
+    await assertNoRows('documents race versions', 'SELECT count(*)::int AS count FROM document_versions WHERE document_id = $1', [fixture.documentId]);
+  }
+}
+
+async function documentVerdictRace() {
+  const fixture = await createDocumentsRaceFixture();
+
+  try {
+    // Two concurrent verifiers race to record THE verdict for version 1.
+    // The command serializes on the document row lock and the loser sees the
+    // moved state; this race proves the named unique index independently
+    // guarantees one verdict per version against any writer.
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        "INSERT INTO document_verifications (id, document_id, version_no, verifier_person_id, result, reason) VALUES ($1, $2, 1, $3, $4, $5)",
+        [randomUUID(), fixture.documentId, fixture.personId, contender === 0 ? 'pass' : 'fail', `runtime race verdict ${contender}`],
+      );
+    }));
+
+    return assertOneWinner('single verdict per document version', race, 'document_verifications_one_verdict_per_version');
+  } finally {
+    await deleteAppendOnlyRows('DELETE FROM document_verifications WHERE document_id = $1', [fixture.documentId]);
+    await cleanupDocumentsRaceFixture(fixture);
+    await assertNoRows('documents race verdicts', 'SELECT count(*)::int AS count FROM document_verifications WHERE document_id = $1', [fixture.documentId]);
+  }
+}
+
 async function verify(name, operation) {
   try {
     record(name, true, await operation());
@@ -317,6 +604,19 @@ try {
       { table: 'scope_grants', privileges: ['SELECT', 'INSERT', 'DELETE'] },
       { table: 'org_wide_grant_requests', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
       { table: 'accounts', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'organizations', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'campuses', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'branches', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'campus_assignments', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'book_copies', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'book_issuances', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'assets', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'custodies', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'asset_disposal_requests', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'document_classifications', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'documents', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'document_versions', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'document_verifications', privileges: ['SELECT', 'INSERT', 'DELETE'] },
     ],
   });
 
@@ -324,6 +624,11 @@ try {
   await verify('single active scope-grant race', scopeGrantRace);
   await verify('staged organization-wide approval race', stagedOrganizationGrantRace);
   await verify('chart-of-accounts code race', chartAccountCodeRace);
+  await verify('one open library issuance race', openBookIssuanceRace);
+  await verify('one open asset custody race', openAssetCustodyRace);
+  await verify('staged asset disposal approval race', stagedDisposalApprovalRace);
+  await verify('concurrent document version append race', documentVersionAppendRace);
+  await verify('single verdict per document version race', documentVerdictRace);
 
   const passed = results.filter((result) => result.pass).length;
   console.log(`Concurrency verification: ${passed}/${results.length} production-table races passed.`);

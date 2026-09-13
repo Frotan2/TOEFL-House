@@ -15,8 +15,10 @@ use App\Support\Authorization\PersonBranchScope;
 use App\Support\Authorization\StructureScope;
 use App\Support\Errors\AuthorizationDenied;
 use App\Support\Errors\BusinessRejection;
+use App\Support\Errors\ConcurrencyConflict;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -49,17 +51,23 @@ final class MaintainAsset
                         throw BusinessRejection::forCode('resources.asset_code_exists', 'this asset code already exists');
                     }
 
-                    $asset = Asset::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'organization_id' => $scope->organizationId,
-                        'originating_branch_id' => $scope->branchId,
-                        'code' => $code,
-                        'name' => $name,
-                        'category' => $category,
-                        'location' => $location,
-                        'acquired_on' => $acquiredOn,
-                        'lifecycle_state' => 'in_service',
-                    ]);
+                    try {
+                        $asset = Asset::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'organization_id' => $scope->organizationId,
+                            'originating_branch_id' => $scope->branchId,
+                            'code' => $code,
+                            'name' => $name,
+                            'category' => $category,
+                            'location' => $location,
+                            'acquired_on' => $acquiredOn,
+                            'lifecycle_state' => 'in_service',
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // The code pre-check and this insert are separated by a
+                        // real race window; the unique index is the authority.
+                        throw ConcurrencyConflict::forCode('resources.asset_code.concurrent', 'a concurrent session already registered this asset code');
+                    }
                     $event = $this->audit->record($actor->actorId, 'resources.asset.register', 'asset', $asset->id, null, [
                         'code' => $code, 'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,
                     ]);
@@ -111,13 +119,19 @@ final class MaintainAsset
                         $open->save();
                     }
 
-                    $custody = Custody::query()->create([
-                        'id' => RandomIdentifier::new(),
-                        'asset_id' => $locked->id,
-                        'custodian_person_id' => $custodianPersonId,
-                        'assigned_on' => $assignedOn,
-                        'assigned_by' => $actor->actorId,
-                    ]);
+                    try {
+                        $custody = Custody::query()->create([
+                            'id' => RandomIdentifier::new(),
+                            'asset_id' => $locked->id,
+                            'custodian_person_id' => $custodianPersonId,
+                            'assigned_on' => $assignedOn,
+                            'assigned_by' => $actor->actorId,
+                        ]);
+                    } catch (UniqueConstraintViolationException) {
+                        // Defense in depth behind the asset row lock: the partial
+                        // unique index remains the authority on one open custody.
+                        throw ConcurrencyConflict::forCode('resources.custody_open.concurrent', 'a concurrent session already opened custody for this asset');
+                    }
                     $event = $this->audit->record($actor->actorId, 'resources.custody.assign', 'custody', $custody->id, null, [
                         'asset_id' => $locked->id, 'custodian' => $custodianPersonId,
                         'branch_id' => $scope->branchId, 'organization_id' => $scope->organizationId,

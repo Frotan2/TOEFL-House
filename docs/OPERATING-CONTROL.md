@@ -11,7 +11,7 @@
 
 - **Authoritative branch:** `main`
 - **Active domain:** Library & Resources
-- **Active domain status:** **IMPLEMENTATION COMPLETE / RUNTIME-UNVERIFIED**
+- **Active domain status:** **VERIFIED** — all Library closure gates were executed and observed green on branch `arena/01a09629-toefl-house` (Verification run 34713414829, head `e603db9`, plus workflow/docs-only successors). `RELEASE CERTIFIED` still requires the merge and a passing Verification run on the actual `main` HEAD.
 - **Next allowed domain:** Documents, but only after Library is closed and a fresh reassessment is performed.
 - **Release status:** **NOT CURRENTLY CERTIFIED** until the latest non-superseded Verification evidence for the actual `main` HEAD passes all applicable gates.
 

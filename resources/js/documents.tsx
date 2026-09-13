@@ -11,7 +11,7 @@ type DocumentRow = {
   classification_id: string;
   title: string;
   lifecycle_state: string;
-  available_actions: { submit: boolean; verify: boolean; retention: boolean };
+  available_actions: { submit: boolean; verify: boolean; activate: boolean; expire: boolean; archive: boolean; retention: boolean };
   created_at: string | null;
   updated_at: string | null;
 };
@@ -57,8 +57,10 @@ const recordedAt = (value: string | null) => {
 
 /**
  * Documents is a browser projection over the canonical server commands. It
- * deliberately receives no storage references and uses `available_actions`
- * only to shape the interface: command handlers re-authorize every write.
+ * deliberately receives no storage references and renders the server's
+ * state-legal `available_actions` matrix verbatim: the lifecycle table is
+ * never re-derived in the browser, and command handlers re-authorize every
+ * write.
  */
 export function DocumentsApp({ getJson, postJson, csrfToken }: Props) {
   const [data, setData] = useState<WorkspaceData | null>(null);
@@ -249,7 +251,7 @@ export function DocumentsApp({ getJson, postJson, csrfToken }: Props) {
         {filteredDocuments.length === 0 ? <p className="empty">No authorized documents match the current filter.</p> : <div className="table-wrap"><table><thead><tr><th>Document</th><th>Subject</th><th>Classification</th><th>Lifecycle</th><th>Recorded</th><th>Actions</th></tr></thead><tbody>{filteredDocuments.map((document) => {
           const person = peopleById.get(document.subject_person_id);
           const documentClass = classificationsById.get(document.classification_id);
-          return <tr key={document.id}><td><strong>{document.title}</strong><small className="documents-id">{compactId(document.id)}</small></td><td>{person?.legal_name ?? compactId(document.subject_person_id)}<small className="documents-id">{person?.branch_id ?? 'Scoped record'}</small></td><td>{documentClass?.category ?? compactId(document.classification_id)}<small className="documents-id">{documentClass?.access_class ?? 'classification unavailable'}</small></td><td><span className="status-chip">{titleCase(document.lifecycle_state)}</span></td><td>{recordedAt(document.updated_at ?? document.created_at)}</td><td><div className="action-strip documents-actions"><button type="button" className="button small secondary" onClick={() => openHistory(document)} disabled={busy}>History</button>{document.available_actions.submit && ['draft', 'rejected'].includes(document.lifecycle_state) && <button type="button" className="button small" onClick={() => actionForm('submit', document)} disabled={busy}>Submit version</button>}{document.available_actions.verify && document.lifecycle_state === 'submitted' && <button type="button" className="button small" onClick={() => actionForm('verify', document)} disabled={busy}>Verify</button>}{document.available_actions.verify && document.lifecycle_state === 'verified' && <button type="button" className="button small" onClick={() => transition(document, 'activate')} disabled={busy}>Activate</button>}{document.available_actions.verify && document.lifecycle_state === 'active' && <button type="button" className="button small secondary" onClick={() => transition(document, 'expire')} disabled={busy}>Expire</button>}{document.available_actions.verify && ['active', 'expired'].includes(document.lifecycle_state) && <button type="button" className="button small secondary" onClick={() => transition(document, 'archive')} disabled={busy}>Archive</button>}{document.available_actions.retention && <button type="button" className="button small secondary" onClick={() => transition(document, 'retention')} disabled={busy}>Retention</button>}</div></td></tr>;
+          return <tr key={document.id}><td><strong>{document.title}</strong><small className="documents-id">{compactId(document.id)}</small></td><td>{person?.legal_name ?? compactId(document.subject_person_id)}<small className="documents-id">{person?.branch_id ?? 'Scoped record'}</small></td><td>{documentClass?.category ?? compactId(document.classification_id)}<small className="documents-id">{documentClass?.access_class ?? 'classification unavailable'}</small></td><td><span className="status-chip">{titleCase(document.lifecycle_state)}</span></td><td>{recordedAt(document.updated_at ?? document.created_at)}</td><td><div className="action-strip documents-actions"><button type="button" className="button small secondary" onClick={() => openHistory(document)} disabled={busy}>History</button>{document.available_actions.submit && <button type="button" className="button small" onClick={() => actionForm('submit', document)} disabled={busy}>Submit version</button>}{document.available_actions.verify && <button type="button" className="button small" onClick={() => actionForm('verify', document)} disabled={busy}>Verify</button>}{document.available_actions.activate && <button type="button" className="button small" onClick={() => transition(document, 'activate')} disabled={busy}>Activate</button>}{document.available_actions.expire && <button type="button" className="button small secondary" onClick={() => transition(document, 'expire')} disabled={busy}>Expire</button>}{document.available_actions.archive && <button type="button" className="button small secondary" onClick={() => transition(document, 'archive')} disabled={busy}>Archive</button>}{document.available_actions.retention && <button type="button" className="button small secondary" onClick={() => transition(document, 'retention')} disabled={busy}>Retention</button>}</div></td></tr>;
         })}</tbody></table></div>}
       </section>}
 
