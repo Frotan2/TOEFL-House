@@ -14,6 +14,7 @@
     "verify:browser:library": "node scripts/runtime/library-browser-e2e.mjs",
     "verify:browser:documents": "node scripts/runtime/documents-browser-e2e.mjs",
     "verify:browser:privacy": "node scripts/runtime/privacy-browser-e2e.mjs",
+    "verify:browser:students": "node scripts/runtime/students-admissions-browser-e2e.mjs",
     "verify:environment": "node scripts/runtime/verify-environment.mjs"
   },
   "devDependencies": {
