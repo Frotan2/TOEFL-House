@@ -174,42 +174,6 @@ jobs:
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: npm ci --engine-strict
       - run: cp .env.example .env && php artisan key:generate
-      # Temporary evidence channel. This operator cannot download CI logs (the
-      # log blob host is unreachable from the sandbox), so every gate that can
-      # fail mirrors its decisive lines into workflow annotations, which are
-      # readable through the REST API. The gates themselves are unchanged and
-      # still decide the job. Retire this helper when the run is green.
-      - name: Install failure evidence helper
-        run: |
-          cat > /tmp/annot.sh <<'HELPER'
-          emit() {
-            level="$1"; title="$2"
-            while IFS= read -r line; do
-              [ -n "$line" ] || continue
-              printf '::%s title=%s::%s\n' "$level" "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
-            done
-          }
-          # GitHub keeps only a handful of annotations per level per run, so the
-          # budget is spent deliberately: the tool's own summary first (every
-          # gate prints one last), then the matched detail lines, stack frames
-          # dropped.
-          annotate() {
-            title="$1"; log="$2"; limit="${3:-6}"; pattern="${4:-}"
-            [ -s "$log" ] || return 0
-            if [ -z "$pattern" ]; then pattern='FAIL|ERROR|Error|error|Exception|Tests: |^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php'; fi
-            tail -n "$limit" "$log" | emit error "$title-summary"
-            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | head -n "$limit" | emit warning "$title"
-            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | sed -n "$((limit + 1)),$((limit * 3))p" | emit notice "$title-detail"
-          }
-          run_logged() {
-            title="$1"; log="$2"; shift 2
-            set +e
-            "$@" 2>&1 | tee "$log"
-            code=${PIPESTATUS[0]}
-            if [ "$code" -ne 0 ]; then annotate "$title" "$log" "${ANNOTATE_LINES:-6}" "${ANNOTATE_PATTERN:-}"; fi
-            return "$code"
-          }
-          HELPER
       - run: npm run verify:environment
       - run: php artisan migrate:fresh --force
       - run: php artisan db:seed --class=StandardFinanceChartSeeder --force
@@ -259,43 +223,19 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
-          # A journey log is short and its FAIL detail lines carry the observed
-          # projection, so mirror all of it rather than a filtered subset.
-          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
-          ANNOTATE_LINES: '8'
-        run: |
-          . /tmp/annot.sh
-          run_logged browser-e2e /tmp/browser.log npm run verify:browser
+        run: npm run verify:browser
       - name: Run Library browser E2E
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
-          # A journey log is short and its FAIL detail lines carry the observed
-          # projection, so mirror all of it rather than a filtered subset.
-          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
-          ANNOTATE_LINES: '8'
-        run: |
-          . /tmp/annot.sh
-          run_logged library-browser-e2e /tmp/library-browser.log npm run verify:browser:library
+        run: npm run verify:browser:library
       - name: Run Documents browser E2E
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
-          # A journey log is short and its FAIL detail lines carry the observed
-          # projection, so mirror all of it rather than a filtered subset.
-          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
-          ANNOTATE_LINES: '8'
-        run: |
-          . /tmp/annot.sh
-          run_logged documents-browser-e2e /tmp/documents-browser.log npm run verify:browser:documents
+        run: npm run verify:browser:documents
       - name: Run Privacy browser E2E
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
-          # A journey log is short and its FAIL detail lines carry the observed
-          # projection, so mirror all of it rather than a filtered subset.
-          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
-          ANNOTATE_LINES: '8'
-        run: |
-          . /tmp/annot.sh
-          run_logged privacy-browser-e2e /tmp/privacy-browser.log npm run verify:browser:privacy
+        run: npm run verify:browser:privacy

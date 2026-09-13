@@ -2,13 +2,14 @@
 
 **Verdict: CLOSED** — every proven defect is fixed at the layer that owns it,
 regression-tested, and rehearsed in a real browser. Verification run
-**34741595867** (tree `05aecf6`) passed **all four jobs** with the Privacy
-browser journey at **38/38 checks** across four isolated Chromium sessions;
-CRM Browser E2E run 34741595850 passed alongside. The run before it,
-34741188832 (tree `30c0a70`), had already proved the backend suite, the
-canonical suite, the runtime invariants and races, every frontend gate and all
-four browser journeys green, and failed only on three PHPStan property errors
-(P13), which the closure tree fixes. The temporary CI evidence
+**34742746987** (tree `55fc461`) passed **all four jobs** — static analysis,
+the full backend job, every frontend gate, and the Browser E2E job with all
+four journeys, the Privacy journey at **38/38 checks** across four isolated
+Chromium sessions; CRM Browser E2E run 34742746986 passed alongside. Run
+34741595867 (tree `05aecf6`) had already proved the same four jobs green on the
+tree that fixed the last PHPStan error, and 34741188832 (tree `30c0a70`) before
+it proved the backend suite, the canonical suite, the runtime invariants and
+races, every frontend gate and all four browser journeys green. The temporary CI evidence
 channel used to read those results is retired in the closure commit, the same
 lifecycle the Library and Documents channels had.
 
@@ -73,6 +74,8 @@ the refreshed projection*.
 | 34740680278 | `7ed900b` | 34/38 (same tree behaviour, evidence channel only) | confirmed the four failures were read races, not server state: the same-actor refusal downstream observed the filled slot, proving the write had landed |
 | **34741188832** | **`30c0a70`** | **38/38 PASS, exit 0** | — (green: full lifecycle, provoked denials, staged chain, subject-side boundary, canonical mutations only, four clean sessions) |
 | **34741595867** | **`05aecf6`** | **38/38 PASS, exit 0** | — (re-proved on the closure tree; PHPStan fix only) |
+| 34742078457 | `9440e41` | **not reached** — the shared smoke journey failed first and the remaining journeys were skipped | the smoke journey's one-shot console read (§ The same race in the shared smoke journey) |
+| **34742746987** | **`55fc461`** | **38/38 PASS, exit 0** | — (green behind a hardened smoke journey; all four journeys ran) |
 
 Fixes: `waitForRow()` polls until a created row exists in the refreshed
 projection, and `waitForRowCellSettled()` polls until an approver slot is no
@@ -81,6 +84,27 @@ come from one consistent post-command paint. Reads that follow a **denied**
 command are deliberately left one-shot: a denial performs no refresh, so the
 unchanged view is the correct expectation, and a genuine projection defect must
 still record a FAIL rather than time out.
+
+### The same race in the shared smoke journey
+
+Adding `/privacy` to the general journey's console tour exposed the identical
+defect one level up: the tour read each console **once**, immediately after
+`page.goto(…, { waitUntil: 'networkidle2' })`, and a console mounts
+asynchronously — `networkidle2` can settle in the gap before React has painted,
+so `mounted` and the expected-text match were sampled from an unpainted
+document. The closure commit's run (34742078457) failed exactly there, in the
+Browser E2E job's first step, with Library, Documents and Privacy skipped
+behind it, on a tree that had passed the same journey four consecutive times
+and whose commit touched only docs and the workflow's evidence mirror.
+
+The tour now polls, bounded at fifteen seconds, until the console is mounted and
+its expected text is present; the timeout falls through to one honest read, so a
+console that never renders still fails. The error and failed-request deltas are
+still compared against the counts captured before the visit — nothing was made
+more lenient. The failure detail also names its evidence now (the bad API calls
+with statuses, the first console errors and failed requests seen during that
+visit) instead of only counting it, because an operator who cannot read CI logs
+has to be able to diagnose a journey from its own output.
 
 ## CI evidence channel (temporary, retired at closure)
 
@@ -105,8 +129,13 @@ reviewing the patch's removed lines caught it and it was restored before the
 commit, so no gate was ever missing from a run.
 
 That channel is what produced P11, P12, P13 and the four harness races above.
-It is removed in the closure commit, exactly as the Library and Documents
-channels were.
+It was retired in the closure commit — and then restored for the Browser E2E
+job only, four journey steps, when the smoke journey failed on that commit and
+reruns turned out to be unavailable to this operator (the rerun endpoints answer
+403 `Resource not accessible by integration`, so a fresh attempt requires a
+commit). The static and backend jobs were never re-wrapped, no gate command
+changed, and the channel is retired again in the commit that carries the smoke
+journey's fix.
 
 ## Evidence chain (per required dimension)
 
@@ -149,14 +178,19 @@ channels were.
 | 34740270037 | `4b88837` | green | **pint FAIL** (2 style issues) | **full suite FAIL** (1 test: 403 vs 409) — migrations, invariants, concurrency and the **canonical suite green** | **privacy journey 34/38** — general, Library, Documents green | P11 style, P12 authority ordering in the test, the four harness read races |
 | 34740680278 | `7ed900b` | green | pint FAIL (same 2) | full suite FAIL (same test) | privacy journey 34/38 | evidence channel only; confirmed the four journey failures were stale reads, not server state |
 | 34741188832 | `30c0a70` | green | **pint PASS (978 files)**; **phpstan FAIL** (3 errors) | **green** — migrations, invariants, concurrency, canonical suite, full suite | **green** — all four journeys, privacy 38/38 | P13 property declarations |
-| **34741595867** | **`05aecf6`** | **green** | **green** — pint, phpstan, migration audit, terminology audit, composer validate/audit/platform | **green** | **green** | — closure evidence run |
+| 34741595867 | `05aecf6` | green | **green** — pint, phpstan, migration audit, terminology audit, composer validate/audit/platform | green | green | last PHPStan error fixed; all four jobs green |
+| 34742078457 | `9440e41` | green | green | green | **FAIL** — the shared smoke journey, with the three domain journeys skipped behind it | the console-paint race; docs-and-workflow-only commit, so nothing in it could explain the failure |
+| **34742746987** | **`55fc461`** | **green** | **green** | **green** | **green** — all four journeys, privacy 38/38 | — **closure evidence run** |
 
-- CRM Browser E2E runs 34740270038, 34741188858 and 34741595850: success
-  (actionlint plus the CRM journey, so the workflow edits are structurally
-  valid and the CRM surface is untouched).
-- The temporary annotation channel is retired in the closure commit; the gate
-  commands it wrapped are byte-identical to the ones that ran above, so
-  retiring it changes no gate.
+- CRM Browser E2E runs 34740270038, 34741188858, 34741595850 and 34742746986:
+  success (actionlint plus the CRM journey, so every workflow edit was
+  structurally valid and the CRM surface is untouched).
+- The temporary annotation channel is retired in the commit that carries this
+  report; the workflow returns byte-for-byte to the shape that ran as `4b88837`,
+  so every gate command is identical to the ones that produced the green run
+  above and only the evidence mirror is gone. Reruns were never available to
+  this operator (403 `Resource not accessible by integration`), which is why
+  each diagnosis cost a commit and a full run.
 - No mutation-check evidence is claimed for the new canonical Privacy tests:
   this audit sandbox has no PHP toolchain, so "break the production rule and
   watch the test fail" could not be executed here. The canonical tests attack
