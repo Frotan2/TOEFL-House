@@ -123,11 +123,11 @@ Current release truth is always calculated from:
 
 Certification is attached to an exact commit. Any later commit requires fresh applicable verification.
 
-At the current documentation baseline the release state remains **NOT RELEASE CERTIFIED** until the latest workflow for the actual `main` HEAD has a final successful conclusion across all required gates.
+At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `27b96d8`**: Verification run 34744897784 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E) and CRM Browser E2E run 34744897779 concluded successfully alongside, both on that exact commit. That certification lapses with the next commit to `main`, which requires its own applicable evidence.
 
 ## 5. Domain release gate
 
-The active material domain is **Library & Resources**. Its closure requires all materially applicable implementation, backend authority, database, authorization/scope, API, React, UX, audit/provenance, idempotency, concurrency, test, browser/E2E, security and operational evidence gates.
+There is **no active material domain**: Library & Resources, Documents & Evidence and Privacy & Consent are each closed, and each closure was certified on `main` (Library and Documents by Verification run 34735425882 at HEAD `0e46611`, Privacy by run 34744897784 at HEAD `27b96d8`). Every closure required all materially applicable implementation, backend authority, database, authorization/scope, API, React, UX, audit/provenance, idempotency, concurrency, test, browser/E2E, security and operational evidence gates. The next domain is selected only through a fresh reassessment recorded in `docs/OPERATING-CONTROL.md`.
 
 Domain maturity is recorded only in `docs/DOMAIN-REGISTRY.md`; active execution control is recorded only in `docs/OPERATING-CONTROL.md`.
 

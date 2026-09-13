@@ -11,10 +11,10 @@
 
 - **Authoritative branch:** `main`
 - **Active domain:** Privacy & Consent
-- **Active domain status:** **VERIFIED** — all Privacy closure gates were executed and observed green on branch `arena/01a098fa-toefl-house`; the run identifiers, the findings ledger and the per-dimension evidence chain are recorded in `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. `RELEASE CERTIFIED` still requires the merge and a passing Verification run on the actual `main` HEAD.
+- **Active domain status:** **VERIFIED and CERTIFIED ON `main`** — all Privacy closure gates were executed and observed green on branch `arena/01a098fa-toefl-house` (run 34744173651, tree `b657fa3`), the branch merged as PR #29 (merge commit `27b96d8`), and Verification run 34744897784 passed all four jobs at that `main` HEAD with the Privacy browser journey at 38/38. The findings ledger and the per-dimension evidence chain are in `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`.
 - **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`) and Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`) are **VERIFIED** and were not reopened by this closure; the only change to their journeys was the shared CI evidence helper.
-- **Next allowed domain:** none. Another material domain may be selected from `DOMAIN-REGISTRY.md` §2 only after Privacy is merged and a fresh reassessment is performed.
-- **Release status:** **NOT CURRENTLY CERTIFIED** until the latest non-superseded Verification evidence for the actual `main` HEAD passes all applicable gates.
+- **Next allowed domain:** none yet. Privacy is merged and certified, so the one-domain rule is now waiting on a fresh reassessment of `DOMAIN-REGISTRY.md` §2 to select the next material domain; until that reassessment is recorded, no domain work starts.
+- **Release status:** **CERTIFIED for `main` HEAD `27b96d8`** — Verification run 34744897784 (all four jobs) and CRM Browser E2E run 34744897779 are the latest non-superseded evidence for that exact commit. Certification is attached to the commit, not to the repository: any later commit on `main` requires fresh applicable verification before it can be called certified.
 
 To determine current evidence, inspect the actual `main` HEAD and the latest non-superseded Verification workflow. Do not infer state from a previous run recorded in a document.
 
@@ -46,11 +46,11 @@ Only materially applicable stages are required, but omissions must be explicit.
 
 ## 4. Current domain gate
 
-**Privacy & Consent is the only active material domain.**
+**Privacy & Consent was the only active material domain, and it is closed.**
 
-It may be declared closed only after current-main evidence proves its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates — plus the three that are specific to personal data: consent is a lifecycle fact and never a boolean flag, erasure is revocation/expiry/archive over retained evidence and never a row deletion, and an organization-wide release needs two distinct approver signatures with its requester excluded and execution decided at organization scope.
+It was declared closed only after current-main evidence proved its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates — plus the three that are specific to personal data: consent is a lifecycle fact and never a boolean flag, erasure is revocation/expiry/archive over retained evidence and never a row deletion, and an organization-wide release needs two distinct approver signatures with its requester excluded and execution decided at organization scope.
 
-Do not begin another material domain while this gate is unresolved.
+The gate is resolved: PR #29 merged the closure and Verification run 34744897784 passed every job at that `main` HEAD. Do not begin another material domain until a fresh reassessment of `DOMAIN-REGISTRY.md` §2 selects one and this section names it.
 
 ## 5. Security and adversarial checklist
 
@@ -110,4 +110,4 @@ New documentation is permitted only when all of the following are true: its subj
 
 ## 11. Handoff
 
-The next agent starts here, inspects current `main`, continues Privacy closure only, and updates the canonical control documents after every material change. Historical audits are never the execution authority.
+The next agent starts here, inspects current `main`, treats Privacy & Consent as closed and certified at `27b96d8`, and may select the next material domain only through a fresh reassessment of `DOMAIN-REGISTRY.md` §2 recorded here. Update the canonical control documents after every material change. Historical audits are never the execution authority.

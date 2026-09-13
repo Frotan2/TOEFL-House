@@ -35,16 +35,16 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 | HR | HR | HR workspace | **PARTIAL** | Close employment, contracts and leave lifecycle actions. |
 | Finance | Finance | Finance workspace | **PARTIAL** | Close approvals, reversals, corrections, cash, scholarships, settlement and GL controls. |
 | Payroll / Settlement | Payroll calculation; Finance settlement truth | Payroll workspace | **PARTIAL** | Close calculate/approve/held-resolution/clearance/settlement parity. |
-| Library & Resources | Resources | Library workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34713414829 (head `e603db9`, branch `arena/01a09629-toefl-house`) — backend suite/invariants/concurrency, frontend, static and real-Chromium jobs all green; Library browser journey 24/24 across three sessions (lifecycle, withdrawals, provoked denials, staged approvals, canonical-route and session-hygiene records). Certification still requires merge and a Verification run on the actual `main` HEAD. |
-| Documents | Documents | Documents workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34732090672 (tree `5f32839`) — all four jobs green; Documents browser journey 26/26 across three isolated Chromium sessions (full lifecycle, separation-of-duties denial, terminal state, immutable history, no storage reference in any read model, 14 canonical mutations / 0 violations). Evidence: `docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`. Certification still requires merge and a Verification run on the actual `main` HEAD. |
-| Privacy | Privacy | Privacy workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34742746987 (tree `55fc461`, branch `arena/01a098fa-toefl-house`) — all four jobs green; Privacy browser journey 38/38 across four isolated Chromium sessions (purpose catalog, full consent lifecycle, provoked denials, withdrawal evidence, disclosure evidence, subject dossier, direct release, staged organization-wide export with two distinct approvers, subject-side boundary, canonical-POST-only mutations / 0 violations). Erasure is lifecycle-only: no delete path exists in model, transport or UI. Evidence: `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. Certification still requires merge and a Verification run on the actual `main` HEAD. |
+| Library & Resources | Resources | Library workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34713414829 (head `e603db9`, branch `arena/01a09629-toefl-house`) — backend suite/invariants/concurrency, frontend, static and real-Chromium jobs all green; Library browser journey 24/24 across three sessions (lifecycle, withdrawals, provoked denials, staged approvals, canonical-route and session-hygiene records). **Certified on `main`**: merged as PR #26; Verification run 34735425882 at main HEAD `0e46611` green on all four jobs with the Library journey 24/24, CRM Browser E2E run 34735426000 alongside. |
+| Documents | Documents | Documents workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34732090672 (tree `5f32839`) — all four jobs green; Documents browser journey 26/26 across three isolated Chromium sessions (full lifecycle, separation-of-duties denial, terminal state, immutable history, no storage reference in any read model, 14 canonical mutations / 0 violations). Evidence: `docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`. **Certified on `main`**: merged as PR #26; Verification run 34735425882 at main HEAD `0e46611` green on all four jobs with the Documents journey 26/26, CRM Browser E2E run 34735426000 alongside. |
+| Privacy | Privacy | Privacy workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34742746987 (tree `55fc461`, branch `arena/01a098fa-toefl-house`) — all four jobs green; Privacy browser journey 38/38 across four isolated Chromium sessions (purpose catalog, full consent lifecycle, provoked denials, withdrawal evidence, disclosure evidence, subject dossier, direct release, staged organization-wide export with two distinct approvers, subject-side boundary, canonical-POST-only mutations / 0 violations). Erasure is lifecycle-only: no delete path exists in model, transport or UI. Evidence: `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. **Certified on `main`**: merged as PR #29 (merge commit `27b96d8`); Verification run 34744897784 at that HEAD green on all four jobs with the Privacy journey 38/38, CRM Browser E2E run 34744897779 alongside. |
 | Audit | Audit | Legacy / partial | **PARTIAL** | Provide scoped evidence search/read surfaces without moving authority client-side. |
 | Communication | Communication | Communication + workspace surfaces | **PARTIAL** | Close message/thread/search/status and notification/work integration. |
 | Reporting | Reporting | Reporting workspace | **PARTIAL** | Close report-run lifecycle, evidence/status actions and remaining replay/snapshot depth. |
 | Management / Work | Work Management | Workspace / management | **PARTIAL** | Close queue membership and complete work lifecycle surfaces. |
 | Integrations / queues / projections / DB machinery | Outbox / infrastructure / DB | Operator-only as required | **BACKEND-ONLY / OPERATOR** | Do not duplicate business authority in normal UI. Add observability only when approved. |
 
-## 3. Active domain — Privacy & Consent (closed)
+## 3. Active domain — Privacy & Consent (closed, certified on `main`)
 
 One material domain at a time. Library & Resources and Documents & Evidence are
 closed and were not reopened; Privacy & Consent was the active domain and has
@@ -82,8 +82,11 @@ converged. Confirmed implementation includes:
   `/api/v1/privacy`; the Blade privacy index and the `/governance/privacy` alias
   are retired, and the legacy web POST endpoints remain thin adapters.
 
-Release closure remains blocked until current-main Verification proves the
-applicable gates. Do not begin the next material domain before that closure.
+Release closure is no longer blocked: the domain merged to `main` as PR #29
+(merge commit `27b96d8`) and Verification run 34744897784 passed all four jobs
+at that HEAD, with CRM Browser E2E run 34744897779 alongside. Certification is
+attached to that exact commit and lapses with any later one. No next material
+domain may begin until a fresh reassessment of §2 selects one.
 
 ## 4. Domain closure trace
 
