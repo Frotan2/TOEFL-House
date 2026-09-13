@@ -22,7 +22,7 @@ The interactive frontend follows the canonical boundary: React renders and orche
 | Organization | React | Organization has a scoped v1 projection for topology and position catalog. It is intentionally read-only; structural mutations remain organization-domain commands. |
 | Library & Resources | React | A scoped Resources API projects books, assets, custody, disposals and facilities work; lifecycle commands remain canonical server authority. |
 | Documents & Evidence | React | `/api/v1/documents` computes the union of authorized document branches, projects per-record action affordances, keeps storage references out of read models, and delegates every command to the existing lifecycle authority. |
-| Privacy | React | The server projects branch-scoped privacy evidence and the UI is read-only; authority and correction stay server-owned. |
+| Privacy | React | `/api/v1/privacy` computes the union of authorized privacy branches, projects the workspace and the subject dossier, derives every per-consent affordance from the single `ConsentLifecycle` table, offers no deletion anywhere (revocation, expiry and archive only), and delegates all thirteen mutations — purpose definition, consent capture, the six lifecycle transitions, disclosure, direct export, staged export request, approval and execution — to the existing privacy commands. |
 | Audit | React | The server projects immutable audit evidence and the UI is read-only; audit evidence is never modelled as mutable CRUD. |
 
 ## Transitional or API-blocked surfaces

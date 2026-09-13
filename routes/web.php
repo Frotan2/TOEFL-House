@@ -382,14 +382,17 @@ Route::middleware('employee')->group(function (): void {
         Route::post('delegations/{delegationId}/revoke', [AccessController::class, 'revokeDelegation'])->name('delegation.revoke');
     });
 
-    // Privacy
+    // Privacy renders in the shared React boundary. Its reads and writes use
+    // only the versioned API; the POST adapters below remain a temporary
+    // compatibility bridge for non-React callers.
     Route::prefix('privacy')->name('privacy.')->group(function (): void {
-        Route::get('/', [PrivacyController::class, 'index'])->name('index');
+        Route::view('/', 'workspace', ['view' => 'privacy'])->name('index');
         Route::post('purposes', [PrivacyController::class, 'definePurpose'])->name('purpose.define');
         Route::post('consents', [PrivacyController::class, 'recordConsent'])->name('consent.record');
         Route::post('consents/{consentId}/submit', [PrivacyController::class, 'submitConsent'])->name('consent.submit');
         Route::post('consents/{consentId}/verify', [PrivacyController::class, 'verifyConsent'])->name('consent.verify');
         Route::post('consents/{consentId}/activate', [PrivacyController::class, 'activateConsent'])->name('consent.activate');
+        Route::post('consents/{consentId}/expire', [PrivacyController::class, 'expireConsent'])->name('consent.expire');
         Route::post('consents/{consentId}/revoke', [PrivacyController::class, 'revokeConsent'])->name('consent.revoke');
         Route::post('consents/{consentId}/archive', [PrivacyController::class, 'archiveConsent'])->name('consent.archive');
         Route::post('disclosures', [PrivacyController::class, 'recordDisclosure'])->name('disclosure.record');

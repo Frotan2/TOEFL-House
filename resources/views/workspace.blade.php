@@ -15,6 +15,7 @@
             'teachers' => 'Teacher & Faculty — The TOEFL House',
             'reporting' => 'Reporting & Dashboards — The TOEFL House',
             'documents' => 'Documents & Evidence — The TOEFL House',
+            'privacy' => 'Privacy & Consent — The TOEFL House',
         ];
     @endphp
     <title>{{ $workspaceTitles[$view ?? 'workspace'] ?? 'Employee Workspace — The TOEFL House' }}</title>

@@ -18,8 +18,13 @@ test('privacy and audit React surfaces consume server projections and expose no 
 test('canonical governance routes mount the React views', () => {
   const app = read('resources/js/app.tsx');
   const bootstrap = read('bootstrap/app.php');
+  const web = read('routes/web.php');
   assert.match(app, /case 'privacy':/);
   assert.match(app, /case 'audit':/);
-  assert.match(bootstrap, /governance\/privacy/);
+  // Privacy is a closed domain: /privacy mounts the React workspace directly,
+  // with no Blade redirect hop and no second governance privacy entrypoint.
+  assert.match(web, /Route::prefix\('privacy'\)->name\('privacy\.'\)/);
+  assert.match(web, /Route::view\('\/', 'workspace', \['view' => 'privacy'\]\)->name\('index'\)/);
+  assert.doesNotMatch(bootstrap, /governance\/privacy/);
   assert.match(bootstrap, /governance\/audit/);
 });

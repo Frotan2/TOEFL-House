@@ -10,6 +10,7 @@ use App\Modules\Privacy\Models\ConsentPurpose;
 use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,17 @@ final class DefineConsentPurpose
             return $this->idempotency->execute('privacy.purpose.define', $idempotencyKey, $payload,
                 fn (): array => DB::transaction(function () use ($definer, $name, $channel, $category): array {
                     $this->requireDefiner($definer);
+
+                    // The catalog key is name + channel (consent_purposes_name_channel_unique).
+                    // A second definition of the same purpose on the same channel is a
+                    // business fact the operator must be told about, not a database fault:
+                    // a different channel or a different name is a new definition.
+                    if (ConsentPurpose::query()->where('name', $name)->where('channel', $channel)->exists()) {
+                        throw BusinessRejection::forCode(
+                            'privacy.purpose_duplicate',
+                            'a consent purpose with this name and channel is already defined',
+                        );
+                    }
 
                     /** @var ConsentPurpose $purpose */
                     $purpose = ConsentPurpose::query()->create([

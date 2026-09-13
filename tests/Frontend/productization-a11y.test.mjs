@@ -18,6 +18,7 @@ const app = await readFile(resolve(jsRoot, 'app.tsx'), 'utf8');
 const workspaceBlade = await readFile(resolve(repoRoot, 'resources/views/workspace.blade.php'), 'utf8');
 const appCss = await readFile(resolve(jsRoot, 'app.css'), 'utf8');
 const documents = await readFile(resolve(jsRoot, 'documents.tsx'), 'utf8');
+const privacy = await readFile(resolve(jsRoot, 'privacy.tsx'), 'utf8');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -66,6 +67,11 @@ assert(documents.includes('role="tablist"') && documents.includes('role="tabpane
 assert(documents.includes('aria-live="polite"'), 'Documents lifecycle feedback and history must announce state changes.');
 assert(documents.includes('available_actions'), 'Documents must consume server-projected affordances instead of client-side authority rules.');
 assert(documents.includes('Storage references are intentionally never sent'), 'Documents must make the storage-reference read boundary explicit.');
+assert(privacy.includes('role="tablist"') && privacy.includes('role="tabpanel"'), 'Privacy work areas must expose accessible tab semantics.');
+assert(privacy.includes('aria-live="polite"'), 'Privacy command, receipt and dossier panels must announce state changes.');
+assert(privacy.includes('available_actions'), 'Privacy must consume server-projected affordances instead of client-side lifecycle or chain rules.');
+assert(privacy.includes('Consent evidence references are intentionally never sent'), 'Privacy must make the consent-evidence read boundary explicit.');
+assert(privacy.includes('The exported dataset is not rendered in the browser'), 'Privacy must state that a released dataset is evidenced, not displayed.');
 assert(workspaceBlade.includes("@vite('resources/js/app.tsx')"), 'Workspace Blade must load only the canonical React entrypoint.');
 assert(!workspaceBlade.includes('reporting-console'), 'Workspace Blade must not expose a secondary Reporting mount.');
 assert(!workspaceBlade.includes("@vite('resources/js/reporting.tsx')"), 'Workspace Blade must not mount Reporting through a second entrypoint.');

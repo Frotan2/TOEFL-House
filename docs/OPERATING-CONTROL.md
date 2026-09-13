@@ -2,7 +2,7 @@
 
 **STATUS: ACTIVE / CANONICAL / NORMATIVE**  
 **Authority:** `main`  
-**Last reconciled:** 2026-09-09  
+**Last reconciled:** 2026-09-13  
 **Purpose:** Single operational control plane for current state, active domain, agent execution, evidence semantics and documentation governance.
 
 > This is the one document an agent uses to determine **what may be worked on now, what is blocked, and what evidence is required before closure**. It deliberately does not hard-code a verification run number or commit SHA; those change whenever the repository changes.
@@ -10,9 +10,10 @@
 ## 1. Current control state
 
 - **Authoritative branch:** `main`
-- **Active domain:** Library & Resources
-- **Active domain status:** **VERIFIED** — all Library closure gates were executed and observed green on branch `arena/01a09629-toefl-house` (Verification run 34713414829, head `e603db9`, plus workflow/docs-only successors). `RELEASE CERTIFIED` still requires the merge and a passing Verification run on the actual `main` HEAD.
-- **Next allowed domain:** Documents, but only after Library is closed and a fresh reassessment is performed.
+- **Active domain:** Privacy & Consent
+- **Active domain status:** **VERIFIED** — all Privacy closure gates were executed and observed green on branch `arena/01a098fa-toefl-house`; the run identifiers, the findings ledger and the per-dimension evidence chain are recorded in `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. `RELEASE CERTIFIED` still requires the merge and a passing Verification run on the actual `main` HEAD.
+- **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`) and Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`) are **VERIFIED** and were not reopened by this closure; the only change to their journeys was the shared CI evidence helper.
+- **Next allowed domain:** none. Another material domain may be selected from `DOMAIN-REGISTRY.md` §2 only after Privacy is merged and a fresh reassessment is performed.
 - **Release status:** **NOT CURRENTLY CERTIFIED** until the latest non-superseded Verification evidence for the actual `main` HEAD passes all applicable gates.
 
 To determine current evidence, inspect the actual `main` HEAD and the latest non-superseded Verification workflow. Do not infer state from a previous run recorded in a document.
@@ -45,11 +46,11 @@ Only materially applicable stages are required, but omissions must be explicit.
 
 ## 4. Current domain gate
 
-**Library & Resources is the only active material domain.**
+**Privacy & Consent is the only active material domain.**
 
-It may be declared closed only after current-main evidence proves its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates.
+It may be declared closed only after current-main evidence proves its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates — plus the three that are specific to personal data: consent is a lifecycle fact and never a boolean flag, erasure is revocation/expiry/archive over retained evidence and never a row deletion, and an organization-wide release needs two distinct approver signatures with its requester excluded and execution decided at organization scope.
 
-Do not begin Documents while this gate is unresolved.
+Do not begin another material domain while this gate is unresolved.
 
 ## 5. Security and adversarial checklist
 
@@ -109,4 +110,4 @@ New documentation is permitted only when all of the following are true: its subj
 
 ## 11. Handoff
 
-The next agent starts here, inspects current `main`, continues Library closure only, and updates the canonical control documents after every material change. Historical audits are never the execution authority.
+The next agent starts here, inspects current `main`, continues Privacy closure only, and updates the canonical control documents after every material change. Historical audits are never the execution authority.

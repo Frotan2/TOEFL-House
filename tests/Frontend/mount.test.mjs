@@ -40,6 +40,13 @@ const CONSOLES = [
     markup: '<div id="react-console" data-view="documents" data-csrf-token="test-token" data-api-base="/api/v1"></div>',
   },
   {
+    name: 'app-privacy',
+    entry: 'resources/js/app.tsx',
+    mountId: 'react-console',
+    url: 'https://app.test/privacy',
+    markup: '<div id="react-console" data-view="privacy" data-csrf-token="test-token" data-api-base="/api/v1"></div>',
+  },
+  {
     name: 'app-front-office',
     entry: 'resources/js/app.tsx',
     mountId: 'react-console',

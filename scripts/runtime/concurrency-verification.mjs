@@ -130,6 +130,29 @@ function assertOneWinner(name, race, expectedConstraint) {
   return `backends=${race.pids.join(', ')}; one committed, one rejected by ${expectedConstraint}`;
 }
 
+/**
+ * Same one-winner shape, but the loser is stopped by a named trigger message
+ * rather than a unique constraint: staged-chain and lifecycle guards reject a
+ * stale writer with `check_violation` plus the boundary's own sentence.
+ */
+function assertOneWinnerByMessage(name, race, messageIncludes, boundary) {
+  const committed = race.outcomes.filter((outcome) => outcome.state === 'committed');
+  const rejected = race.outcomes.filter((outcome) => outcome.state === 'rejected');
+  const loser = rejected.find((outcome) => {
+    const error = outcome.error && typeof outcome.error === 'object' ? outcome.error : {};
+
+    return String(error.message ?? '').includes(messageIncludes);
+  });
+
+  if (committed.length !== 1 || rejected.length !== 1 || loser === undefined) {
+    throw new Error(
+      `${name}: expected exactly one commit and one rejection containing ${JSON.stringify(messageIncludes)}; observed ${race.outcomes.map((outcome) => outcome.state === 'committed' ? 'committed' : describeError(outcome.error)).join(' | ')}`,
+    );
+  }
+
+  return `backends=${race.pids.join(', ')}; one committed, one rejected by ${boundary}`;
+}
+
 async function assertNoRows(label, sql, params) {
   const count = await oneConnection(async (client) => {
     const { rows } = await client.query(sql, params);
@@ -587,6 +610,201 @@ async function documentVerdictRace() {
   }
 }
 
+/**
+ * Privacy race fixture: one subject person and one defined purpose, created
+ * before the race and removed after it. Consents are inserted *through* the
+ * production guard (born draft with evidence), never around it.
+ */
+async function createPrivacyRaceFixture() {
+  const personId = randomUUID();
+  const purposeId = randomUUID();
+
+  await oneConnection(async (client) => {
+    await client.query(
+      "INSERT INTO people (id, legal_name, date_of_birth, verification_state) VALUES ($1, 'Runtime privacy race person', '1980-01-01', 'unverified')",
+      [personId],
+    );
+    await client.query(
+      "INSERT INTO consent_purposes (id, name, channel, category) VALUES ($1, $2, 'email', 'communication')",
+      [purposeId, `runtime-race-${purposeId}`],
+    );
+  });
+
+  return { personId, purposeId };
+}
+
+async function insertConsent(client, fixture, consentId, state = 'draft') {
+  await client.query(
+    `
+      INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+      VALUES ($1, $2, $3, 'draft', CURRENT_DATE, NULL, 'evidence/runtime-race', $4, NOW(), NOW())
+    `,
+    [consentId, fixture.personId, fixture.purposeId, fixture.personId],
+  );
+  if (state !== 'draft') {
+    await client.query("UPDATE consents SET lifecycle_state = 'submitted', updated_at = NOW() WHERE id = $1", [consentId]);
+  }
+}
+
+async function cleanupPrivacyRaceFixture(fixture, label) {
+  // The consent guard refuses DELETE by design; cleanup enters replica role
+  // only after the contested race has been observed and named.
+  await deleteAppendOnlyRows('DELETE FROM consents WHERE subject_person_id = $1', [fixture.personId]);
+  await oneConnection(async (client) => {
+    await client.query('DELETE FROM consent_purposes WHERE id = $1', [fixture.purposeId]);
+    await client.query('DELETE FROM people WHERE id = $1', [fixture.personId]);
+  });
+  await assertNoRows(`${label} consents`, 'SELECT count(*)::int AS count FROM consents WHERE subject_person_id = $1', [fixture.personId]);
+  await assertNoRows(`${label} person`, 'SELECT count(*)::int AS count FROM people WHERE id = $1', [fixture.personId]);
+}
+
+async function oneOpenConsentRace() {
+  const fixture = await createPrivacyRaceFixture();
+
+  try {
+    // Two officers record consent for the same subject and purpose at the same
+    // instant. The command serializes on its own transaction; this race proves
+    // the partial unique index independently guarantees one open consent per
+    // subject+purpose against any writer, so a duplicate can never create two
+    // competing use authorities.
+    const race = await raceTransactions([0, 1].map((contender) => async (client) => {
+      await client.query(
+        `
+          INSERT INTO consents (id, subject_person_id, purpose_id, lifecycle_state, effective_from, effective_to, evidence_ref, recorded_by, created_at, updated_at)
+          VALUES ($1, $2, $3, 'draft', CURRENT_DATE, NULL, $4, $5, NOW(), NOW())
+        `,
+        [randomUUID(), fixture.personId, fixture.purposeId, `evidence/runtime-race-${contender}`, fixture.personId],
+      );
+    }));
+
+    return assertOneWinner('one open consent per subject and purpose', race, 'consents_one_open_per_subject_purpose');
+  } finally {
+    await cleanupPrivacyRaceFixture(fixture, 'open-consent race');
+  }
+}
+
+async function consentTransitionRace() {
+  const fixture = await createPrivacyRaceFixture();
+  const consentId = randomUUID();
+  await oneConnection((client) => insertConsent(client, fixture, consentId, 'submitted'));
+
+  try {
+    // Two verifiers race the same submitted consent. Exactly one may move it
+    // to verified; the stale writer re-reads the committed row and is stopped
+    // by the write-once lifecycle guard rather than double-recording the act.
+    const race = await raceTransactions(
+      [0, 1].map(() => async (client) => {
+        await client.query("UPDATE consents SET lifecycle_state = 'verified', updated_at = NOW() WHERE id = $1", [consentId]);
+      }),
+      async (client) => {
+        const { rows } = await client.query('SELECT lifecycle_state FROM consents WHERE id = $1', [consentId]);
+        if (rows.length !== 1 || rows[0].lifecycle_state !== 'submitted') {
+          throw new Error('a contender did not observe the submitted state before the contested verification');
+        }
+      },
+    );
+
+    return assertOneWinnerByMessage(
+      'concurrent consent verification',
+      race,
+      'a consent update must move its lifecycle state',
+      'consents_guard_trigger',
+    );
+  } finally {
+    await cleanupPrivacyRaceFixture(fixture, 'consent-transition race');
+  }
+}
+
+async function createExportRequestFixture() {
+  const fixture = await createPrivacyRaceFixture();
+  const requestId = randomUUID();
+  const organizationId = randomUUID();
+
+  await oneConnection((client) => client.query(
+    `
+      INSERT INTO privacy_export_requests (id, subject_person_id, purpose, organization_id, lifecycle_state, requested_by, created_at, updated_at)
+      VALUES ($1, $2, 'runtime race bulk export', $3, 'requested', $4, NOW(), NOW())
+    `,
+    [requestId, fixture.personId, organizationId, fixture.personId],
+  ));
+
+  return { ...fixture, requestId, organizationId };
+}
+
+async function cleanupExportRequestFixture(fixture, label) {
+  await deleteAppendOnlyRows('DELETE FROM privacy_export_requests WHERE id = $1', [fixture.requestId]);
+  await cleanupPrivacyRaceFixture(fixture, label);
+  await assertNoRows(`${label} request`, 'SELECT count(*)::int AS count FROM privacy_export_requests WHERE id = $1', [fixture.requestId]);
+}
+
+async function firstExportSignatureRace() {
+  const fixture = await createExportRequestFixture();
+
+  try {
+    // Two approvers sign the FIRST slot simultaneously. The slot is written
+    // once: one signature counts, the other is rejected instead of silently
+    // overwriting who approved an organization-wide personal-data release.
+    const race = await raceTransactions(
+      [0, 1].map(() => async (client) => {
+        await client.query('UPDATE privacy_export_requests SET approver_one_id = $1, updated_at = NOW() WHERE id = $2', [randomUUID(), fixture.requestId]);
+      }),
+      async (client) => {
+        const { rows } = await client.query('SELECT lifecycle_state, approver_one_id FROM privacy_export_requests WHERE id = $1', [fixture.requestId]);
+        if (rows.length !== 1 || rows[0].lifecycle_state !== 'requested' || rows[0].approver_one_id !== null) {
+          throw new Error('a contender did not observe an unsigned requested export');
+        }
+      },
+    );
+
+    return assertOneWinnerByMessage(
+      'first bulk-export signature',
+      race,
+      'accepts only its first approver signature',
+      'privacy_export_requests_guard_trigger',
+    );
+  } finally {
+    await cleanupExportRequestFixture(fixture, 'first-signature race');
+  }
+}
+
+async function stagedExportApprovalRace() {
+  const fixture = await createExportRequestFixture();
+  await oneConnection((client) => client.query(
+    'UPDATE privacy_export_requests SET approver_one_id = $1, updated_at = NOW() WHERE id = $2',
+    [randomUUID(), fixture.requestId],
+  ));
+
+  try {
+    // The second signature closes the chain as approved. Two concurrent
+    // closers race; one commits and the stale writer is rejected by the chain
+    // guard, so an organization-wide export can never be approved twice or by
+    // a writer that did not observe the requested state.
+    const race = await raceTransactions(
+      [0, 1].map(() => async (client) => {
+        await client.query(
+          "UPDATE privacy_export_requests SET approver_two_id = $1, lifecycle_state = 'approved', updated_at = NOW() WHERE id = $2",
+          [randomUUID(), fixture.requestId],
+        );
+      }),
+      async (client) => {
+        const { rows } = await client.query('SELECT lifecycle_state, approver_one_id, approver_two_id FROM privacy_export_requests WHERE id = $1', [fixture.requestId]);
+        if (rows.length !== 1 || rows[0].lifecycle_state !== 'requested' || rows[0].approver_one_id === null || rows[0].approver_two_id !== null) {
+          throw new Error('a contender did not observe a singly-signed requested export');
+        }
+      },
+    );
+
+    return assertOneWinnerByMessage(
+      'staged bulk-export approval',
+      race,
+      'moves only requested -> approved -> exported',
+      'privacy_export_requests_guard_trigger',
+    );
+  } finally {
+    await cleanupExportRequestFixture(fixture, 'staged-export race');
+  }
+}
+
 async function verify(name, operation) {
   try {
     record(name, true, await operation());
@@ -617,6 +835,9 @@ try {
       { table: 'documents', privileges: ['SELECT', 'INSERT', 'DELETE'] },
       { table: 'document_versions', privileges: ['SELECT', 'INSERT', 'DELETE'] },
       { table: 'document_verifications', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'consent_purposes', privileges: ['SELECT', 'INSERT', 'DELETE'] },
+      { table: 'consents', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'privacy_export_requests', privileges: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
     ],
   });
 
@@ -629,6 +850,10 @@ try {
   await verify('staged asset disposal approval race', stagedDisposalApprovalRace);
   await verify('concurrent document version append race', documentVersionAppendRace);
   await verify('single verdict per document version race', documentVerdictRace);
+  await verify('one open consent per subject and purpose race', oneOpenConsentRace);
+  await verify('concurrent consent verification race', consentTransitionRace);
+  await verify('first bulk-export signature race', firstExportSignatureRace);
+  await verify('staged bulk-export approval race', stagedExportApprovalRace);
 
   const passed = results.filter((result) => result.pass).length;
   console.log(`Concurrency verification: ${passed}/${results.length} production-table races passed.`);

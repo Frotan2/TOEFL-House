@@ -52,10 +52,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->middleware(['api', 'employee', 'throttle:employee-api'])
                 ->group(base_path('routes/audit-api.php'));
 
-            // Canonical React governance read surfaces. Legacy controller
+            // Canonical React governance read surface. Legacy controller
             // routes redirect here so Blade cannot become a second read model.
+            // Privacy mounts directly at /privacy (the navigation registry's
+            // canonical href) and has no second mount.
             Route::middleware('employee')->group(function (): void {
-                Route::view('/governance/privacy', 'workspace', ['view' => 'privacy'])->name('governance.privacy');
                 Route::view('/governance/audit', 'workspace', ['view' => 'audit'])->name('governance.audit');
             });
         },

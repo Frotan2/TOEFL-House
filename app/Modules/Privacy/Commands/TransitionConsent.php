@@ -6,6 +6,7 @@ namespace App\Modules\Privacy\Commands;
 
 use App\Modules\Audit\AttemptedOperation;
 use App\Modules\Audit\AuditRecorder;
+use App\Modules\Calendar\CalendarAuthority;
 use App\Modules\Privacy\Domain\ConsentLifecycle;
 use App\Modules\Privacy\Models\Consent;
 use App\Modules\Privacy\Models\ConsentRevocation;
@@ -13,8 +14,10 @@ use App\Support\Authorization\AccessDecision;
 use App\Support\Authorization\Actor;
 use App\Support\Authorization\PersonBranchScope;
 use App\Support\Errors\AuthorizationDenied;
+use App\Support\Errors\BusinessRejection;
 use App\Support\Idempotency\IdempotentExecution;
 use App\Support\Identifiers\RandomIdentifier;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -22,6 +25,11 @@ use Illuminate\Support\Facades\DB;
  * their own consent; every other transition requires the consent
  * capability. Revocation stops future use and records the withdrawal as
  * append-only evidence; nothing is erased.
+ *
+ * Expiry is the passage of the recorded window, not a second revocation:
+ * a consent may be closed as expired only after its `effective_to` day has
+ * passed under the canonical calendar authority. Ending use before the
+ * window closes is a revocation and stays attributable as one.
  */
 final class TransitionConsent
 {
@@ -32,6 +40,7 @@ final class TransitionConsent
         private readonly IdempotentExecution $idempotency,
         private readonly AuditRecorder $audit,
         private readonly AttemptedOperation $attemptedOperation,
+        private readonly CalendarAuthority $calendar,
     ) {}
 
     /** @return array{consent_id: string, lifecycle_state: string, correlation_id: string} */
@@ -53,6 +62,12 @@ final class TransitionConsent
     }
 
     /** @return array{consent_id: string, lifecycle_state: string, correlation_id: string} */
+    public function expire(Actor $actor, Consent $consent, string $idempotencyKey): array
+    {
+        return $this->transition($actor, $consent, ConsentLifecycle::STATE_EXPIRED, 'expire', self::CAPABILITY, $idempotencyKey, null, true);
+    }
+
+    /** @return array{consent_id: string, lifecycle_state: string, correlation_id: string} */
     public function revoke(Actor $actor, Consent $consent, string $scope, string $effect, string $idempotencyKey): array
     {
         return $this->transition($actor, $consent, ConsentLifecycle::STATE_REVOKED, 'revoke', null, $idempotencyKey, compact('scope', 'effect'));
@@ -68,13 +83,13 @@ final class TransitionConsent
      * @param  array{scope: string, effect: string}|null  $revocation
      * @return array{consent_id: string, lifecycle_state: string, correlation_id: string}
      */
-    private function transition(Actor $actor, Consent $consent, string $toState, string $verb, ?string $capability, string $idempotencyKey, ?array $revocation = null): array
+    private function transition(Actor $actor, Consent $consent, string $toState, string $verb, ?string $capability, string $idempotencyKey, ?array $revocation = null, bool $requiresLapsedWindow = false): array
     {
         $payload = hash('sha256', implode('|', ['privacy.consent.'.$verb, $consent->id, $toState, $actor->actorId, $revocation['scope'] ?? '', $revocation['effect'] ?? '']));
 
         try {
             return $this->idempotency->execute('privacy.consent.'.$verb, $idempotencyKey, $payload,
-                fn (): array => DB::transaction(function () use ($actor, $consent, $toState, $verb, $capability, $revocation): array {
+                fn (): array => DB::transaction(function () use ($actor, $consent, $toState, $verb, $capability, $revocation, $requiresLapsedWindow): array {
                     /** @var Consent $locked */
                     $locked = Consent::query()->whereKey($consent->id)->lockForUpdate()->firstOrFail();
                     $scope = PersonBranchScope::resolve($locked->subject_person_id);
@@ -85,6 +100,9 @@ final class TransitionConsent
                         }
                     }
                     ConsentLifecycle::requireTransition($locked->lifecycle_state, $toState);
+                    if ($requiresLapsedWindow) {
+                        $this->requireLapsedWindow($locked);
+                    }
 
                     $before = ['lifecycle_state' => $locked->lifecycle_state];
                     $locked->forceFill(['lifecycle_state' => $toState]);
@@ -107,6 +125,26 @@ final class TransitionConsent
             );
         } catch (AuthorizationDenied $denial) {
             $this->attemptedOperation->deniedByActor($denial, $actor, 'privacy.consent.'.$verb, 'consent', $consent->id);
+        }
+    }
+
+    /**
+     * A consent expires by its own recorded window. An open-ended consent has
+     * nothing to lapse and can only be revoked or archived, so the read side
+     * never mistakes an unbounded consent for a closed one.
+     */
+    private function requireLapsedWindow(Consent $consent): void
+    {
+        $today = $this->calendar->nowUtc()->startOfDay()->toDateString();
+        $effectiveTo = $consent->effective_to === null
+            ? null
+            : CarbonImmutable::parse(trim((string) $consent->effective_to))->startOfDay()->toDateString();
+
+        if ($effectiveTo === null || $effectiveTo > $today) {
+            throw BusinessRejection::forCode(
+                'privacy.consent_expiry_not_due',
+                'a consent expires only after its recorded effective window has passed; ending use earlier is a revocation',
+            );
         }
     }
 }

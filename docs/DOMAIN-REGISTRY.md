@@ -2,7 +2,7 @@
 
 **STATUS: ACTIVE / CANONICAL / NORMATIVE**  
 **Authority:** `main`  
-**Last reassessed:** 2026-09-09  
+**Last reassessed:** 2026-09-13  
 **Purpose:** Single source of truth for domain ownership, current maturity, backend↔frontend parity, closure gaps and requirement evidence.
 
 > This file replaces duplicated current-state, parity, reassessment and requirement-traceability documents. Historical audits remain historical evidence only.
@@ -36,30 +36,54 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 | Finance | Finance | Finance workspace | **PARTIAL** | Close approvals, reversals, corrections, cash, scholarships, settlement and GL controls. |
 | Payroll / Settlement | Payroll calculation; Finance settlement truth | Payroll workspace | **PARTIAL** | Close calculate/approve/held-resolution/clearance/settlement parity. |
 | Library & Resources | Resources | Library workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34713414829 (head `e603db9`, branch `arena/01a09629-toefl-house`) — backend suite/invariants/concurrency, frontend, static and real-Chromium jobs all green; Library browser journey 24/24 across three sessions (lifecycle, withdrawals, provoked denials, staged approvals, canonical-route and session-hygiene records). Certification still requires merge and a Verification run on the actual `main` HEAD. |
-| Documents | Documents | Legacy / partial | **PARTIAL / HIGH PRIORITY NEXT** | Converge identity/version/classification/verification/retention workflows in React after Library closure. |
-| Privacy | Privacy | Legacy / partial | **PARTIAL** | Modernize operational controls while retaining server policy authority. |
+| Documents | Documents | Documents workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34732090672 (tree `5f32839`) — all four jobs green; Documents browser journey 26/26 across three isolated Chromium sessions (full lifecycle, separation-of-duties denial, terminal state, immutable history, no storage reference in any read model, 14 canonical mutations / 0 violations). Evidence: `docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`. Certification still requires merge and a Verification run on the actual `main` HEAD. |
+| Privacy | Privacy | Privacy workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34742746987 (tree `55fc461`, branch `arena/01a098fa-toefl-house`) — all four jobs green; Privacy browser journey 38/38 across four isolated Chromium sessions (purpose catalog, full consent lifecycle, provoked denials, withdrawal evidence, disclosure evidence, subject dossier, direct release, staged organization-wide export with two distinct approvers, subject-side boundary, canonical-POST-only mutations / 0 violations). Erasure is lifecycle-only: no delete path exists in model, transport or UI. Evidence: `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`. Certification still requires merge and a Verification run on the actual `main` HEAD. |
 | Audit | Audit | Legacy / partial | **PARTIAL** | Provide scoped evidence search/read surfaces without moving authority client-side. |
 | Communication | Communication | Communication + workspace surfaces | **PARTIAL** | Close message/thread/search/status and notification/work integration. |
 | Reporting | Reporting | Reporting workspace | **PARTIAL** | Close report-run lifecycle, evidence/status actions and remaining replay/snapshot depth. |
 | Management / Work | Work Management | Workspace / management | **PARTIAL** | Close queue membership and complete work lifecycle surfaces. |
 | Integrations / queues / projections / DB machinery | Outbox / infrastructure / DB | Operator-only as required | **BACKEND-ONLY / OPERATOR** | Do not duplicate business authority in normal UI. Add observability only when approved. |
 
-## 3. Active domain — Library & Resources
+## 3. Active domain — Privacy & Consent (closed)
 
-The selected domain has converged in source inspection. Confirmed implementation includes:
+One material domain at a time. Library & Resources and Documents & Evidence are
+closed and were not reopened; Privacy & Consent was the active domain and has
+converged. Confirmed implementation includes:
 
-- books and copies;
-- circulation issue/return/loss;
-- assets and custody;
-- facilities work lifecycle;
-- staged disposal request → approval → execution, with requester-only withdrawal while the request is unapproved (withdrawal is terminal and frees the asset for a corrected request);
-- explicit consequential actor selection;
-- evidence capture;
-- irreversible-action confirmation;
-- server-owned authorization/scope/lifecycle/audit controls;
-- idempotency and concurrency protections.
+- purposes of personal-data use as an organization-rooted catalog, with
+  communication and marketing as separate definitions and a duplicate
+  definition refused as a business rejection rather than a database error;
+- consent capture as a born-draft, write-once fact with its evidence reference;
+- one open consent per (subject, purpose), enforced by a partial unique index
+  and attacked under savepoints in the canonical suite;
+- the single consent lifecycle table (`ConsentLifecycle`) consulted by the
+  command, the transport and the projection alike, so no surface re-derives it:
+  draft → submitted → verified → active → expired/revoked → archived;
+- expiry as the passage of the recorded window, decided by the CalendarAuthority
+  and never by a client clock;
+- withdrawal as append-only revocation evidence attached to the consent it ended;
+- disclosure as immutable release evidence with recipient, purpose, authority
+  and declared scope, the scope re-resolved server-side so a forged one is
+  refused;
+- subject access: one dossier projection (identity, complete consent history
+  with its withdrawals, every disclosure, every export request) that the subject
+  may read about themselves without holding any staff capability;
+- subject-data release in two shapes — a direct single-subject export inside a
+  non-organization scope, and a staged organization-wide export that needs two
+  distinct approver signatures, excludes its requester, and executes only at
+  organization scope (`ExportApprovalChain`);
+- erasure as lifecycle only: `Consent::delete()` and `forceDelete()` throw
+  `privacy.consent_immutable`, the database guards refuse rewriting export
+  history, and no delete/erase/purge control exists in the UI;
+- server-owned authorization/scope (`PrivacyScopePolicy`), fail-closed denials
+  that are audit-recorded with their code and capability reason, idempotency on
+  every mutation, and concurrency races on the consent tables;
+- one canonical operator surface: `/privacy` renders the React workspace over
+  `/api/v1/privacy`; the Blade privacy index and the `/governance/privacy` alias
+  are retired, and the legacy web POST endpoints remain thin adapters.
 
-Release closure remains blocked until current-main Verification proves the applicable gates. Do not begin Documents before that closure.
+Release closure remains blocked until current-main Verification proves the
+applicable gates. Do not begin the next material domain before that closure.
 
 ## 4. Domain closure trace
 
