@@ -123,11 +123,15 @@ Current release truth is always calculated from:
 
 Certification is attached to an exact commit. Any later commit requires fresh applicable verification.
 
-At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `27b96d8`**: Verification run 34744897784 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E) and CRM Browser E2E run 34744897779 concluded successfully alongside, both on that exact commit. That certification lapses with the next commit to `main`, which requires its own applicable evidence.
+At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `b824efd`**: Verification run 34745363765 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E) and CRM Browser E2E run 34745363720 concluded successfully alongside, both on that exact commit.
+
+`b824efd` was produced by documentation-only PR #30, which superseded the prior certification at `27b96d8` (PR #29, Verification run 34744897784, CRM Browser E2E run 34744897779). The compare between the two commits touches four Markdown files and no source, test, migration, workflow or route file, so the certification was re-earned by execution at the new HEAD rather than inherited from the old one. That certification lapses with the next commit to `main`, which requires its own applicable evidence.
 
 ## 5. Domain release gate
 
-There is **no active material domain**: Library & Resources, Documents & Evidence and Privacy & Consent are each closed, and each closure was certified on `main` (Library and Documents by Verification run 34735425882 at HEAD `0e46611`, Privacy by run 34744897784 at HEAD `27b96d8`). Every closure required all materially applicable implementation, backend authority, database, authorization/scope, API, React, UX, audit/provenance, idempotency, concurrency, test, browser/E2E, security and operational evidence gates. The next domain is selected only through a fresh reassessment recorded in `docs/OPERATING-CONTROL.md`.
+Library & Resources, Documents & Evidence and Privacy & Consent are each closed, and each closure was certified on `main` (Library and Documents by Verification run 34735425882 at HEAD `0e46611`, Privacy by run 34744897784 at HEAD `27b96d8`, re-verified at the current HEAD `b824efd` by run 34745363765 after documentation-only PR #30). Every closure required all materially applicable implementation, backend authority, database, authorization/scope, API, React, UX, audit/provenance, idempotency, concurrency, test, browser/E2E, security and operational evidence gates.
+
+The next-domain reassessment has since been performed: **CRM / Front Office is the selected active material domain and is not started**. Its release gate is not yet open. No CRM or Front Office work may begin, and no domain may be promoted, until the baseline gate in `docs/OPERATING-CONTROL.md` §4 is satisfied against the *actual current* `main` HEAD and recorded there with its run identifiers. Because that gate is re-evaluated at every commit, `b824efd` evidence does not carry forward past the merge that records the selection.
 
 Domain maturity is recorded only in `docs/DOMAIN-REGISTRY.md`; active execution control is recorded only in `docs/OPERATING-CONTROL.md`.
 
