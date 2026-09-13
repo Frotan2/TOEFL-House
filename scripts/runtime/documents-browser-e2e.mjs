@@ -496,6 +496,10 @@ try {
   await openTab(officerPage, 'Evidence registry');
   await clickPageButton(officerPage, 'Refresh facts');
   await waitIdle(officerPage);
+  // waitIdle can pass inside the gap between the click and React painting the
+  // busy label; the officer's stale table does not contain DOC_A at all until
+  // the refresh lands, so gate the button read on the refreshed projection.
+  await waitForChip(officerPage, DOC_A, 'Active');
   const officerRowButtons = await rowButtons(officerPage, DOC_A);
   record(
     'The officer row offers History + Retention and nothing else (capability-projected)',
