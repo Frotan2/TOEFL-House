@@ -153,8 +153,8 @@ try {
   record('Student detail is scoped and exposes the canonical lifecycle projection', detail.status === 200 && detail.data?.student_id === studentId && Array.isArray(detail.data?.status_history), `status=${detail.data?.status}`);
 
   const suspendKey = `students-e2e-suspend-${unique}`;
-  const firstSuspend = await manager.api('POST', `/students/${encodeURIComponent(studentId)}/status/suspend`, { reason: 'Browser E2E suspension proof' }, 200);
-  const replaySuspend = await manager.api('POST', `/students/${encodeURIComponent(studentId)}/status/suspend`, { reason: 'Browser E2E suspension proof' }, 200);
+  const firstSuspend = await manager.api('POST', `/students/${encodeURIComponent(studentId)}/status/suspend`, { reason: 'Browser E2E suspension proof', idempotency_key: suspendKey }, 200);
+  const replaySuspend = await manager.api('POST', `/students/${encodeURIComponent(studentId)}/status/suspend`, { reason: 'Browser E2E suspension proof', idempotency_key: suspendKey }, 200);
   record('Student status mutation is idempotent and does not duplicate history', firstSuspend.data?.status === 'suspend' && replaySuspend.data?.status === 'suspend', `replay=${JSON.stringify(replaySuspend.data)}`);
 
   const deniedReactivate = await manager.api('POST', `/students/${encodeURIComponent(studentId)}/status/reactivate`, { reason: 'manager must not self-reactivate' });
