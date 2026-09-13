@@ -114,7 +114,7 @@ final class HrController extends Controller
     public function addRule(Request $request, string $versionId): RedirectResponse
     {
         $input = $request->validate([
-            'method' => ['required', 'in:fixed_monthly,session_rate,hourly_rate,scale_rate,allowance'],
+            'method' => ['required', 'in:fixed_monthly,session_rate,hourly_rate,allowance'],
             'rate' => ['required', 'numeric', 'money', 'gte:0'],
             'skill_id' => ['nullable', 'string'],
             'scale_id' => ['nullable', 'string'],

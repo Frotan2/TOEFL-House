@@ -45,6 +45,22 @@ const EXPECTED_CONSTRAINTS = new Map([
   ['disclosures_scope_type_check', 'c'],
   ['privacy_export_requests_purpose_check', 'c'],
   ['privacy_export_requests_lifecycle_state_check', 'c'],
+  ['employments_lifecycle_state_check', 'c'],
+  ['contracts_lifecycle_state_check', 'c'],
+  ['contracts_period_check', 'c'],
+  ['contract_versions_lifecycle_state_check', 'c'],
+  ['contract_versions_period_check', 'c'],
+  ['contract_versions_approval_evidence_check', 'c'],
+  ['contract_versions_submitted_evidence_check', 'c'],
+  ['contract_versions_approver_independence_check', 'c'],
+  ['leaves_lifecycle_state_check', 'c'],
+  ['leaves_period_check', 'c'],
+  ['employment_statuses_status_check', 'c'],
+  ['scales_lifecycle_state_check', 'c'],
+  ['scales_rank_order_check', 'c'],
+  ['compensation_rules_method_check', 'c'],
+  ['compensation_rules_rate_check', 'c'],
+  ['compensation_rules_dimension_check', 'c'],
 ]);
 
 // This production boundary is intentionally a unique *index* rather than an
@@ -58,6 +74,16 @@ const EXPECTED_UNIQUE_INDEXES = [
   'asset_disposal_requests_one_active_per_asset',
   'document_verifications_one_verdict_per_version',
   'consents_one_open_per_subject_purpose',
+  'employments_one_open_per_person',
+  'contracts_one_open_per_employment',
+  'leaves_one_pending_per_employment',
+  'contract_versions_no_unique',
+  'contract_versions_one_in_preparation_per_contract',
+  'compensation_rules_one_per_unit_rate_per_version',
+  'compensation_rules_one_fixed_per_version',
+  'compensation_rules_one_allowance_label_per_version',
+  'scales_key_unique',
+  'scales_rank_order_unique',
 ];
 
 // Final-state trigger guards whose absence would silently reopen a closed
@@ -73,6 +99,15 @@ const EXPECTED_TRIGGERS = [
   ['consent_revocations', 'consent_revocations_append_only_trigger'],
   ['disclosures', 'disclosures_append_only_trigger'],
   ['privacy_export_requests', 'privacy_export_requests_guard_trigger'],
+  ['employments', 'employments_lifecycle_guard_trigger'],
+  ['employment_statuses', 'employment_statuses_append_only_trigger'],
+  ['contracts', 'contracts_signed_terms_immutable_trigger'],
+  ['contracts', 'contracts_no_delete_trigger'],
+  ['contract_versions', 'contract_versions_lifecycle_guard_trigger'],
+  ['contract_versions', 'contract_versions_no_delete_trigger'],
+  ['leaves', 'leaves_lifecycle_guard_trigger'],
+  ['compensation_rules', 'compensation_rules_version_gate_trigger'],
+  ['scales', 'scales_catalog_guard_trigger'],
 ];
 
 const conn = async () => {
@@ -198,6 +233,7 @@ async function mustReject(name, probe) {
     consentRevocation: randomUUID(),
     disclosure: randomUUID(),
     exportRequest: randomUUID(),
+    leave: randomUUID(),
   };
   let rejection;
 
@@ -372,8 +408,15 @@ try {
       { table: 'consent_revocations', privileges: ['INSERT', 'UPDATE'] },
       { table: 'disclosures', privileges: ['INSERT', 'UPDATE'] },
       { table: 'privacy_export_requests', privileges: ['INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'employments', privileges: ['INSERT', 'UPDATE'] },
+      { table: 'employment_statuses', privileges: ['INSERT'] },
+      { table: 'contracts', privileges: ['INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'contract_versions', privileges: ['INSERT', 'UPDATE', 'DELETE'] },
+      { table: 'leaves', privileges: ['INSERT', 'UPDATE'] },
+      { table: 'scales', privileges: ['INSERT', 'DELETE'] },
+      { table: 'compensation_rules', privileges: ['INSERT'] },
     ],
-    userTriggerControlTables: ['payments', 'enrollments', 'classes', 'journal_lines', 'asset_disposal_requests', 'consents'],
+    userTriggerControlTables: ['payments', 'enrollments', 'classes', 'journal_lines', 'asset_disposal_requests', 'consents', 'employments', 'employment_statuses', 'contracts', 'contract_versions', 'leaves', 'scales', 'compensation_rules'],
   });
   await assertExpectedSchema();
 
@@ -874,7 +917,224 @@ try {
     params: (ids) => [ids.exportRequest],
   });
 
-  console.log('Database invariants: 39/39 named production-schema boundaries rejected invalid writes.');
+  // HR employment lifecycle: candidate is the only birth state
+  await mustReject('employment is born as candidate', {
+    expected: { code: 'P0001', messageIncludes: 'employments are created as candidate' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR runtime person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+    params: (ids) => [ids.account, ids.person],
+  });
+
+  // HR employment: terminated is terminal
+  await mustReject('terminated employment is terminal', {
+    expected: { code: 'P0001', messageIncludes: 'terminated employment is final' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR terminal person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'terminated', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"UPDATE employments SET lifecycle_state = 'active', updated_at = NOW() WHERE id = $1\",
+    params: (ids) => [ids.account],
+  });
+
+  // HR employment: cannot rebind to another person
+  await mustReject('employment person is immutable', {
+    expected: { code: 'P0001', messageIncludes: 'an employment cannot be rebound' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR person A', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR person B', '1980-01-01', 'verified', NULL)\",
+        [ids.verifiedPerson],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"UPDATE employments SET person_id = $1, updated_at = NOW() WHERE id = $2\",
+    params: (ids) => [ids.verifiedPerson, ids.account],
+  });
+
+  // HR employment statuses: append-only
+  await mustReject('employment status history is append-only', {
+    expected: { code: 'P0001', messageIncludes: 'employment status history is append-only' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR status person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'candidate', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employment_statuses (id, employment_id, status, effective_from, reason, actor_id, created_at, updated_at) VALUES ($1, $2, 'candidate', CURRENT_DATE, 'opened', $3, NOW(), NOW())\",
+        [ids.enrollment, ids.account, ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"UPDATE employment_statuses SET reason = 'tampered' WHERE id = $1\",
+    params: (ids) => [ids.enrollment],
+  });
+
+  // HR leave: self-approval prevention
+  await mustReject('leave self-approval is prevented by schema', {
+    expected: { code: 'P0001', messageIncludes: 'the leave decider must differ from the requester' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR leave person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(
+        \"INSERT INTO leaves (id, employment_id, category, date_from, date_to, reason, lifecycle_state, requested_by, created_at, updated_at) VALUES ($1, $2, 'sick', CURRENT_DATE, CURRENT_DATE + 3, 'illness', 'requested', $3, NOW(), NOW())\",
+        [ids.leave, ids.account, ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"UPDATE leaves SET lifecycle_state = 'approved', decided_by = requested_by, updated_at = NOW() WHERE id = $1\",
+    params: (ids) => [ids.leave],
+  });
+
+  // HR contract: signed terms are immutable
+  await mustReject('signed contract terms are immutable', {
+    expected: { code: 'P0001', messageIncludes: 'signed contract terms are immutable' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR contract person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(
+        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'original terms', 'active', CURRENT_DATE, NOW(), NOW())\",
+        [ids.student, ids.account],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"UPDATE contracts SET terms_summary = 'tampered terms', updated_at = NOW() WHERE id = $1\",
+    params: (ids) => [ids.student],
+  });
+
+  // HR contract: no delete
+  await mustReject('contracts cannot be deleted', {
+    expected: { code: 'P0001', messageIncludes: 'contracts are retained history and cannot be deleted' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR delete contract person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(
+        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'immutable terms', 'closed', CURRENT_DATE, NOW(), NOW())\",
+        [ids.student, ids.account],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: 'DELETE FROM contracts WHERE id = $1',
+    params: (ids) => [ids.student],
+  });
+
+  // HR scales: no delete
+  await mustReject('scales cannot be deleted', {
+    expected: { code: 'P0001', messageIncludes: 'scales are retained compensation history and cannot be deleted' },
+    setup: async (client, ids) => {
+      await client.query(
+        \"INSERT INTO scales (id, key, name, rank_order, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'Runtime Scale', 99, 'active', NOW(), NOW())\",
+        [ids.documentClassification, `runtime-scale-${ids.documentClassification}`],
+      );
+    },
+    sql: 'DELETE FROM scales WHERE id = $1',
+    params: (ids) => [ids.documentClassification],
+  });
+
+  // HR contract versions: no delete
+  await mustReject('contract versions cannot be deleted', {
+    expected: { code: 'P0001', messageIncludes: 'contract versions are retained approval history and cannot be deleted' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR version person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(
+        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'version contract', 'active', CURRENT_DATE, NOW(), NOW())\",
+        [ids.student, ids.account],
+      );
+      await client.query(
+        \"INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, created_at, updated_at) VALUES ($1, $2, 1, 'draft', 'terms.pdf', CURRENT_DATE, $3, NOW(), NOW())\",
+        [ids.documentVersion, ids.student, ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: 'DELETE FROM contract_versions WHERE id = $1',
+    params: (ids) => [ids.documentVersion],
+  });
+
+  // HR compensation rules: frozen once version leaves draft
+  await mustReject('compensation rules frozen after version leaves draft', {
+    expected: { code: 'P0001', messageIncludes: 'compensation rules attach to a draft contract version only' },
+    setup: async (client, ids) => {
+      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query(
+        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR rule person', '1980-01-01', 'verified', NULL)\",
+        [ids.person],
+      );
+      await client.query(
+        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        [ids.account, ids.person],
+      );
+      await client.query(
+        \"INSERT INTO contracts (id, employment_id, terms_summary, lifecycle_state, effective_from, created_at, updated_at) VALUES ($1, $2, 'rule contract', 'active', CURRENT_DATE, NOW(), NOW())\",
+        [ids.student, ids.account],
+      );
+      await client.query(
+        \"INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, submitted_at, approved_by, approved_at, approval_digest, created_at, updated_at) VALUES ($1, $2, 1, 'active', 'terms.pdf', CURRENT_DATE, $3, NOW(), $3, NOW(), 'digest', NOW(), NOW())\",
+        [ids.documentVersion, ids.student, ids.person],
+      );
+      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+    },
+    sql: \"INSERT INTO compensation_rules (id, contract_version_id, method, rate, created_at, updated_at) VALUES ($1, $2, 'fixed_monthly', 100.00, NOW(), NOW())\",
+    params: (ids) => [randomUUID(), ids.documentVersion],
+  });
+
+  const totalInvariants = 39 + 10;
+  console.log(`Database invariants: ${totalInvariants}/${totalInvariants} named production-schema boundaries rejected invalid writes.`);
 } catch (error) {
   console.error(`Database invariant verification failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;

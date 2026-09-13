@@ -32,6 +32,7 @@ final class ApiContractTest extends CanonicalTestCase
         '/api/v1/crm/branches',
         '/api/v1/placement/profiles',
         '/api/v1/notifications',
+        '/api/v1/hr/workspace',
     ];
 
     private function signIn(): void

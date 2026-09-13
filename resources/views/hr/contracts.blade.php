@@ -138,7 +138,7 @@
                                         <option value="fixed_monthly">Fixed monthly</option>
                                         <option value="session_rate">Per session</option>
                                         <option value="hourly_rate">Per hour</option>
-                                        <option value="scale_rate">Per scale</option>
+                                        <option value="allowance">Allowance</option>
                                     </select>
                                     <label>Rate</label>
                                     <input name="rate" type="text" required>

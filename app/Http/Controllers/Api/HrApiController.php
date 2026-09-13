@@ -170,6 +170,13 @@ final class HrApiController extends Controller
         return response()->json(['status' => 'retired', 'result' => $result]);
     }
 
+    public function discardRule(string $ruleId): JsonResponse
+    {
+        $result = app(MaintainContractVersion::class)->discardRule($this->actor(), \App\Modules\Hr\Models\CompensationRule::query()->findOrFail($ruleId), $this->idempotencyKey('hr.version.rule.discard'));
+
+        return response()->json(['status' => 'rule_discarded', 'result' => $result]);
+    }
+
     private function can(string $capability): bool
     {
         return app(AccessDecision::class)->decide($this->actor(), $capability, null)->allowed;
