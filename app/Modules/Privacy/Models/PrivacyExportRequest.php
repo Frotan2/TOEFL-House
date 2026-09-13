@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Privacy\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Staged organization-wide data export request: requested by an
@@ -21,6 +22,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $approver_two_id
  * @property string|null $exported_by
  * @property string|null $disclosure_id
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 final class PrivacyExportRequest extends Model
 {
