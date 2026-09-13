@@ -135,8 +135,6 @@ jobs:
     name: Browser E2E (real Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write
     services:
       postgres:
         image: postgres:18.4
@@ -235,28 +233,4 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run verify:browser:documents 2>&1 | tee /tmp/documents-e2e-console.log
-
-      # TEMPORARY first-run debugging channel (same pattern the Library
-      # journey used while it was being stabilized): CI log downloads and
-      # step summaries are unreachable from some operator environments, so
-      # the journey's console log and summary mirror are committed back to
-      # the branch. Retire this step once the journey is stable.
-      - name: Publish Documents E2E evidence
-        if: always()
-        run: |
-          mkdir -p ci-evidence
-          cp /tmp/documents-e2e-console.log ci-evidence/documents-e2e-console.log 2>/dev/null \
-            || echo 'console log unavailable' > ci-evidence/documents-e2e-console.log
-          cp /tmp/documents-browser-e2e-summary.md ci-evidence/documents-e2e-summary.md 2>/dev/null \
-            || echo 'summary unavailable' > ci-evidence/documents-e2e-summary.md
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ci-evidence
-          if ! git diff --cached --quiet; then
-            git commit -m "ci-evidence: documents browser e2e, run $GITHUB_RUN_ID attempt $GITHUB_RUN_ATTEMPT [skip ci]"
-            git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
-          fi
+        run: npm run verify:browser:documents
