@@ -209,11 +209,31 @@ journey's fix.
   scripts independently exercise the same boundaries in CI; recording a
   mutation run remains open work for an environment that can execute PHPUnit.
 
+## Certification on `main`
+
+The closure merged to `main` as **PR #29** (merge commit **`27b96d8`**,
+2026-09-13T07:18:18Z) and the certification runs were executed on that exact
+HEAD, not on the branch:
+
+| Gate | Run | Head | Result |
+|---|---|---|---|
+| Verification (static analysis, backend, frontend, browser E2E) | **34744897784** | `27b96d8` | **success — all four jobs**, Privacy browser journey 38/38 behind the hardened smoke tour |
+| CRM Browser E2E (actionlint + CRM journey) | **34744897779** | `27b96d8` | **success** |
+
+That run executed all four browser journeys green — smoke, Library, Documents
+and Privacy — so `27b96d8` carries the two predecessor closures as well:
+Library & Resources and Documents & Evidence merged in PR #26 and were first
+certified on `main` at HEAD `0e46611` by Verification run 34735425882 (Library
+24/24, Documents 26/26) with CRM run 34735426000 alongside.
+`DOMAIN-REGISTRY.md`, `OPERATING-CONTROL.md` and `RUNTIME-RELEASE.md` now record
+all three certifications against their exact commits, and record that a
+certification lapses with the next commit to `main`.
+
 ## Remaining work
 
-1. Merge to `main` and run the Verification workflow on the main HEAD as the
-   certification run (same doctrine as the Library and Documents closures). No
-   known Privacy defects remain open.
+1. None for the Privacy domain: no known defect is open, and the closure is
+   certified at `main` HEAD `27b96d8`. Any later commit to `main` requires fresh
+   applicable evidence before it can inherit that certification.
 2. Execute a mutation check on the canonical Privacy suite in an environment
    that can run PHPUnit (remove the lifecycle guard → the boundary test must
    fail; remove the one-open-consent index → the savepoint attack must
