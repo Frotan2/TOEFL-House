@@ -5,12 +5,13 @@
 documents browser E2E actors provisioned on DB 'toefl_house_e2e'
 PASS  Health endpoint is reachable
       HTTP 200
+PASS  Officer workspace renders server-projected evidence metrics
+      0Visible documentsScoped server projection | 0In lifecycle reviewDraft through verified | 0Active documentsEvidence remains append-only | 0Retention decisionsNo destructive deletion
 DOCUMENTS BROWSER E2E FAILED
-TimeoutError: Waiting for selector `#app-toolbar` failed
-    at CSSQueryHandler.waitFor (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/common/QueryHandler.js:211:46)
-    at async CdpFrame.waitForSelector (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:546:21)
-    at async CdpPage.waitForSelector (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1477:20)
-    at async session (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:197:5)
-    at async file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:333:19
+ReferenceError: clickPageButton is not defined
+    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:363:3
+FAIL  Journey ran to completion
+      clickPageButton is not defined
 
-DOCUMENTS BROWSER E2E: 1/1 checks passed
+DOCUMENTS BROWSER E2E: 2/3 checks passed
+FAILED: Journey ran to completion
