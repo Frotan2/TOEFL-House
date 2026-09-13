@@ -8,15 +8,13 @@ use App\Modules\Hr\Commands\MaintainContract;
 use App\Modules\Hr\Commands\MaintainContractVersion;
 use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Commands\MaintainLeave;
-use App\Modules\Hr\Commands\MaintainScale;
 use App\Modules\Hr\Models\Contract;
 use App\Modules\Hr\Models\ContractVersion;
 use App\Modules\Hr\Models\Employment;
 use App\Modules\Hr\Models\Leave;
-use App\Modules\Hr\Models\Scale;
-use App\Modules\Identity\Models\Person;
+use App\Modules\Identity\Models\UserAccount;
 use App\Support\Identifiers\RandomIdentifier;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
@@ -68,21 +66,21 @@ final class HrApiFeatureTest extends TestCase
 
     private function signInAs(string $personId, string $username): void
     {
-        $existing = \App\Modules\Identity\Models\UserAccount::query()
+        $existing = UserAccount::query()
             ->where('person_id', $personId)
-            ->where('account_state', \App\Modules\Identity\Models\UserAccount::STATE_ACTIVE)
+            ->where('account_state', UserAccount::STATE_ACTIVE)
             ->first();
         if ($existing) {
             $this->post('/login', ['username' => $existing->username, 'password' => 'employee-password-1'])->assertRedirect('/');
 
             return;
         }
-        \App\Modules\Identity\Models\UserAccount::query()->create([
+        UserAccount::query()->create([
             'id' => RandomIdentifier::new(),
             'person_id' => $personId,
             'username' => $username,
-            'password_hash' => \Illuminate\Support\Facades\Hash::make('employee-password-1'),
-            'account_state' => \App\Modules\Identity\Models\UserAccount::STATE_ACTIVE,
+            'password_hash' => Hash::make('employee-password-1'),
+            'account_state' => UserAccount::STATE_ACTIVE,
         ]);
         $this->post('/login', ['username' => $username, 'password' => 'employee-password-1'])->assertRedirect('/');
     }
