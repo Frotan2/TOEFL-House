@@ -470,6 +470,12 @@ try {
   await waitForChip(registrarPage, DOC_A, 'Submitted');
   record('Registrar re-submits the rejected document (rejected→submitted)', await rowChip(registrarPage, DOC_A) === 'Submitted', `chip=${await rowChip(registrarPage, DOC_A)}`);
 
+  // The registrar's re-submit changed DOC_A behind the verifier's back; their
+  // last reload still shows Rejected, which correctly offers no Verify button
+  // under the state-legal matrix. A real verifier refreshes before acting.
+  await clickPageButton(verifierPage, 'Refresh facts');
+  await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_A, 'Submitted');
   await clickRowButton(verifierPage, DOC_A, 'Verify');
   await selectOption(verifierPage, 'Verification result', 'Pass');
   await setLabeledInput(verifierPage, 'Evidence reason', 'e2e verified independently');
