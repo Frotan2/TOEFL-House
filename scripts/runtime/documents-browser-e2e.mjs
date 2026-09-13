@@ -280,6 +280,24 @@ try {
     return row?.querySelector('td:nth-child(4)')?.textContent.trim() ?? null;
   }, title);
 
+  /**
+   * Wait for a row's lifecycle chip to reach the expected state. Commands
+   * refresh the workspace SILENTLY (load(false) shows no busy indicator), so
+   * chip reads must poll until the reloaded projection arrives instead of
+   * reading the stale pre-command view once.
+   */
+  const waitForChip = (page, title, chip) => page.waitForFunction(
+    ({ needle, expected }) => {
+      const section = Array.from(document.querySelectorAll('section'))
+        .find((element) => element.querySelector('h2')?.textContent.includes('Documents in your authorized scope'));
+      const row = Array.from(section?.querySelectorAll('table tbody tr') || [])
+        .find((element) => element.querySelector('td')?.textContent.includes(needle));
+      return row?.querySelector('td:nth-child(4)')?.textContent.trim() === expected;
+    },
+    { timeout: 60_000, polling: 100 },
+    { needle: title, expected: chip },
+  );
+
   /** Exact button labels offered by a registry row. */
   const rowButtons = (page, title) => page.evaluate((needle) => {
     const section = Array.from(document.querySelectorAll('section'))
@@ -404,6 +422,7 @@ try {
   record('Registrar registers evidence for the target person', true, `${subjectOption} / ${classificationOption}`);
 
   await openTab(registrarPage, 'Evidence registry');
+  await waitForChip(registrarPage, DOC_A, 'Draft');
   record('Registered document appears in the authorized scope', await rowChip(registrarPage, DOC_A) === 'Draft', `chip=${await rowChip(registrarPage, DOC_A)}`);
   const draftButtons = await rowButtons(registrarPage, DOC_A);
   record(
@@ -418,6 +437,7 @@ try {
   await clickCommandSubmit(registrarPage, 'Submit new version');
   await waitForNotice(registrarPage, 'New immutable version submitted for review.');
   await waitIdle(registrarPage);
+  await waitForChip(registrarPage, DOC_A, 'Submitted');
   record('Registrar submits an immutable version for review', await rowChip(registrarPage, DOC_A) === 'Submitted', `chip=${await rowChip(registrarPage, DOC_A)}`);
 
   // ── Verifier session: independent verification + lifecycle + SoD denial ──
@@ -431,15 +451,23 @@ try {
   await clickCommandSubmit(verifierPage, 'Record failed verification');
   await waitForNotice(verifierPage, 'Verification failed and evidence was recorded.');
   await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_A, 'Rejected');
   record('Verifier records an independent FAIL verdict', await rowChip(verifierPage, DOC_A) === 'Rejected', `chip=${await rowChip(verifierPage, DOC_A)}`);
 
-  // Recovery flow: the registrar re-submits the rejected document.
+  // Recovery flow: the registrar re-submits the rejected document. Their
+  // session still shows the pre-verdict projection, where the state-legal
+  // matrix correctly offers no Submit button on a Submitted row — a real
+  // registrar refreshes to see the rejection, and so does the journey.
+  await clickPageButton(registrarPage, 'Refresh facts');
+  await waitIdle(registrarPage);
+  await waitForChip(registrarPage, DOC_A, 'Rejected');
   await clickRowButton(registrarPage, DOC_A, 'Submit version');
   await setLabeledInput(registrarPage, 'Content hash', 'sha256:e2e-documents-a-v3');
   await setLabeledInput(registrarPage, 'Storage reference', 'storage/e2e/doc-a-v3.pdf');
   await clickCommandSubmit(registrarPage, 'Submit new version');
   await waitForNotice(registrarPage, 'New immutable version submitted for review.');
   await waitIdle(registrarPage);
+  await waitForChip(registrarPage, DOC_A, 'Submitted');
   record('Registrar re-submits the rejected document (rejected→submitted)', await rowChip(registrarPage, DOC_A) === 'Submitted', `chip=${await rowChip(registrarPage, DOC_A)}`);
 
   await clickRowButton(verifierPage, DOC_A, 'Verify');
@@ -448,12 +476,14 @@ try {
   await clickCommandSubmit(verifierPage, 'Record passing verification');
   await waitForNotice(verifierPage, 'Verification passed and evidence was recorded.');
   await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_A, 'Verified');
   record('Verifier records a PASS verdict', await rowChip(verifierPage, DOC_A) === 'Verified', `chip=${await rowChip(verifierPage, DOC_A)}`);
 
   await verifier.expectDialogs(true);
   await clickRowButton(verifierPage, DOC_A, 'Activate');
   await waitForNotice(verifierPage, 'Document activated.');
   await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_A, 'Active');
   record('Verifier activates the verified evidence', await rowChip(verifierPage, DOC_A) === 'Active', `chip=${await rowChip(verifierPage, DOC_A)}`);
 
   // Officer records the retention decision while the document is ACTIVE.
@@ -470,6 +500,16 @@ try {
   await clickRowButton(officerPage, DOC_A, 'Retention');
   await waitForNotice(officerPage, 'Retention decision recorded from the current rule.');
   await waitIdle(officerPage);
+  await officerPage.waitForFunction(
+    (needle) => {
+      const section = Array.from(document.querySelectorAll('section'))
+        .find((element) => element.querySelector('h2')?.textContent.includes('Recent recorded decisions'));
+      const text = section?.textContent || '';
+      return text.includes(needle) && text.includes('Retain');
+    },
+    { timeout: 60_000, polling: 100 },
+    DOC_A,
+  );
   const retentionEvidence = await officerPage.evaluate(() => {
     const section = Array.from(document.querySelectorAll('section'))
       .find((element) => element.querySelector('h2')?.textContent.includes('Recent recorded decisions'));
@@ -499,6 +539,7 @@ try {
   await clickCommandSubmit(verifierPage, 'Submit new version');
   await waitForNotice(verifierPage, 'New immutable version submitted for review.');
   await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_B, 'Submitted');
   record('Verifier registers and submits their OWN document (SoD setup)', await rowChip(verifierPage, DOC_B) === 'Submitted', `chip=${await rowChip(verifierPage, DOC_B)}`);
 
   verifier.expectDenial(true);
@@ -509,10 +550,15 @@ try {
   await waitForAlert(verifierPage, 'the verifier may not be the uploader');
   verifier.expectDenial(false);
   await waitIdle(verifierPage);
+  // Prove the document did not move using a FRESH server projection, not the
+  // stale view the denied command left behind.
+  await clickPageButton(verifierPage, 'Refresh facts');
+  await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_B, 'Submitted');
   record(
     'Uploader/verifier SoD is denied in the live UI and the document does NOT move',
     await rowChip(verifierPage, DOC_B) === 'Submitted',
-    `chip=${await rowChip(verifierPage, DOC_B)} — alert carries the server message`,
+    `chip=${await rowChip(verifierPage, DOC_B)} after refresh — alert carries the server message`,
   );
 
   // Expire and archive behind the irreversible confirms.
@@ -520,12 +566,14 @@ try {
   await clickRowButton(verifierPage, DOC_A, 'Expire');
   await waitForNotice(verifierPage, 'Document expired; its immutable evidence remains available.');
   await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_A, 'Expired');
   record('Verifier expires the active document', await rowChip(verifierPage, DOC_A) === 'Expired', `chip=${await rowChip(verifierPage, DOC_A)}`);
 
   await verifier.expectDialogs(true);
   await clickRowButton(verifierPage, DOC_A, 'Archive');
   await waitForNotice(verifierPage, 'Document archived; immutable evidence remains retained.');
   await waitIdle(verifierPage);
+  await waitForChip(verifierPage, DOC_A, 'Archived');
   record('Verifier archives the expired document', await rowChip(verifierPage, DOC_A) === 'Archived', `chip=${await rowChip(verifierPage, DOC_A)}`);
 
   const verifierDialogs = await dialogMessages(verifierPage);
@@ -539,6 +587,7 @@ try {
   await openTab(registrarPage, 'Evidence registry');
   await clickPageButton(registrarPage, 'Refresh facts');
   await waitIdle(registrarPage);
+  await waitForChip(registrarPage, DOC_A, 'Archived');
   const archivedButtons = await rowButtons(registrarPage, DOC_A);
   record(
     'An archived document offers History only — no mutation affordance',
