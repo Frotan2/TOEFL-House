@@ -10,6 +10,7 @@ use App\Modules\Hr\Commands\MaintainContractVersion;
 use App\Modules\Hr\Commands\MaintainEmployment;
 use App\Modules\Hr\Commands\MaintainLeave;
 use App\Modules\Hr\Commands\MaintainScale;
+use App\Modules\Hr\Models\CompensationRule;
 use App\Modules\Hr\Models\Contract;
 use App\Modules\Hr\Models\ContractVersion;
 use App\Modules\Hr\Models\Employment;
@@ -168,6 +169,13 @@ final class HrApiController extends Controller
         $result = app(MaintainScale::class)->retire($this->actor(), Scale::query()->findOrFail($scaleId), $this->idempotencyKey('hr.scale.retire'));
 
         return response()->json(['status' => 'retired', 'result' => $result]);
+    }
+
+    public function discardRule(string $ruleId): JsonResponse
+    {
+        $result = app(MaintainContractVersion::class)->discardRule($this->actor(), CompensationRule::query()->findOrFail($ruleId), $this->idempotencyKey('hr.version.rule.discard'));
+
+        return response()->json(['status' => 'rule_discarded', 'result' => $result]);
     }
 
     private function can(string $capability): bool

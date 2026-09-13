@@ -66,6 +66,7 @@ containsAll(apiRoutes + hrRoutes, [
   "Route::prefix('hr')->name('api.hr.')",
   "Route::get('/workspace', [HrApiController::class, 'workspace'])",
   "Route::post('/employ', [HrApiController::class, 'employ'])",
+  "Route::post('/contract-versions/rules/{ruleId}/discard', [HrApiController::class, 'discardRule'])",
 ], 'canonical People/Placement API route contract');
 
 containsAll(placement, [
@@ -92,7 +93,24 @@ containsAll(hr, [
   '`/hr/employments/${encodeURIComponent(selected.id)}/${action}`',
   '`/hr/employments/${encodeURIComponent(selected.id)}/place-on-leave`',
   '`/hr/employments/${encodeURIComponent(selected.id)}/leave`',
+  '`/hr/leaves/${encodeURIComponent(leaveId)}/decide`',
+  '`/hr/leaves/${encodeURIComponent(leaveId)}/cancel`',
+  '`/hr/contract-versions/${encodeURIComponent(versionId)}/${action}`',
+  '`/hr/contracts/${encodeURIComponent(contractSignForm.contract_id)}/sign`',
+  '`/hr/contracts/${encodeURIComponent(contractCloseForm.contract_id)}/close`',
+  'fixed_monthly',
+  'session_rate',
+  'hourly_rate',
+  'allowance',
 ], 'HR workspace lifecycle');
+
+containsAll(hrRoutes, [
+  "Route::post('/leaves/{leaveId}/decide', [HrApiController::class, 'decideLeave'])",
+  "Route::post('/leaves/{leaveId}/cancel', [HrApiController::class, 'cancelLeave'])",
+  "Route::post('/scales', [HrApiController::class, 'registerScale'])",
+  "Route::post('/scales/{scaleId}/retire', [HrApiController::class, 'retireScale'])",
+  "Route::post('/contract-versions/{versionId}/{action}', [HrApiController::class, 'versionTransition'])",
+], 'HR API route contract');
 
 assert.match(navigation, /['\"]\/library['\"]/);
 console.log('Backend↔frontend parity sentinels passed.');

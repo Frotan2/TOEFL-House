@@ -15,6 +15,7 @@ Route::prefix('hr')->name('api.hr.')->group(function (): void {
     Route::post('/leaves/{leaveId}/cancel', [HrApiController::class, 'cancelLeave'])->name('leave.cancel');
     Route::post('/contract-versions', [HrApiController::class, 'prepareVersion'])->name('version.prepare');
     Route::post('/contract-versions/{versionId}/rules', [HrApiController::class, 'addRule'])->name('version.rule');
+    Route::post('/contract-versions/rules/{ruleId}/discard', [HrApiController::class, 'discardRule'])->name('version.rule.discard');
     Route::post('/contract-versions/{versionId}/{action}', [HrApiController::class, 'versionTransition'])
         ->where('action', 'submit|withdraw|approve')->name('version.transition');
     Route::post('/contracts', [HrApiController::class, 'draftContract'])->name('contract.draft');

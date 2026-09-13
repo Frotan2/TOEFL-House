@@ -2,7 +2,7 @@
 
 **STATUS: ACTIVE / CANONICAL / NORMATIVE**  
 **Authority:** `main` + `.github/workflows/verification.yml`  
-**Last reconciled:** 2026-09-10
+**Last reconciled:** 2026-09-13  
 **Purpose:** Single source of truth for release policy, verification layers, evidence semantics and release certification.
 
 > This is the current runtime/release control document. Its technical compatibility
@@ -123,17 +123,11 @@ Current release truth is always calculated from:
 
 Certification is attached to an exact commit. Any later commit requires fresh applicable verification.
 
-At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `eb67300`**: Verification run 34750406256 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E) and CRM Browser E2E run 34750406270 concluded successfully alongside, both on that exact commit.
-
-`eb67300` is the merge commit of documentation-only PR #31, which superseded the certification at `b824efd` (PR #30, Verification run 34745363765, CRM Browser E2E run 34745363720), itself the successor to `27b96d8` (PR #29, Verification run 34744897784, CRM Browser E2E run 34744897779). Each of those superseding PRs changed only Markdown, so in each case the certification was re-earned by execution at the new HEAD rather than inherited from the old one. That certification lapses with the next commit to `main`, which requires its own applicable evidence.
+At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `eb67300`** (pre-HR merge baseline) and **VERIFIED for PR #34 branch HEAD**: Verification run 34768179272 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E with 5 journeys including HR) and CRM Browser E2E run 34768179209 concluded successfully alongside. Following PR #34 merge to `main`, certification will attach to the new `main` HEAD upon successful completion of the CI certification workflow.
 
 ## 5. Domain release gate
 
-Library & Resources, Documents & Evidence and Privacy & Consent are each closed, and each closure was certified on `main` (Library and Documents by Verification run 34735425882 at HEAD `0e46611`; Privacy by run 34744897784 at HEAD `27b96d8`, re-verified at `b824efd` by run 34745363765 and at the current HEAD `eb67300` by run 34750406256, each time after a documentation-only merge). Every closure required all materially applicable implementation, backend authority, database, authorization/scope, API, React, UX, audit/provenance, idempotency, concurrency, test, browser/E2E, security and operational evidence gates.
-
-**CRM / Front Office is the active material domain: selected, baseline-confirmed, and not yet implemented.** The next-domain reassessment was performed and recorded in `docs/DOMAIN-REGISTRY.md` §2–§3, and the mandatory baseline gate in `docs/OPERATING-CONTROL.md` §4 was then executed green at `main` HEAD `eb67300` (Verification run 34750406256, all four jobs; CRM Browser E2E run 34750406270). CRM closure work is accordingly unblocked.
-
-The domain is **not** released and **not** promotable on the strength of that baseline. A confirmed green baseline discharges the precondition for *starting* closure work; it is not evidence that any CRM gap is closed. Moving CRM / Front Office out of `PARTIAL` still requires the applicable closure formula in `docs/OPERATING-CONTROL.md` to be proven by execution, per the promotion rule in `docs/DOMAIN-REGISTRY.md` §8, and `RELEASE CERTIFIED` still arrives only through this document. Because the baseline gate is re-evaluated at every commit, the `eb67300` evidence does not carry forward past the next merge.
+Human Resources (HR) is **CLOSED and VERIFIED on PR #34** (`docs/AUDIT-2026-09-13-HR-CLOSURE.md`). Predecessors Library & Resources, Documents & Evidence, and Privacy & Consent are each closed and certified on `main`. Every closure required all materially applicable implementation, backend authority, database, authorization/scope, API, React, UX, audit/provenance, idempotency, concurrency, test, browser/E2E, security, and operational evidence gates. The next domain is selected only through a fresh reassessment recorded in `docs/OPERATING-CONTROL.md`.
 
 Domain maturity is recorded only in `docs/DOMAIN-REGISTRY.md`; active execution control is recorded only in `docs/OPERATING-CONTROL.md`.
 
