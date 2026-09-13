@@ -38,7 +38,7 @@ This repository follows a **single-source documentation architecture**. A curren
 
 ## Historical evidence
 
-`history/` contains preserved provenance from earlier execution lines. Historical material may explain how the system evolved but never overrides the current control plane. The former compliance snapshot is preserved there under its dated evidence name.
+`history/` is not a second current control plane. Git commits, tags and pull-request history are the authoritative historical record. The only retained history volume is `history/02-architecture-history.md`, kept temporarily because the canonical decision register still depends on its full-text decision provenance. That volume is historical/non-normative and must not override the current control plane.
 
 ## Agent entry
 
