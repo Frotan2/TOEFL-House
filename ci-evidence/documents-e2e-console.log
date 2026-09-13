@@ -8,18 +8,20 @@ PASS  Health endpoint is reachable
 PASS  Officer workspace renders server-projected evidence metrics
       0Visible documentsScoped server projection | 0In lifecycle reviewDraft through verified | 0Active documentsEvidence remains append-only | 0Retention decisionsNo destructive deletion
 PASS  Officer defines the classification through the UI
-      e2e-identity-1789263237745
+      e2e-identity-1789264003192
 PASS  Officer defines the retention rule through the UI
-      e2e-identity-1789263237745 retain 365d
+      e2e-identity-1789264003192 retain 365d
 PASS  Registrar registers evidence for the target person
-      Authority Fixture e2e-documents-subject / e2e-identity-1789263237745 · Restricted
-FAIL  Registered document appears in the authorized scope
-      chip=null
-FAIL  A draft offers the server-projected actions and NEVER a Verify affordance
-      
-FAIL  Registrar submits an immutable version for review
+      Authority Fixture e2e-documents-subject / e2e-identity-1789264003192 · Restricted
+PASS  Registered document appears in the authorized scope
       chip=Draft
-FAIL  Verifier records an independent FAIL verdict
+PASS  A draft offers the server-projected actions and NEVER a Verify affordance
+      History, Submit version
+PASS  Registrar submits an immutable version for review
+      chip=Submitted
+PASS  Verifier records an independent FAIL verdict
+      chip=Rejected
+PASS  Registrar re-submits the rejected document (rejected→submitted)
       chip=Submitted
 DOCUMENTS BROWSER E2E FAILED
 TimeoutError: Waiting failed: 60000ms exceeded
@@ -29,13 +31,9 @@ TimeoutError: Waiting failed: 60000ms exceeded
     at CdpFrame.<anonymous> (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/util/decorators.js:101:27)
     at CdpPage.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1537:37)
     at clickRowButton (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:256:55)
-    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:437:9
+    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:473:9
 FAIL  Journey ran to completion
       Waiting failed: 60000ms exceeded
 
-DOCUMENTS BROWSER E2E: 5/10 checks passed
-FAILED: Registered document appears in the authorized scope
-FAILED: A draft offers the server-projected actions and NEVER a Verify affordance
-FAILED: Registrar submits an immutable version for review
-FAILED: Verifier records an independent FAIL verdict
+DOCUMENTS BROWSER E2E: 10/11 checks passed
 FAILED: Journey ran to completion
