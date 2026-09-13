@@ -72,7 +72,7 @@ A test that remains green while its target production rule is broken is defectiv
 
 For material canonical/invariant tests, verification should include a controlled mutation of the protected production rule, confirmation that the intended test fails, restoration of the rule, and a green rerun. Mutation evidence belongs to the engineering record of that change; this document does not freeze historical test counts or run durations as current facts.
 
-Representative previously executed mutation checks have included monetary over-allocation, academic capacity, authorization decisions, API registration, page rendering, database uniqueness, test-strategy enforcement and React mount failures. Those examples describe the verification method, not permanent current test counts.
+Representative previously executed mutation checks have included monetary over-allocation, academic capacity, authorization decisions, API registration, page rendering, database uniqueness, test-strategy enforcement, React mount failures, staged asset-disposal withdrawal and document evidence lifecycle rules. Those examples describe the verification method, not permanent current test counts.
 
 ## 6. CI responsibilities
 
