@@ -8,11 +8,11 @@ PASS  Health endpoint is reachable
 PASS  Officer workspace renders server-projected evidence metrics
       0Visible documentsScoped server projection | 0In lifecycle reviewDraft through verified | 0Active documentsEvidence remains append-only | 0Retention decisionsNo destructive deletion
 PASS  Officer defines the classification through the UI
-      e2e-identity-1789264599677
+      e2e-identity-1789265218842
 PASS  Officer defines the retention rule through the UI
-      e2e-identity-1789264599677 retain 365d
+      e2e-identity-1789265218842 retain 365d
 PASS  Registrar registers evidence for the target person
-      Authority Fixture e2e-documents-subject / e2e-identity-1789264599677 · Restricted
+      Authority Fixture e2e-documents-subject / e2e-identity-1789265218842 · Restricted
 PASS  Registered document appears in the authorized scope
       chip=Draft
 PASS  A draft offers the server-projected actions and NEVER a Verify affordance
@@ -27,10 +27,10 @@ PASS  Verifier records a PASS verdict
       chip=Verified
 PASS  Verifier activates the verified evidence
       chip=Active
-FAIL  The officer row offers History + Retention and nothing else (capability-projected)
-      
+PASS  The officer row offers History + Retention and nothing else (capability-projected)
+      History, Retention
 PASS  The retention decision appears in the retention evidence table
-      Retention evidenceRecent recorded decisionsAppend-only policy outcomesDocumentOutcomeBasisDecided byRecordedBrowser E2E evidence 1789264599677RetainE2E retentio
+      Retention evidenceRecent recorded decisionsAppend-only policy outcomesDocumentOutcomeBasisDecided byRecordedBrowser E2E evidence 1789265218842RetainE2E retentio
 PASS  Verifier registers and submits their OWN document (SoD setup)
       chip=Submitted
 PASS  Uploader/verifier SoD is denied in the live UI and the document does NOT move
@@ -40,13 +40,13 @@ PASS  Verifier expires the active document
 PASS  Verifier archives the expired document
       chip=Archived
 PASS  The archive confirm warns that archiving does not erase immutable evidence
-      Activate “Browser E2E evidence 1789264599677”? || Expire “Browser E2E evidence 1789264599677”? || Archive “Browser E2E evidence 1789264599677”?
+      Activate “Browser E2E evidence 1789265218842”? || Expire “Browser E2E evidence 1789265218842”? || Archive “Browser E2E evidence 1789265218842”?
 
 Archiving does not erase immutable evidence.
 PASS  An archived document offers History only — no mutation affordance
       History
 PASS  The immutable history renders every version, uploader and verdict with its reason
-      Immutable chain of custodyBrowser E2E evidence 1789264599677Version records and verification evidence are projected without storage references.Close historyCurrent lifecycle: Archived · Immutable Appe
+      Immutable chain of custodyBrowser E2E evidence 1789265218842Version records and verification evidence are projected without storage references.Close historyCurrent lifecycle: Archived · Immutable Appe
 PASS  No storage reference is ever rendered anywhere in the workspace
       storage_ref is write-only projection
 PASS  Every observed Documents mutation was a canonical POST (no PUT/PATCH/DELETE, no ad-hoc routes)
@@ -58,5 +58,4 @@ PASS  Registrar completed the journey without console/network errors outside the
 PASS  Verifier completed the journey without console/network errors outside the provoked denial
       console=0; failedRequests=0
 
-DOCUMENTS BROWSER E2E: 25/26 checks passed
-FAILED: The officer row offers History + Retention and nothing else (capability-projected)
+DOCUMENTS BROWSER E2E: 26/26 checks passed

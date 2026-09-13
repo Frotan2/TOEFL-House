@@ -1,6 +1,6 @@
 ## Documents browser E2E
 
-**25/26 checks passed** (2026-09-13T01:56:54.894Z)
+**26/26 checks passed** (2026-09-13T02:07:12.063Z)
 
-- FAILED: The officer row offers History + Retention and nothing else (capability-projected)
+
 
