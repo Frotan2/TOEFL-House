@@ -133,12 +133,42 @@ try {
   for (const [path, expected] of CONSOLES) {
     const beforeErrors = consoleErrors.length;
     const beforeFailures = failedRequests.length;
+    const beforeApiCalls = apiCalls.length;
     await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle2' });
-    const mounted = await page.evaluate(() => Array.from(document.querySelectorAll('[id$="-console"], #react-console, #app, main')).some((node) => node.childElementCount > 0));
-    const text = (await page.evaluate(() => document.body.innerText || '')).replace(/\s+/g, ' ');
-    const matched = text.toLowerCase().includes(expected.toLowerCase());
-    record(`Console ${path} renders without browser errors`, mounted && matched && consoleErrors.length === beforeErrors && failedRequests.length === beforeFailures,
-      `mounted=${mounted} matched=${matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`);
+    // A console mounts asynchronously: `networkidle2` can settle in the gap
+    // before React has painted, and a one-shot read then reports a healthy
+    // console as unmounted. Poll the settled view instead of racing the paint —
+    // the rule the domain journeys follow. A console that never renders still
+    // fails: the bounded wait falls through to one honest read of what is there.
+    const settled = await page.waitForFunction(
+      (needle) => {
+        const mounted = Array.from(document.querySelectorAll('[id$="-console"], #react-console, #app, main')).some((node) => node.childElementCount > 0);
+        const matched = (document.body.innerText || '').replace(/\s+/g, ' ').toLowerCase().includes(needle.toLowerCase());
+        return mounted && matched ? { mounted, matched } : false;
+      },
+      { timeout: 15_000, polling: 150 },
+      expected,
+    )
+      .then((handle) => handle.jsonValue())
+      .catch(async () => {
+        try {
+          return {
+            mounted: await page.evaluate(() => Array.from(document.querySelectorAll('[id$="-console"], #react-console, #app, main')).some((node) => node.childElementCount > 0)),
+            matched: (await page.evaluate(() => document.body.innerText || '')).replace(/\s+/g, ' ').toLowerCase().includes(expected.toLowerCase()),
+          };
+        } catch {
+          return { mounted: false, matched: false };
+        }
+      });
+    // Name the offending call in the failure detail: this operator cannot read
+    // CI logs, so the journey's own output has to carry the diagnosis.
+    const badCalls = apiCalls.slice(beforeApiCalls).filter((call) => call.status >= 400);
+    record(`Console ${path} renders without browser errors`,
+      settled.mounted && settled.matched && consoleErrors.length === beforeErrors && failedRequests.length === beforeFailures,
+      `mounted=${settled.mounted} matched=${settled.matched} newConsoleErrors=${consoleErrors.length - beforeErrors} newFailedRequests=${failedRequests.length - beforeFailures}`
+        + (badCalls.length > 0 ? ` badApiCalls=${badCalls.map((call) => `${call.status} ${call.url}`).join(',').slice(0, 200)}` : '')
+        + (consoleErrors.length > beforeErrors ? ` consoleErrors=${consoleErrors.slice(beforeErrors).join(' | ').slice(0, 200)}` : '')
+        + (failedRequests.length > beforeFailures ? ` failedRequests=${failedRequests.slice(beforeFailures).join(' | ').slice(0, 200)}` : ''));
   }
 
   const workspaceProjections = await Promise.all(workspaceProjectionResponses);
