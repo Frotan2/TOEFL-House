@@ -497,6 +497,13 @@ final class PrivacyApiFeatureTest extends TestCase
             'requested_by' => $this->officerA,
         ]);
 
+        // Execution is decided at organization scope, so the "too early" probe
+        // must come from an actor that actually holds it. Authorization precedes
+        // chain state: a caller without organization-wide export authority is
+        // refused outright and learns nothing about the request's progress, so
+        // the state rejection below is only reachable by an authorized exporter.
+        $this->signOut();
+        $this->signIn($this->exporterOrg);
         $this->postJson('/api/v1/privacy/exports/'.$requestId.'/execute', [], ['Idempotency-Key' => 'privacy-api-bulk-early-execute'])
             ->assertStatus(409)
             ->assertJsonPath('error', 'privacy.export_request_state');

@@ -359,6 +359,42 @@ try {
   );
 
   /**
+   * Wait until a registry row exists in the REFRESHED projection. A command
+   * that creates a row refreshes the workspace silently (`load(false)` paints
+   * no busy state), so the row is absent until that refresh lands: every read
+   * after a creating command gates here instead of racing the paint.
+   */
+  const waitForRow = (page, heading, needle) => page.waitForFunction(
+    new Function('options', `
+      const { needle } = options;
+      ${sectionTable(heading)}
+      return Array.from(table?.querySelectorAll('tbody tr') || [])
+        .some((element) => element.textContent.includes(needle));
+    `),
+    { timeout: 60_000, polling: 100 },
+    { needle },
+  );
+
+  /**
+   * Wait until one registry cell no longer starts with `rejected`, then return
+   * its text. Slot writes (an approver signature) are invisible until the
+   * silent refresh lands; this is the positive signal that the projection the
+   * neighbouring cells are read from is the post-command one.
+   */
+  const waitForRowCellSettled = (page, heading, needle, column, rejected) => page.waitForFunction(
+    new Function('options', `
+      const { needle, index, rejected } = options;
+      ${sectionTable(heading)}
+      const row = Array.from(table?.querySelectorAll('tbody tr') || [])
+        .find((element) => element.textContent.includes(needle));
+      const text = row?.querySelector(\`td:nth-child(\${index})\`)?.textContent.trim() ?? null;
+      return text !== null && !text.startsWith(rejected) ? text : false;
+    `),
+    { timeout: 60_000, polling: 100 },
+    { needle, index: column, rejected },
+  ).then((handle) => handle.jsonValue());
+
+  /**
    * Fill a labelled input/textarea by its visible label text (polls until
    * mounted). The form is identified either by a CSS selector or by an anchor
    * label unique to that form — the release tab mounts three forms that all
@@ -507,6 +543,9 @@ try {
   await waitForNotice(officerPage, 'Consent purpose defined and audit-recorded.');
   await waitIdle(officerPage);
 
+  // Each definition refreshes the catalog silently: gate the read on the last
+  // row landing so the category assertions see the settled projection.
+  await waitForRow(officerPage, PURPOSES, PURPOSE_C);
   const purposeRows = await officerPage.evaluate(
     new Function('needles', `
       ${sectionTable(PURPOSES)}
@@ -676,6 +715,7 @@ try {
   await clickPageButton(officerPage, 'Record disclosure');
   await waitForNotice(officerPage, 'Disclosure recorded as immutable release evidence.');
   await waitIdle(officerPage);
+  await waitForRow(officerPage, DISCLOSURES, DISCLOSURE_RECIPIENT);
   const disclosureRow = await rowCell(officerPage, DISCLOSURES, DISCLOSURE_RECIPIENT, 2);
   record(
     'A disclosure is recorded as immutable release evidence with its recipient, purpose and declared scope',
@@ -760,8 +800,10 @@ try {
   await clickRowButton(approverOne.page, EXPORTS, BULK_PURPOSE, 'Sign approval');
   await waitForNotice(onePage, 'First approval signed; a distinct second approver must sign before execution.');
   await waitIdle(onePage);
+  // The signature fills an approver slot; wait for that slot to appear in the
+  // refreshed projection before reading the chain cells or the affordances.
+  const signatures = await waitForRowCellSettled(onePage, EXPORTS, BULK_PURPOSE, 3, '—');
   const afterFirst = await rowCell(onePage, EXPORTS, BULK_PURPOSE, 4);
-  const signatures = await rowCell(onePage, EXPORTS, BULK_PURPOSE, 3);
   const signDialogs = await approverOne.dialogLog();
   record(
     'The first signature fills one approver slot and leaves the request `requested`',

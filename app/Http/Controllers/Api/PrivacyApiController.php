@@ -429,7 +429,7 @@ final class PrivacyApiController extends Controller
     }
 
     /**
-     * @param  \Closure(TransitionConsent, Consent, string): array{consent_id: string, lifecycle_state: string, correlation_id: string}  $transition
+     * @param  Closure(TransitionConsent, Consent, string): array{consent_id: string, lifecycle_state: string, correlation_id: string}  $transition
      */
     private function consentTransition(string $consentId, string $verb, Closure $transition): JsonResponse
     {

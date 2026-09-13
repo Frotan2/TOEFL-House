@@ -69,19 +69,31 @@ jobs:
       - name: Install failure evidence helper
         run: |
           cat > /tmp/annot.sh <<'HELPER'
-          annotate() {
-            title="$1"; log="$2"; limit="${3:-100}"
-            [ -s "$log" ] || return 0
-            { grep -nE 'FAIL|ERROR|Error|error|Exception|Tests:|^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php' "$log" | tail -n "$limit"; echo '--- last lines ---'; tail -n 25 "$log"; } | while IFS= read -r line; do
-              printf '::error title=%s::%s\n' "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
+          emit() {
+            level="$1"; title="$2"
+            while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              printf '::%s title=%s::%s\n' "$level" "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
             done
+          }
+          # GitHub keeps only a handful of annotations per level per run, so the
+          # budget is spent deliberately: the tool's own summary first (every
+          # gate prints one last), then the matched detail lines, stack frames
+          # dropped.
+          annotate() {
+            title="$1"; log="$2"; limit="${3:-6}"; pattern="${4:-}"
+            [ -s "$log" ] || return 0
+            if [ -z "$pattern" ]; then pattern='FAIL|ERROR|Error|error|Exception|Tests: |^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php'; fi
+            tail -n "$limit" "$log" | emit error "$title-summary"
+            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | head -n "$limit" | emit warning "$title"
+            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | sed -n "$((limit + 1)),$((limit * 3))p" | emit notice "$title-detail"
           }
           run_logged() {
             title="$1"; log="$2"; shift 2
             set +e
             "$@" 2>&1 | tee "$log"
             code=${PIPESTATUS[0]}
-            if [ "$code" -ne 0 ]; then annotate "$title" "$log" 120; fi
+            if [ "$code" -ne 0 ]; then annotate "$title" "$log" "${ANNOTATE_LINES:-6}" "${ANNOTATE_PATTERN:-}"; fi
             return "$code"
           }
           HELPER
@@ -90,9 +102,9 @@ jobs:
           . /tmp/annot.sh
           set +e
           vendor/bin/pint --test -v > /tmp/pint.log 2>&1
-          annotate pint /tmp/pint.log 160
+          annotate pint /tmp/pint.log 8 '⨯|FAIL|style issues|begin diff|end diff|^[+-]'
           vendor/bin/phpstan analyse --no-progress --memory-limit=1G --error-format=raw > /tmp/phpstan.log 2>&1
-          annotate phpstan /tmp/phpstan.log 120
+          annotate phpstan /tmp/phpstan.log 8 '.'
           exit 0
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
@@ -151,19 +163,31 @@ jobs:
       - name: Install failure evidence helper
         run: |
           cat > /tmp/annot.sh <<'HELPER'
-          annotate() {
-            title="$1"; log="$2"; limit="${3:-100}"
-            [ -s "$log" ] || return 0
-            { grep -nE 'FAIL|ERROR|Error|error|Exception|Tests:|^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php' "$log" | tail -n "$limit"; echo '--- last lines ---'; tail -n 25 "$log"; } | while IFS= read -r line; do
-              printf '::error title=%s::%s\n' "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
+          emit() {
+            level="$1"; title="$2"
+            while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              printf '::%s title=%s::%s\n' "$level" "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
             done
+          }
+          # GitHub keeps only a handful of annotations per level per run, so the
+          # budget is spent deliberately: the tool's own summary first (every
+          # gate prints one last), then the matched detail lines, stack frames
+          # dropped.
+          annotate() {
+            title="$1"; log="$2"; limit="${3:-6}"; pattern="${4:-}"
+            [ -s "$log" ] || return 0
+            if [ -z "$pattern" ]; then pattern='FAIL|ERROR|Error|error|Exception|Tests: |^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php'; fi
+            tail -n "$limit" "$log" | emit error "$title-summary"
+            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | head -n "$limit" | emit warning "$title"
+            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | sed -n "$((limit + 1)),$((limit * 3))p" | emit notice "$title-detail"
           }
           run_logged() {
             title="$1"; log="$2"; shift 2
             set +e
             "$@" 2>&1 | tee "$log"
             code=${PIPESTATUS[0]}
-            if [ "$code" -ne 0 ]; then annotate "$title" "$log" 120; fi
+            if [ "$code" -ne 0 ]; then annotate "$title" "$log" "${ANNOTATE_LINES:-6}" "${ANNOTATE_PATTERN:-}"; fi
             return "$code"
           }
           HELPER
@@ -176,11 +200,11 @@ jobs:
       - name: Database invariants
         run: |
           . /tmp/annot.sh
-          run_logged database-invariants /tmp/invariants.log npm run verify:invariants
+          ANNOTATE_PATTERN='FAIL|probe|rejected|expected|Error' ANNOTATE_LINES=8 run_logged database-invariants /tmp/invariants.log npm run verify:invariants
       - name: Concurrency
         run: |
           . /tmp/annot.sh
-          run_logged concurrency /tmp/concurrency.log npm run verify:concurrency
+          ANNOTATE_PATTERN='FAIL|race|winner|rejected|Error' ANNOTATE_LINES=8 run_logged concurrency /tmp/concurrency.log npm run verify:concurrency
       # The Feature suite includes WorkspacePageRenderTest, which renders the
       # authenticated Blade consoles (they @vite the built bundles). The test
       # fails this job when the manifest is absent under CI rather than
@@ -190,11 +214,11 @@ jobs:
       - name: Canonical suite
         run: |
           . /tmp/annot.sh
-          run_logged canonical-suite /tmp/canonical.log vendor/bin/phpunit --testsuite Canonical --no-coverage
+          ANNOTATE_PATTERN='FAILURES|ERRORS|Tests: |^[0-9]+\) |Failed asserting|There w' ANNOTATE_LINES=8 run_logged canonical-suite /tmp/canonical.log vendor/bin/phpunit --testsuite Canonical --no-coverage
       - name: Backend test suite
         run: |
           . /tmp/annot.sh
-          run_logged backend-suite /tmp/phpunit.log vendor/bin/phpunit --no-coverage
+          ANNOTATE_PATTERN='FAILURES|ERRORS|Tests: |^[0-9]+\) |Failed asserting|There w' ANNOTATE_LINES=8 run_logged backend-suite /tmp/phpunit.log vendor/bin/phpunit --no-coverage
 
   browser-e2e:
     name: Browser E2E (real Chromium)
@@ -247,19 +271,31 @@ jobs:
       - name: Install failure evidence helper
         run: |
           cat > /tmp/annot.sh <<'HELPER'
-          annotate() {
-            title="$1"; log="$2"; limit="${3:-100}"
-            [ -s "$log" ] || return 0
-            { grep -nE 'FAIL|ERROR|Error|error|Exception|Tests:|^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php' "$log" | tail -n "$limit"; echo '--- last lines ---'; tail -n 25 "$log"; } | while IFS= read -r line; do
-              printf '::error title=%s::%s\n' "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
+          emit() {
+            level="$1"; title="$2"
+            while IFS= read -r line; do
+              [ -n "$line" ] || continue
+              printf '::%s title=%s::%s\n' "$level" "$title" "$(printf '%s' "$line" | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-400)"
             done
+          }
+          # GitHub keeps only a handful of annotations per level per run, so the
+          # budget is spent deliberately: the tool's own summary first (every
+          # gate prints one last), then the matched detail lines, stack frames
+          # dropped.
+          annotate() {
+            title="$1"; log="$2"; limit="${3:-6}"; pattern="${4:-}"
+            [ -s "$log" ] || return 0
+            if [ -z "$pattern" ]; then pattern='FAIL|ERROR|Error|error|Exception|Tests: |^[0-9]+\)|Failed asserting|--- Expected|\+\+\+ Actual|begin diff|end diff|^[+-]|aborted|Cannot|denied|expected|\.php'; fi
+            tail -n "$limit" "$log" | emit error "$title-summary"
+            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | head -n "$limit" | emit warning "$title"
+            grep -E "$pattern" "$log" | grep -vE '^[[:space:]]*#[0-9]+' | sed -n "$((limit + 1)),$((limit * 3))p" | emit notice "$title-detail"
           }
           run_logged() {
             title="$1"; log="$2"; shift 2
             set +e
             "$@" 2>&1 | tee "$log"
             code=${PIPESTATUS[0]}
-            if [ "$code" -ne 0 ]; then annotate "$title" "$log" 120; fi
+            if [ "$code" -ne 0 ]; then annotate "$title" "$log" "${ANNOTATE_LINES:-6}" "${ANNOTATE_PATTERN:-}"; fi
             return "$code"
           }
           HELPER
@@ -312,6 +348,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
+          # A journey log is short and its FAIL detail lines carry the observed
+          # projection, so mirror all of it rather than a filtered subset.
+          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
+          ANNOTATE_LINES: '8'
         run: |
           . /tmp/annot.sh
           run_logged browser-e2e /tmp/browser.log npm run verify:browser
@@ -319,6 +359,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
+          # A journey log is short and its FAIL detail lines carry the observed
+          # projection, so mirror all of it rather than a filtered subset.
+          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
+          ANNOTATE_LINES: '8'
         run: |
           . /tmp/annot.sh
           run_logged library-browser-e2e /tmp/library-browser.log npm run verify:browser:library
@@ -326,6 +370,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
+          # A journey log is short and its FAIL detail lines carry the observed
+          # projection, so mirror all of it rather than a filtered subset.
+          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
+          ANNOTATE_LINES: '8'
         run: |
           . /tmp/annot.sh
           run_logged documents-browser-e2e /tmp/documents-browser.log npm run verify:browser:documents
@@ -333,6 +381,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8999
           CHROMIUM_PATH: /usr/bin/chromium
+          # A journey log is short and its FAIL detail lines carry the observed
+          # projection, so mirror all of it rather than a filtered subset.
+          ANNOTATE_PATTERN: 'FAIL|^      |checks|aborted|Error'
+          ANNOTATE_LINES: '8'
         run: |
           . /tmp/annot.sh
           run_logged privacy-browser-e2e /tmp/privacy-browser.log npm run verify:browser:privacy

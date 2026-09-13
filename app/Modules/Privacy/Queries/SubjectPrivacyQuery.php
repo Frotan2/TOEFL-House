@@ -11,6 +11,7 @@ use App\Modules\Privacy\Models\ConsentRevocation;
 use App\Modules\Privacy\Models\Disclosure;
 use App\Modules\Privacy\Models\PrivacyExportRequest;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 
 /**
  * Read-only privacy dossier of one subject as of a day.
@@ -43,7 +44,7 @@ final class SubjectPrivacyQuery
     {
         $day = ($asOf ?? app(CalendarAuthority::class)->nowUtc())->startOfDay()->toDateString();
 
-        /** @var \Illuminate\Support\Collection<int, Consent> $recorded */
+        /** @var Collection<int, Consent> $recorded */
         $recorded = Consent::query()
             ->where('subject_person_id', $subjectPersonId)
             ->orderBy('effective_from')
