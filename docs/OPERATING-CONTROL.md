@@ -10,11 +10,11 @@
 ## 1. Current control state
 
 - **Authoritative branch:** `main`
-- **Active domain:** Privacy & Consent
-- **Active domain status:** **VERIFIED and CERTIFIED ON `main`** — all Privacy closure gates were executed and observed green on branch `arena/01a098fa-toefl-house` (run 34744173651, tree `b657fa3`), the branch merged as PR #29 (merge commit `27b96d8`), and Verification run 34744897784 passed all four jobs at that `main` HEAD with the Privacy browser journey at 38/38. The findings ledger and the per-dimension evidence chain are in `docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`.
-- **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`) and Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`) are **VERIFIED** and were not reopened by this closure; the only change to their journeys was the shared CI evidence helper.
-- **Next allowed domain:** none yet. Privacy is merged and certified, so the one-domain rule is now waiting on a fresh reassessment of `DOMAIN-REGISTRY.md` §2 to select the next material domain; until that reassessment is recorded, no domain work starts.
-- **Release status:** **CERTIFIED for `main` HEAD `27b96d8`** — Verification run 34744897784 (all four jobs) and CRM Browser E2E run 34744897779 are the latest non-superseded evidence for that exact commit. Certification is attached to the commit, not to the repository: any later commit on `main` requires fresh applicable verification before it can be called certified.
+- **Active domain:** Human Resources (HR)
+- **Active domain status:** **VERIFIED on PR #34 / branch `arena/01a09a1b-toefl-house`** — all HR closure gates were executed and observed green on branch `arena/01a09a1b-toefl-house` (Verification run 34767322990, tree `b3d13d4`), with CRM Browser E2E run 34767323002 green alongside. The findings ledger and the per-dimension evidence chain are in `docs/AUDIT-2026-09-13-HR-CLOSURE.md`. PR #34 is open, fully verified, and ready for merge.
+- **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`), Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`), and Privacy & Consent (`docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`) are **VERIFIED** and certified on `main`.
+- **Next allowed domain:** none yet. HR closure is verified on PR #34 and pending merge to `main`. Following merge, a fresh reassessment of `DOMAIN-REGISTRY.md` §2 will select the next material domain.
+- **Release status:** **CERTIFIED for `main` HEAD `27b96d8`** (pre-HR merge baseline) / **VERIFIED on PR #34 branch HEAD `b3d13d4`** (Verification run 34767322990 all 4 jobs green, CRM Browser E2E run 34767323002 green).
 
 To determine current evidence, inspect the actual `main` HEAD and the latest non-superseded Verification workflow. Do not infer state from a previous run recorded in a document.
 
@@ -46,11 +46,11 @@ Only materially applicable stages are required, but omissions must be explicit.
 
 ## 4. Current domain gate
 
-**Privacy & Consent was the only active material domain, and it is closed.**
+**Human Resources (HR) was the active material domain, and it is closed.**
 
-It was declared closed only after current-main evidence proved its applicable backend lifecycle, database invariants, authorization/scope, API, React parity, UX states, audit/provenance, idempotency, concurrency, unit/feature/integration tests, browser/E2E, security/adversarial and documentation gates — plus the three that are specific to personal data: consent is a lifecycle fact and never a boolean flag, erasure is revocation/expiry/archive over retained evidence and never a row deletion, and an organization-wide release needs two distinct approver signatures with its requester excluded and execution decided at organization scope.
+It was declared closed after branch HEAD evidence (`b3d13d4`, Verification run 34767322990) proved its applicable backend lifecycle, database invariants (49/49 runtime probes including 13 HR-specific schema constraints/triggers), authorization/scope, canonical API (`HrApiFeatureTest` 18/18), React parity, UX states, audit/provenance, idempotency, concurrency (`HrConcurrencyTest` 7/7), unit/feature/integration tests, real Chromium browser E2E (`verify:browser:hr`), security/adversarial and documentation gates — including the separation of duties for contract approvals (preparer and beneficiary independence) and leave decisions (independent decider).
 
-The gate is resolved: PR #29 merged the closure and Verification run 34744897784 passed every job at that `main` HEAD. Do not begin another material domain until a fresh reassessment of `DOMAIN-REGISTRY.md` §2 selects one and this section names it.
+The gate is resolved on PR #34. Merge PR #34 to `main` and execute the certification run on `main` HEAD. Do not begin another material domain until a fresh reassessment of `DOMAIN-REGISTRY.md` §2 selects one and this section names it.
 
 ## 5. Security and adversarial checklist
 

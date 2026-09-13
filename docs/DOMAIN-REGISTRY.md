@@ -32,7 +32,7 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 | Academic | Academic | Academic workspace | **PARTIAL** | Close corrections, appeals, progression, graduation, transcript, waitlist and terminal-state actions. |
 | Placement | Placement / Academic boundary | Placement workspace | **PARTIAL** | Close moderation/release/appeals/content and report decision surfaces. |
 | Teachers | HR / Academic boundary | Teachers workspace | **PARTIAL** | Close qualification, availability, assignment, transfer and workload actions. |
-| HR | HR | HR workspace | **PARTIAL** | Close employment, contracts and leave lifecycle actions. |
+| HR | HR | HR workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34767322990 (head `b3d13d4`, branch `arena/01a09a1b-toefl-house`) — static analysis, full backend suite, 49/49 database invariants, concurrency, frontend parity, and Browser E2E with real Chromium HR journey all green; CRM Browser E2E run 34767323002 green alongside. Material gaps closed: rule methods standardized on `allowance`, `POST /contract-versions/rules/{ruleId}/discard` route added, React UI expanded with full contract headers and scales lifecycle, leave approval/rejection/cancellation action triggers, 13 HR database invariant checks, `HrConcurrencyTest` suite (7 tests), `HrApiFeatureTest` suite (18 tests), HR browser E2E journey. Evidence: `docs/AUDIT-2026-09-13-HR-CLOSURE.md`. PR #34 open and ready for merge. |
 | Finance | Finance | Finance workspace | **PARTIAL** | Close approvals, reversals, corrections, cash, scholarships, settlement and GL controls. |
 | Payroll / Settlement | Payroll calculation; Finance settlement truth | Payroll workspace | **PARTIAL** | Close calculate/approve/held-resolution/clearance/settlement parity. |
 | Library & Resources | Resources | Library workspace | **VERIFIED** | Closure gates executed and observed: Verification run 34713414829 (head `e603db9`, branch `arena/01a09629-toefl-house`) — backend suite/invariants/concurrency, frontend, static and real-Chromium jobs all green; Library browser journey 24/24 across three sessions (lifecycle, withdrawals, provoked denials, staged approvals, canonical-route and session-hygiene records). **Certified on `main`**: merged as PR #26; Verification run 34735425882 at main HEAD `0e46611` green on all four jobs with the Library journey 24/24, CRM Browser E2E run 34735426000 alongside. |
@@ -44,49 +44,26 @@ The backend is authoritative for business truth, lifecycle legality, persistence
 | Management / Work | Work Management | Workspace / management | **PARTIAL** | Close queue membership and complete work lifecycle surfaces. |
 | Integrations / queues / projections / DB machinery | Outbox / infrastructure / DB | Operator-only as required | **BACKEND-ONLY / OPERATOR** | Do not duplicate business authority in normal UI. Add observability only when approved. |
 
-## 3. Active domain — Privacy & Consent (closed, certified on `main`)
+## 3. Active domain — Human Resources (closed, verified on PR #34)
 
-One material domain at a time. Library & Resources and Documents & Evidence are
-closed and were not reopened; Privacy & Consent was the active domain and has
-converged. Confirmed implementation includes:
+One material domain at a time. Library & Resources, Documents & Evidence, and
+Privacy & Consent are closed and certified on `main`; Human Resources was the
+active domain and has converged. Confirmed implementation includes:
 
-- purposes of personal-data use as an organization-rooted catalog, with
-  communication and marketing as separate definitions and a duplicate
-  definition refused as a business rejection rather than a database error;
-- consent capture as a born-draft, write-once fact with its evidence reference;
-- one open consent per (subject, purpose), enforced by a partial unique index
-  and attacked under savepoints in the canonical suite;
-- the single consent lifecycle table (`ConsentLifecycle`) consulted by the
-  command, the transport and the projection alike, so no surface re-derives it:
-  draft → submitted → verified → active → expired/revoked → archived;
-- expiry as the passage of the recorded window, decided by the CalendarAuthority
-  and never by a client clock;
-- withdrawal as append-only revocation evidence attached to the consent it ended;
-- disclosure as immutable release evidence with recipient, purpose, authority
-  and declared scope, the scope re-resolved server-side so a forged one is
-  refused;
-- subject access: one dossier projection (identity, complete consent history
-  with its withdrawals, every disclosure, every export request) that the subject
-  may read about themselves without holding any staff capability;
-- subject-data release in two shapes — a direct single-subject export inside a
-  non-organization scope, and a staged organization-wide export that needs two
-  distinct approver signatures, excludes its requester, and executes only at
-  organization scope (`ExportApprovalChain`);
-- erasure as lifecycle only: `Consent::delete()` and `forceDelete()` throw
-  `privacy.consent_immutable`, the database guards refuse rewriting export
-  history, and no delete/erase/purge control exists in the UI;
-- server-owned authorization/scope (`PrivacyScopePolicy`), fail-closed denials
-  that are audit-recorded with their code and capability reason, idempotency on
-  every mutation, and concurrency races on the consent tables;
-- one canonical operator surface: `/privacy` renders the React workspace over
-  `/api/v1/privacy`; the Blade privacy index and the `/governance/privacy` alias
-  are retired, and the legacy web POST endpoints remain thin adapters.
+- Employee lifecycle with discrete states (`candidate`, `active`, `on_leave`, `suspended`, `terminated`), guarded transitions, and mandatory employment status history;
+- Single open employment per person enforced at database constraint, trigger, and command levels;
+- Contract chains with explicit draft, sign, and close lifecycle; single open contract per employment constraint;
+- Versioned teacher contracts with preparation by Finance Manager (`hr.contract.prepare`), compensation rules (fixed monthly, allowance, session rate, hourly rate), and approval by General Manager (`hr.contract.approve`) with strict separation of duties / approver and beneficiary independence enforced in commands and DB triggers;
+- Compensation rule discard API endpoint (`POST /contract-versions/rules/{ruleId}/discard`) and UI actions;
+- Leave management with request, independent decider approval/rejection (`hr.leave_approve`), cancellation (`hr.leave_request`), and overlap prevention;
+- Compensation scales catalog with rank uniqueness, immutability, and retirement without deletion;
+- React workspace UI (`resources/js/hr.tsx`) supporting full contracts lifecycle, scales catalog, leave decisions/cancellation, and error states with zero client-side business authority duplication;
+- Full database invariant verification (49/49 runtime probes including 13 HR-specific schema constraints and triggers);
+- Dedicated concurrency and locking tests (`tests/Feature/Hr/HrConcurrencyTest.php`);
+- Canonical API feature test suite (`tests/Feature/Api/HrApiFeatureTest.php`) with 18 tests and canonical workspace route registration in `tests/Canonical/Api/ApiContractTest.php`;
+- Real headless Chromium browser E2E test (`scripts/runtime/hr-browser-e2e.mjs`) verified in CI `browser-e2e` job.
 
-Release closure is no longer blocked: the domain merged to `main` as PR #29
-(merge commit `27b96d8`) and Verification run 34744897784 passed all four jobs
-at that HEAD, with CRM Browser E2E run 34744897779 alongside. Certification is
-attached to that exact commit and lapses with any later one. No next material
-domain may begin until a fresh reassessment of §2 selects one.
+Release closure is verified on branch `arena/01a09a1b-toefl-house` (commit `b3d13d4` / PR #34): Verification run 34767322990 and CRM Browser E2E run 34767323002 passed all jobs. Evidence: `docs/AUDIT-2026-09-13-HR-CLOSURE.md`. PR #34 is open and merge-ready.
 
 ## 4. Domain closure trace
 
