@@ -919,58 +919,58 @@ try {
 
   // HR employment lifecycle: candidate is the only birth state
   await mustReject('employment is born as candidate', {
-    expected: { code: 'P0001', messageIncludes: 'employments are created as candidate' },
+    expected: { code: '23514', messageIncludes: 'employments are created as candidate' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR runtime person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR runtime person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+    sql: "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
     params: (ids) => [ids.account, ids.person],
   });
 
   // HR employment: terminated is terminal
   await mustReject('terminated employment is terminal', {
-    expected: { code: 'P0001', messageIncludes: 'terminated employment is final' },
+    expected: { code: '23514', messageIncludes: 'terminated employment is final' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR terminal person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR terminal person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'terminated', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'terminated', NOW(), NOW())",
         [ids.account, ids.person],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"UPDATE employments SET lifecycle_state = 'active', updated_at = NOW() WHERE id = $1\",
+    sql: "UPDATE employments SET lifecycle_state = 'active', updated_at = NOW() WHERE id = $1",
     params: (ids) => [ids.account],
   });
 
   // HR employment: cannot rebind to another person
   await mustReject('employment person is immutable', {
-    expected: { code: 'P0001', messageIncludes: 'an employment cannot be rebound' },
+    expected: { code: '23514', messageIncludes: 'an employment cannot be rebound' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR person A', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR person A', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR person B', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR person B', '1980-01-01', 'verified', NULL)",
         [ids.verifiedPerson],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'active', NOW(), NOW())",
         [ids.account, ids.person],
       );
-      await client.query(\"SET LOCAL session_replication_role = 'origin'\");
+      await client.query("SET LOCAL session_replication_role = 'origin'");
     },
-    sql: \"UPDATE employments SET person_id = $1, updated_at = NOW() WHERE id = $2\",
+    sql: "UPDATE employments SET person_id = $1, updated_at = NOW() WHERE id = $2",
     params: (ids) => [ids.verifiedPerson, ids.account],
   });
 
@@ -978,13 +978,13 @@ try {
   await mustReject('employment status history is append-only', {
     expected: { code: 'P0001', messageIncludes: 'employment status history is append-only' },
     setup: async (client, ids) => {
-      await client.query(\"SET LOCAL session_replication_role = 'replica'\");
+      await client.query("SET LOCAL session_replication_role = 'replica'");
       await client.query(
-        \"INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR status person', '1980-01-01', 'verified', NULL)\",
+        "INSERT INTO people (id, legal_name, date_of_birth, verification_state, home_branch_id) VALUES ($1, 'HR status person', '1980-01-01', 'verified', NULL)",
         [ids.person],
       );
       await client.query(
-        \"INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'candidate', NOW(), NOW())\",
+        "INSERT INTO employments (id, person_id, lifecycle_state, created_at, updated_at) VALUES ($1, $2, 'candidate', NOW(), NOW())\",
         [ids.account, ids.person],
       );
       await client.query(
@@ -999,7 +999,7 @@ try {
 
   // HR leave: self-approval prevention
   await mustReject('leave self-approval is prevented by schema', {
-    expected: { code: 'P0001', messageIncludes: 'the leave decider must differ from the requester' },
+    expected: { code: '23514', messageIncludes: 'the leave decider must differ from the requester' },
     setup: async (client, ids) => {
       await client.query(\"SET LOCAL session_replication_role = 'replica'\");
       await client.query(
