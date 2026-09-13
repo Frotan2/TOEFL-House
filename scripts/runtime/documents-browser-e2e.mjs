@@ -194,7 +194,10 @@ try {
       page.waitForNavigation({ waitUntil: 'networkidle2' }),
     ]);
     await page.goto(`${BASE}/documents`, { waitUntil: 'networkidle2' });
-    await page.waitForSelector('#app-toolbar', { timeout: 60_000 });
+    if (page.url().includes('/login')) throw new Error(`${username}: documents E2E login failed`);
+    // The workspace heading renders in both the loaded and the fail-closed
+    // states; waitIdle() below distinguishes them.
+    await page.waitForSelector('#documents-title', { timeout: 60_000 });
     return {
       context,
       page,
@@ -243,7 +246,7 @@ try {
       const section = Array.from(document.querySelectorAll('section'))
         .find((element) => element.querySelector('h2')?.textContent.includes('Documents in your authorized scope'));
       const row = Array.from(section?.querySelectorAll('table tbody tr') || [])
-        .find((element) => element.querySelector('th')?.textContent.includes(needle));
+        .find((element) => element.querySelector('td')?.textContent.includes(needle));
       if (!row) return false;
       const button = Array.from(row.querySelectorAll('button')).find((element) => element.textContent.trim() === text);
       if (button && !button.disabled) {
@@ -261,8 +264,8 @@ try {
     const section = Array.from(document.querySelectorAll('section'))
       .find((element) => element.querySelector('h2')?.textContent.includes('Documents in your authorized scope'));
     const row = Array.from(section?.querySelectorAll('table tbody tr') || [])
-      .find((element) => element.querySelector('th')?.textContent.includes(needle));
-    return row?.querySelector('td:nth-child(3)')?.textContent.trim() ?? null;
+      .find((element) => element.querySelector('td')?.textContent.includes(needle));
+    return row?.querySelector('td:nth-child(4)')?.textContent.trim() ?? null;
   }, title);
 
   /** Exact button labels offered by a registry row. */
@@ -270,14 +273,25 @@ try {
     const section = Array.from(document.querySelectorAll('section'))
       .find((element) => element.querySelector('h2')?.textContent.includes('Documents in your authorized scope'));
     const row = Array.from(section?.querySelectorAll('table tbody tr') || [])
-      .find((element) => element.querySelector('th')?.textContent.includes(needle));
-    return Array.from(row?.querySelectorAll('.row-actions button') || []).map((button) => button.textContent.trim());
+      .find((element) => element.querySelector('td')?.textContent.includes(needle));
+    return Array.from(row?.querySelectorAll('.documents-actions button') || []).map((button) => button.textContent.trim());
   }, title);
 
-  /** Fill a labelled input/textarea by its visible label text (polls until mounted). */
-  const setLabeledInput = (page, label, value) => page.waitForFunction(
-    ({ labelText, next }) => {
-      const labelElement = Array.from(document.querySelectorAll('label')).find((element) => element.textContent.trim() === labelText);
+  /**
+   * Fill a labelled input/textarea by its visible label text (polls until
+   * mounted). When formTitle is given the label is resolved inside the form
+   * whose <h3> carries that title — the policy tab mounts two forms that both
+   * contain a 'Category' label bound to DIFFERENT component state.
+   */
+  const setLabeledInput = (page, label, value, formTitle = null) => page.waitForFunction(
+    ({ labelText, next, heading }) => {
+      const root = heading
+        ? Array.from(document.querySelectorAll('form')).find((form) => form.querySelector('h3')?.textContent.trim() === heading)
+        : document;
+      if (!root) return false;
+      // A <label> wrapping a <select> has the option texts inside its
+      // textContent; match on the label's own first text node instead.
+      const labelElement = Array.from(root.querySelectorAll('label')).find((element) => (element.firstChild?.textContent || '').trim() === labelText);
       const span = labelElement?.querySelector('span');
       const input = (span && document.getElementById(span.id.replace('-label', '')))
         || labelElement?.querySelector('input, textarea, select');
@@ -289,14 +303,20 @@ try {
       return true;
     },
     { timeout: 60_000, polling: 100 },
-    { labelText: label, next: value },
+    { labelText: label, next: value, heading: formTitle },
   );
 
-  /** Choose a select option by visible option text (polls until mounted). */
-  const selectOption = async (page, label, optionText) => {
+  /** Choose a select option by visible option text (polls until mounted; optionally form-scoped). */
+  const selectOption = async (page, label, optionText, formTitle = null) => {
     const handle = await page.waitForFunction(
-      ({ labelText, needle }) => {
-        const labelElement = Array.from(document.querySelectorAll('label')).find((element) => element.textContent.trim() === labelText);
+      ({ labelText, needle, heading }) => {
+        const root = heading
+          ? Array.from(document.querySelectorAll('form')).find((form) => form.querySelector('h3')?.textContent.trim() === heading)
+          : document;
+        if (!root) return false;
+        // A <label> wrapping a <select> has the option texts inside its
+      // textContent; match on the label's own first text node instead.
+      const labelElement = Array.from(root.querySelectorAll('label')).find((element) => (element.firstChild?.textContent || '').trim() === labelText);
         const span = labelElement?.querySelector('span');
         const input = (span && document.getElementById(span.id.replace('-label', '')))
           || labelElement?.querySelector('select');
@@ -308,7 +328,7 @@ try {
         return option.textContent.trim();
       },
       { timeout: 60_000, polling: 100 },
-      { labelText: label, needle: optionText },
+      { labelText: label, needle: optionText, heading: formTitle },
     );
     return handle.jsonValue();
   };
@@ -337,16 +357,19 @@ try {
   record('Officer workspace renders server-projected evidence metrics', officerMetrics.length === 4, officerMetrics.join(' | '));
 
   await openTab(officerPage, 'Classification & retention');
-  await setLabeledInput(officerPage, 'Category', CATEGORY);
-  await setLabeledInput(officerPage, 'Owning module', 'Identity');
-  await selectOption(officerPage, 'Access class', 'Restricted');
+  await setLabeledInput(officerPage, 'Category', CATEGORY, 'Define classification');
+  await setLabeledInput(officerPage, 'Owning module', 'Identity', 'Define classification');
+  await selectOption(officerPage, 'Access class', 'Restricted', 'Define classification');
   await clickPageButton(officerPage, 'Define classification');
   await waitForNotice(officerPage, 'Classification defined and audit-recorded.');
   await waitIdle(officerPage);
   record('Officer defines the classification through the UI', true, CATEGORY);
 
-  await setLabeledInput(officerPage, 'Retention days', '365');
-  await setLabeledInput(officerPage, 'Legal basis', 'E2E retention proof');
+  // The retention form keeps its OWN category state: fill its Category input
+  // explicitly (label text collides with the classification form's).
+  await setLabeledInput(officerPage, 'Category', CATEGORY, 'Define retention rule');
+  await setLabeledInput(officerPage, 'Retention days', '365', 'Define retention rule');
+  await setLabeledInput(officerPage, 'Legal basis', 'E2E retention proof', 'Define retention rule');
   await clickPageButton(officerPage, 'Define retention rule');
   await waitForNotice(officerPage, 'Retention rule defined and audit-recorded.');
   await waitIdle(officerPage);
@@ -368,6 +391,7 @@ try {
   await waitIdle(registrarPage);
   record('Registrar registers evidence for the target person', true, `${subjectOption} / ${classificationOption}`);
 
+  await openTab(registrarPage, 'Evidence registry');
   record('Registered document appears in the authorized scope', await rowChip(registrarPage, DOC_A) === 'Draft', `chip=${await rowChip(registrarPage, DOC_A)}`);
   const draftButtons = await rowButtons(registrarPage, DOC_A);
   record(
@@ -456,6 +480,7 @@ try {
   await clickPageButton(verifierPage, 'Register immutable version 1');
   await waitForNotice(verifierPage, 'Document registered as a draft with immutable version 1.');
   await waitIdle(verifierPage);
+  await openTab(verifierPage, 'Evidence registry');
   await clickRowButton(verifierPage, DOC_B, 'Submit version');
   await setLabeledInput(verifierPage, 'Content hash', 'sha256:e2e-documents-b-v2');
   await setLabeledInput(verifierPage, 'Storage reference', 'storage/e2e/doc-b-v2.pdf');
@@ -547,6 +572,9 @@ try {
 } catch (error) {
   console.error('DOCUMENTS BROWSER E2E FAILED');
   console.error(error?.stack || String(error));
+  // An aborted journey is a failed journey: record it so the process exits
+  // non-zero even when every check collected before the throw had passed.
+  record('Journey ran to completion', false, String(error?.message || error).slice(0, 300));
   writeStepSummary(`## Documents browser E2E\n\n**Journey aborted:** ${String(error?.message || error).slice(0, 2_000)}\n`);
   for (const context of contexts) {
     try {
