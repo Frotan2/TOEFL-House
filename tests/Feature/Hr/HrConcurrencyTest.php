@@ -94,7 +94,7 @@ final class HrConcurrencyTest extends TestCase
         try {
             app(MaintainLeave::class)->request($requester, $employment, 'annual', '2026-11-05', '2026-11-15', 'overlapping second request', 'hrconc-leave-2');
             $this->fail('a second pending leave for the same employment must be rejected');
-        } catch (QueryException $e) {
+        } catch (QueryException|BusinessRejection $e) {
             // The unique partial index `leaves_one_pending_per_employment` rejects this
             $this->assertDatabaseHas('leaves', [
                 'employment_id' => $this->employmentId,

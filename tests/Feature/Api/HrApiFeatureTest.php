@@ -147,15 +147,21 @@ final class HrApiFeatureTest extends TestCase
 
     public function test_employment_transition_hire_endpoint(): void
     {
-        $this->setUpEmployment();
-        $mgr = $this->grantedActor('hrapi-mgr-1', ['hr.employ', 'hr.contract', 'hr.terminate']);
-        $this->signInAs($mgr->actorId, 'hrapi.mgr.1');
+        $mgr = $this->grantedActor('hrapi-hire-mgr', ['hr.employ', 'hr.contract', 'hr.terminate']);
+        $person = $this->personWithAuthority('hrapi-hire-person', []);
+        $emp = app(MaintainEmployment::class)->employ($mgr, $person->id, 'hrapi-hire-emp-1');
+        $contract = app(MaintainContract::class)->draft($mgr, Employment::query()->findOrFail($emp['employment_id']), 'hire test terms', '2026-09-01', 'hrapi-hire-con-1');
+        app(MaintainContract::class)->sign($mgr, Contract::query()->findOrFail($contract['contract_id']), 'signed/hire.pdf', 'hrapi-hire-con-2');
 
-        $this->postJson('/api/v1/hr/employments/'.$this->employmentId.'/hire', [
+        $this->signInAs($mgr->actorId, 'hrapi.hire.mgr');
+
+        $this->postJson('/api/v1/hr/employments/'.$emp['employment_id'].'/hire', [
             'effective_from' => '2026-09-01',
         ], ['Idempotency-Key' => 'hrapi-hire-001'])
             ->assertOk()
             ->assertJsonPath('status', 'hire_recorded');
+
+        $this->assertDatabaseHas('employments', ['id' => $emp['employment_id'], 'lifecycle_state' => 'active']);
     }
 
     public function test_employment_transition_terminate_with_reason(): void
@@ -356,7 +362,9 @@ final class HrApiFeatureTest extends TestCase
         $this->postJson('/api/v1/hr/employments/'.$employment['employment_id'].'/hire', [
             'effective_from' => '2026-09-01',
         ], ['Idempotency-Key' => 'hrapi-reject-hire-001'])
-            ->assertStatus(422);
+            ->assertStatus(409)
+            ->assertJsonPath('category', 'business_rejection')
+            ->assertJsonPath('error', 'hr.hire_requires_contract');
     }
 
     public function test_idempotency_key_is_honored_for_employ(): void
