@@ -229,11 +229,27 @@ certified on `main` at HEAD `0e46611` by Verification run 34735425882 (Library
 all three certifications against their exact commits, and record that a
 certification lapses with the next commit to `main`.
 
+**Supersession (recorded 2026-09-13, after this audit was written).** The table
+above is historical evidence and stays exactly as executed: PR #29 merged at
+`27b96d8` and those two runs were green on that commit. But `27b96d8` is no
+longer `main` HEAD. Documentation-only PR #30 advanced `main` to **`b824efd`**,
+which was independently verified green by Verification run **34745363765** (all
+four jobs) with CRM Browser E2E run **34745363720** alongside. Current release
+authority is therefore `b824efd`, not the commit named in this audit. Nothing
+here reopened Privacy: PR #30 changed no source, test, migration, workflow or
+route file. Read `docs/OPERATING-CONTROL.md` §1 and `docs/RUNTIME-RELEASE.md` §4
+for current release state — this document is a closure report, not a live
+authority, and per `docs/DOMAIN-REGISTRY.md` historical audits are never the
+execution authority.
+
 ## Remaining work
 
-1. None for the Privacy domain: no known defect is open, and the closure is
-   certified at `main` HEAD `27b96d8`. Any later commit to `main` requires fresh
-   applicable evidence before it can inherit that certification.
+1. None for the Privacy domain: no known defect is open. The closure was
+   certified at `main` HEAD `27b96d8`, and that certification has since been
+   superseded — `main` advanced to `b824efd` via documentation-only PR #30, which
+   was verified green in its own right (Verification run 34745363765, CRM Browser
+   E2E run 34745363720). Any later commit to `main` likewise requires fresh
+   applicable evidence before it can inherit a certification.
 2. Execute a mutation check on the canonical Privacy suite in an environment
    that can run PHPUnit (remove the lifecycle guard → the boundary test must
    fail; remove the one-open-consent index → the savepoint attack must

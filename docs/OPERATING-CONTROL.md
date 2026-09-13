@@ -11,10 +11,10 @@
 
 - **Authoritative branch:** `main`
 - **Active domain:** Human Resources (HR)
-- **Active domain status:** **VERIFIED on PR #34 / branch `arena/01a09a1b-toefl-house`** — all HR closure gates were executed and observed green on branch `arena/01a09a1b-toefl-house` (Verification run 34767322990, tree `b3d13d4`), with CRM Browser E2E run 34767323002 green alongside. The findings ledger and the per-dimension evidence chain are in `docs/AUDIT-2026-09-13-HR-CLOSURE.md`. PR #34 is open, fully verified, and ready for merge.
+- **Active domain status:** **VERIFIED on PR #34 / branch `arena/01a09a1b-toefl-house`** — all HR closure gates were executed and observed green on branch `arena/01a09a1b-toefl-house` (Verification run 34768179272), with CRM Browser E2E run 34768179209 green alongside. The findings ledger and the per-dimension evidence chain are in `docs/AUDIT-2026-09-13-HR-CLOSURE.md`. PR #34 is open, fully verified, and merge-ready.
 - **Closed predecessors:** Library & Resources (`docs/AUDIT-2026-09-12-LIBRARY-RESOURCES-CLOSURE.md`), Documents & Evidence (`docs/AUDIT-2026-09-13-DOCUMENTS-CLOSURE.md`), and Privacy & Consent (`docs/AUDIT-2026-09-13-PRIVACY-CLOSURE.md`) are **VERIFIED** and certified on `main`.
 - **Next allowed domain:** none yet. HR closure is verified on PR #34 and pending merge to `main`. Following merge, a fresh reassessment of `DOMAIN-REGISTRY.md` §2 will select the next material domain.
-- **Release status:** **CERTIFIED for `main` HEAD `27b96d8`** (pre-HR merge baseline) / **VERIFIED on PR #34 branch HEAD `b3d13d4`** (Verification run 34767322990 all 4 jobs green, CRM Browser E2E run 34767323002 green).
+- **Release status:** **CERTIFIED for `main` HEAD `eb67300`** (pre-HR merge baseline) / **VERIFIED on PR #34 branch HEAD** (Verification run 34768179272 all 4 jobs green, CRM Browser E2E run 34768179209 green).
 
 To determine current evidence, inspect the actual `main` HEAD and the latest non-superseded Verification workflow. Do not infer state from a previous run recorded in a document.
 
@@ -48,7 +48,7 @@ Only materially applicable stages are required, but omissions must be explicit.
 
 **Human Resources (HR) was the active material domain, and it is closed.**
 
-It was declared closed after branch HEAD evidence (`b3d13d4`, Verification run 34767322990) proved its applicable backend lifecycle, database invariants (49/49 runtime probes including 13 HR-specific schema constraints/triggers), authorization/scope, canonical API (`HrApiFeatureTest` 18/18), React parity, UX states, audit/provenance, idempotency, concurrency (`HrConcurrencyTest` 7/7), unit/feature/integration tests, real Chromium browser E2E (`verify:browser:hr`), security/adversarial and documentation gates — including the separation of duties for contract approvals (preparer and beneficiary independence) and leave decisions (independent decider).
+It was declared closed after branch HEAD evidence (Verification run 34768179272) proved its applicable backend lifecycle, database invariants (49/49 runtime probes including 13 HR-specific schema constraints/triggers), authorization/scope, canonical API (`HrApiFeatureTest` 18/18), React parity, UX states, audit/provenance, idempotency, concurrency (`HrConcurrencyTest` 7/7), unit/feature/integration tests, real Chromium browser E2E (`verify:browser:hr`), security/adversarial and documentation gates — including the separation of duties for contract approvals (preparer and beneficiary independence) and leave decisions (independent decider).
 
 The gate is resolved on PR #34. Merge PR #34 to `main` and execute the certification run on `main` HEAD. Do not begin another material domain until a fresh reassessment of `DOMAIN-REGISTRY.md` §2 selects one and this section names it.
 
@@ -110,4 +110,4 @@ New documentation is permitted only when all of the following are true: its subj
 
 ## 11. Handoff
 
-The next agent starts here, inspects current `main`, treats Privacy & Consent as closed and certified at `27b96d8`, and may select the next material domain only through a fresh reassessment of `DOMAIN-REGISTRY.md` §2 recorded here. Update the canonical control documents after every material change. Historical audits are never the execution authority.
+The next agent starts here, inspects current `main`, treats Human Resources (HR) as closed and verified on PR #34, and may select the next material domain only through a fresh reassessment of `DOMAIN-REGISTRY.md` §2 recorded here. Update the canonical control documents after every material change. Historical audits are never the execution authority.

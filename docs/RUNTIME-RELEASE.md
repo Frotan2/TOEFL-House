@@ -2,7 +2,7 @@
 
 **STATUS: ACTIVE / CANONICAL / NORMATIVE**  
 **Authority:** `main` + `.github/workflows/verification.yml`  
-**Last reconciled:** 2026-09-10
+**Last reconciled:** 2026-09-13  
 **Purpose:** Single source of truth for release policy, verification layers, evidence semantics and release certification.
 
 > This is the current runtime/release control document. Its technical compatibility
@@ -123,7 +123,7 @@ Current release truth is always calculated from:
 
 Certification is attached to an exact commit. Any later commit requires fresh applicable verification.
 
-At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `27b96d8`** (pre-HR merge baseline) and **VERIFIED for PR #34 branch HEAD `b3d13d4`**: Verification run 34767322990 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E with 5 journeys including HR) and CRM Browser E2E run 34767323002 concluded successfully alongside. Following PR #34 merge to `main`, certification will attach to the new `main` HEAD upon successful completion of the CI certification workflow.
+At the current documentation baseline the release state is **CERTIFIED for `main` HEAD `eb67300`** (pre-HR merge baseline) and **VERIFIED for PR #34 branch HEAD**: Verification run 34768179272 concluded successfully across all four jobs (static analysis, backend, frontend, browser E2E with 5 journeys including HR) and CRM Browser E2E run 34768179209 concluded successfully alongside. Following PR #34 merge to `main`, certification will attach to the new `main` HEAD upon successful completion of the CI certification workflow.
 
 ## 5. Domain release gate
 
