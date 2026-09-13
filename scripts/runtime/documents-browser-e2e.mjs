@@ -209,6 +209,18 @@ try {
     };
   }
 
+  /** Click an enabled page button by exact label (polls until actionable). */
+  const clickPageButton = (page, label) => page.waitForFunction(
+    (text) => {
+      const button = Array.from(document.querySelectorAll('button')).find((element) => element.textContent.trim() === text);
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    },
+    { timeout: 60_000, polling: 100 },
+    label,
+  );
+
   /**
    * Idle = workspace rendered, the initial-load placeholder gone, and no
    * command in flight (busy buttons carry an ellipsis label, e.g. "Saving…").
