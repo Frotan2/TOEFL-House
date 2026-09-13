@@ -1124,8 +1124,8 @@ try {
         [ids.student, ids.account],
       );
       await client.query(
-        \"INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, submitted_at, approved_by, approved_at, approval_digest, created_at, updated_at) VALUES ($1, $2, 1, 'active', 'terms.pdf', CURRENT_DATE, $3, NOW(), $3, NOW(), 'digest', NOW(), NOW())\",
-        [ids.documentVersion, ids.student, ids.person],
+        \"INSERT INTO contract_versions (id, contract_id, version_no, lifecycle_state, terms_ref, effective_from, prepared_by, submitted_at, approved_by, approved_at, approval_digest, created_at, updated_at) VALUES ($1, $2, 1, 'active', 'terms.pdf', CURRENT_DATE, $3, NOW(), $4, NOW(), 'digest', NOW(), NOW())\",
+        [ids.documentVersion, ids.student, ids.person, ids.verifiedPerson],
       );
       await client.query(\"SET LOCAL session_replication_role = 'origin'\");
     },
