@@ -7,11 +7,35 @@ PASS  Health endpoint is reachable
       HTTP 200
 PASS  Officer workspace renders server-projected evidence metrics
       0Visible documentsScoped server projection | 0In lifecycle reviewDraft through verified | 0Active documentsEvidence remains append-only | 0Retention decisionsNo destructive deletion
+PASS  Officer defines the classification through the UI
+      e2e-identity-1789263237745
+PASS  Officer defines the retention rule through the UI
+      e2e-identity-1789263237745 retain 365d
+PASS  Registrar registers evidence for the target person
+      Authority Fixture e2e-documents-subject / e2e-identity-1789263237745 · Restricted
+FAIL  Registered document appears in the authorized scope
+      chip=null
+FAIL  A draft offers the server-projected actions and NEVER a Verify affordance
+      
+FAIL  Registrar submits an immutable version for review
+      chip=Draft
+FAIL  Verifier records an independent FAIL verdict
+      chip=Submitted
 DOCUMENTS BROWSER E2E FAILED
-ReferenceError: clickPageButton is not defined
-    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:363:3
+TimeoutError: Waiting failed: 60000ms exceeded
+    at new WaitTask (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/common/WaitTask.js:46:34)
+    at IsolatedWorld.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Realm.js:49:26)
+    at CdpFrame.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:585:43)
+    at CdpFrame.<anonymous> (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/util/decorators.js:101:27)
+    at CdpPage.waitForFunction (file:///home/runner/work/TOEFL-House/TOEFL-House/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1537:37)
+    at clickRowButton (file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:256:55)
+    at file:///home/runner/work/TOEFL-House/TOEFL-House/scripts/runtime/documents-browser-e2e.mjs:437:9
 FAIL  Journey ran to completion
-      clickPageButton is not defined
+      Waiting failed: 60000ms exceeded
 
-DOCUMENTS BROWSER E2E: 2/3 checks passed
+DOCUMENTS BROWSER E2E: 5/10 checks passed
+FAILED: Registered document appears in the authorized scope
+FAILED: A draft offers the server-projected actions and NEVER a Verify affordance
+FAILED: Registrar submits an immutable version for review
+FAILED: Verifier records an independent FAIL verdict
 FAILED: Journey ran to completion
